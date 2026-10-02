@@ -1,0 +1,102 @@
+// ============================================================
+// RevXxxService.cs —— <一句话：这个服务负责哪块业务能力>
+//
+// 位置：业务侧（放你自己的程序集；**不要**放进框架 Runtime）
+//
+// 【它解决什么】跨界面 / 跨模块复用的业务能力封装 —— 界面通过它拿数据、发请求，
+//   不让界面直接碰游戏内核（这就是参考实现里 System 层要解决的问题，本框架用"服务 + 服务定位器"承担）。
+// 【为什么是纯 C#】不引用 UnityEngine 的类可以被链接进普通 .NET 工程跑断言（见 templates/offline-harness/）。
+// 【什么时候不该写服务】只有一屏用、关掉界面就该没的逻辑 → 留在面板里（面板 + TData）。
+// ============================================================
+using System;
+using System.Collections.Generic;
+using Revolution;
+
+namespace <你的命名空间>
+{
+    /// <summary>能力接口（界面只依赖它，不依赖实现 —— 这样能换实现、也能在测试里塞假实现）。</summary>
+    public interface IRevXxxService
+    {
+        int Gold { get; }
+
+        /// <summary>加金币；返回"现在有多少"（失败必须有出口：结果值 / 抛带人话的异常）。</summary>
+        int AddGold(int amount, string reason);
+    }
+
+    /// <summary>实现：纯 C#、可单测、依赖用构造注入（不要在方法里 new 别的服务）。</summary>
+    public sealed class RevXxxService : IRevXxxService, IDisposable
+    {
+        private readonly IRevXxxConfigProvider _config;
+        private int _gold;
+
+        public RevXxxService(IRevXxxConfigProvider config)
+        {
+            _config = config ?? throw new ArgumentNullException(nameof(config));
+        }
+
+        public int Gold => _gold;
+
+        public int AddGold(int amount, string reason)
+        {
+            if (amount == 0) { throw new RevXxxUsageException("加金币数量不能为 0（业务拒绝要带人话）"); }
+
+            _gold += amount;
+            RevLog.Info($"加金币 {amount}（{reason}）→ 现有 {_gold}", "Economy");
+            return _gold;
+        }
+
+        /// <summary>释放：取消订阅、停计时器、归还资源 —— 容器会逆序调用它。</summary>
+        public void Dispose()
+        {
+            RevEvent.RemoveAllByOwner(this);
+            RevTimer.CancelAllOf(this);
+        }
+    }
+
+    /// <summary>业务在"业务拒绝"时的异常（照 RevGMUsageException 的风格：消息是给使用者看的人话）。</summary>
+    public sealed class RevXxxUsageException : Exception
+    {
+        public RevXxxUsageException(string message) : base(message) { }
+    }
+
+    /// <summary>配置来源（示例）：真实项目里从配置表 / 服务端拉，这里只留契约。</summary>
+    public interface IRevXxxConfigProvider
+    {
+        int InitialGold { get; }
+    }
+
+    /// <summary>
+    /// 组合根（**装配只写在这一处**）：写完 Build() 之后容器不可改。
+    /// 业务这样取：GameServices.Locator.GetRequired&lt;IRevXxxService&gt;()
+    /// </summary>
+    public static class GameServices
+    {
+        public static readonly RevServiceLocator Locator = RevServiceLocator.Create()
+            .AddSingleton<IRevXxxConfigProvider, RevXxxConfigProvider>()
+            .AddSingleton<IRevXxxService, RevXxxService>()
+            .AddScoped<IRevCombatContext, RevCombatContext>()          // 每局一份 → 取的时候必须放进 using
+            .Build();
+
+        /// <summary>可选：显式入口（比到处 GetRequired 更好读，也更容易替换实现）。</summary>
+        public static IRevXxxService Economy => Locator.GetRequired<IRevXxxService>();
+    }
+
+    // ---------- 下面两个是占位：真实项目里换成你的实现 ----------
+
+    internal sealed class RevXxxConfigProvider : IRevXxxConfigProvider
+    {
+        public int InitialGold => 0;
+    }
+
+    public interface IRevCombatContext : IDisposable
+    {
+        int RoomId { get; }
+    }
+
+    internal sealed class RevCombatContext : IRevCombatContext
+    {
+        public int RoomId { get; set; }
+
+        public void Dispose() { }
+    }
+}

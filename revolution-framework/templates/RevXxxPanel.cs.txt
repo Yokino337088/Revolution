@@ -1,0 +1,69 @@
+// ============================================================
+// RevXxxPanel.cs —— <一句话：这个面板是干什么的>
+//
+// 位置：Assets/<你的工程>/UI/RevXxxPanel.cs（或模块目录的 UI 子目录）
+//
+// 【它解决什么】<这个界面要给玩家看什么、做什么>
+// 【怎么用】RevUI.Open<RevXxxPanel, RevXxxData>(new RevXxxData { ... });
+//        需要秒开就先 RevUI.Preload<RevXxxPanel>()。
+// 【数据流】业务 → SetData(data) → OnDataChanged → RefreshView（单向；不允许在视图钩子里发请求）
+// ============================================================
+using Revolution;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace <你的命名空间>
+{
+    /// <summary>面板数据（只放"画界面需要的字段"，不要塞整个业务模型）。</summary>
+    public sealed class RevXxxData
+    {
+        public bool ShowTips;
+        public string Title = string.Empty;
+    }
+
+    // ★ root 必填：预制体在资源根目录下的两段路径（分组 + 名字 → 用 RevResPath 常量拼，别手写字符串）
+    // ★ ExclusiveGroup：同组互斥（页签类界面用）；InBackStack：是否参与 RevUI.Back()
+    [RevUIPanel(RevResPath.Data, RevUILayer.Normal, ExclusiveGroup = "XxxTab")]
+    public sealed class RevXxxPanel : RevUIPanel<RevXxxData>
+    {
+        // ★ [RevBind] 字段名 ↔ 节点名；写全路径可以跨层（"Top/Title"）
+        [RevBind] private Button _btnClose;
+        [RevBind] private Text _title;
+
+        /// <summary>只装配：找节点、挂事件。不要在这里发请求 / 读表 / 起计时器。</summary>
+        protected override void OnBindView()
+        {
+            _btnClose.onClick.AddListener(CloseSelf);
+        }
+
+        /// <summary>只落屏：把 Data 画到界面上（带数据面板必须实现；别在这里改业务状态）。</summary>
+        protected override void OnRefreshView()
+        {
+            _title.text = Data.Title;
+        }
+
+        /// <summary>可选：数据变化时的增量刷新（只想改变化的部分就用它，否则会被 RefreshView 覆盖）。</summary>
+        protected override void OnDataChanged(RevXxxData oldData, RevXxxData newData)
+        {
+            if (oldData == null || oldData.Title != newData.Title) { _title.text = newData.Title; }
+        }
+
+        /// <summary>可选：按钮统一走这里（按钮节点用 [RevBind] 登记过才会进来），避免回调散落各处。</summary>
+        protected override void OnClick(string nodeName)
+        {
+            RevLog.Info($"点击 {nodeName}（这里只转发给业务服务，不写业务逻辑）", "UI");
+        }
+
+        /// <summary>可选：从面板池取出复用时调用 —— 清掉自己缓存的字段，否则会带着上一次的状态。</summary>
+        protected override void OnReuse()
+        {
+            _title.text = string.Empty;
+        }
+
+        /// <summary>可选：关闭时清理（框架会清 Data，但你自己缓存的字段 / 计时器要清）。</summary>
+        protected override void OnClose()
+        {
+            RevTimer.CancelAllOf(this);
+        }
+    }
+}
