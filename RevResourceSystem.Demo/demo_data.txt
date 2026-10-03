@@ -1,0 +1,6 @@
+# 这是资源系统演示用的文本资源（demo_data.txt）
+# 加载方式：RevResManager.Load(demo根目录, "demo_data", typeof(TextAsset))
+# 逻辑路径 = 资源根目录 + rootPath + resName
+第一行：编辑器直读模式下，从工程的 Assets 里直接读出这段文本。
+第二行：真机 / 打包模式下，同一行代码会自动改走 AB 包读取（业务零改动）。
+第三行：这就是"配置表也是一种资源"的底气 —— 缓存 / 引用计数 / 分组卸载全部白拿。
