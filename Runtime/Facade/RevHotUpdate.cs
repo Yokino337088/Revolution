@@ -1,0 +1,565 @@
+// ============================================================
+// RevHotUpdate.cs —— 热更门面（业务唯一入口）
+//
+// 位置：Assets\Revolution.HotUpdate\Runtime\Facade\
+//
+// 【它就是"启动时的一次热更"】
+//   游戏启动流程里调用一次 InitializeAsync，这一行就是全部：
+//     拉清单 → 大版本校验 → 版本比对 → 差量下载 → 校验落地 → 切版本 → 重装资源策略
+//   返回之后资源系统已经是"热更后的状态"，业务照常写加载代码（一行不用改）。
+//
+//   ★ 它内部会自动调用 Install()（装框架钩子）与 RevResBootstrap.Init()（重装资源策略），
+//     所以不需要再手动调 RevResBootstrap.Init —— 调了也没关系（幂等）。
+//
+// 【失败纪律】
+//   热更失败绝不破坏现有版本：下载/校验失败时 current.txt 没动，玩家照常玩旧版；
+//   业务拿到 Success=false + Error（分类 + 人话），自行决定重试 / 跳过 / 提示。
+//
+// 【并发纪律】
+//   同一时间只允许"一轮"热更在跑：重复调用 InitializeAsync 会直接等正在跑的那一轮，
+//   不会下载两遍、也不会把资源策略重装两次。
+// ============================================================
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using Revolution;
+
+namespace Revolution.HotUpdate
+{
+    /// <summary>热更门面：状态机 + 对外动作 + 进度事件。</summary>
+    public static class RevHotUpdate
+    {
+        private static RevHotState _state = RevHotState.Idle;
+        private static RevHotError _lastError;
+        private static string _localResVersion = "";
+        private static RevHotConfig _activeConfig;
+
+        // ---------- "一轮热更"的挂起状态 ----------
+        // _pending 不为 null = 有一轮正在跑：重复调用 InitializeAsync、以及别处的 WaitReadyAsync，
+        // 都会等到它结束，而不是并发再跑一轮（并发双跑 = 下载两遍 + 资源策略重装两次，必须防住）。
+        private static RevTaskCompletionSource<RevHotUpdateResult> _pending;
+        private static RevTask _initTask;                // 保活引用：防止在跑的那一轮任务被回收
+        private static RevHotUpdateResult _lastResult;   // 最近一轮的最终结果
+        private static bool _hasResult;
+
+        /// <summary>
+        /// 进度事件：任何一次热更（无论从哪个入口发起）都会往这里推。
+        /// ★ 回调参数 onProgress 与这个事件二选一即可，两个都会收到。
+        /// </summary>
+        public static event Action<RevHotProgress> Progress;
+
+        /// <summary>当前进行到哪一步（业务可轮询，也可只用进度回调 / 事件）。</summary>
+        public static RevHotState State { get { return _state; } }
+
+        /// <summary>最近一次失败的原因（成功后仍保留，便于"失败后进游戏再上报"）。</summary>
+        public static RevHotError LastError { get { return _lastError; } }
+
+        /// <summary>本地当前生效的资源版本（首次启动为空）。</summary>
+        public static string LocalResVersion { get { return _localResVersion; } }
+
+        // ============================================================
+        // 对外 API
+        // ============================================================
+
+        /// <summary>
+        /// 只检查：不下任何东西。返回"有没有更新 / 要下多少 / 是否需要更新客户端"。
+        /// 适合先弹窗问玩家（WIFI 提示、大包确认）再决定要不要下。
+        /// </summary>
+        public static RevTask<RevHotCheckResult> CheckAsync(RevHotConfig config, Action<RevHotProgress> onProgress = null, RevCancellationToken token = null)
+        {
+            return RunCheckAsync(config, WithEventSink(onProgress), token);
+        }
+
+        /// <summary>
+        /// 按 CheckAsync 的结果执行更新（下载 → 校验 → 落地 → 切版本 → 重装资源策略）。
+        /// ★ 必须把 CheckAsync 返回的 check 原样传进来（差量计划在里面）。
+        /// </summary>
+        public static RevTask<RevHotUpdateResult> UpdateAsync(RevHotCheckResult check, Action<RevHotProgress> onProgress = null, RevCancellationToken token = null)
+        {
+            return RunUpdateAsync(check, WithEventSink(onProgress), token);
+        }
+
+        /// <summary>
+        /// ★ 启动时手动调用的"一次热更"：检查 →（有更新则）差量下载 → 校验 → 落地 → 切版本 → 重装资源策略。
+        /// <para>放在"加载任何业务资源"之前；返回后资源系统就是热更后的状态，业务照常写加载代码。</para>
+        /// <para>重复调用不会跑两遍 —— 第二次会直接等正在跑的那一轮的结果。</para>
+        /// </summary>
+        public static RevTask<RevHotUpdateResult> InitializeAsync(RevHotConfig config, Action<RevHotProgress> onProgress = null, RevCancellationToken token = null)
+        {
+            if (_pending != null) return _pending.Task;      // 已有一轮在跑：等它，别并发双跑
+            return RunInitializeAsync(config, WithEventSink(onProgress), token);
+        }
+
+        /// <summary>
+        /// 等"正在进行的那一轮热更"结束（没有在跑就立即返回最近一次的结果）。
+        /// <para>给"启动流程某处发起了热更、另一个地方（比如首场景的业务）需要等它结束"的场景用 ——
+        /// 它不会发起新的热更，只是等。</para>
+        /// </summary>
+        public static RevTask<RevHotUpdateResult> WaitReadyAsync()
+        {
+            if (_pending != null) return _pending.Task;
+            if (_hasResult) return RevTask<RevHotUpdateResult>.FromResult(_lastResult);
+
+            // 谁都没发起过：明确告诉业务"你还没接过热更"，而不是装作成功
+            RevHotError notRun = RevHotError.Of(RevHotErrorCode.NotRun, "还没有执行过热更：请在加载业务资源前调用 RevHotUpdate.InitializeAsync（一次即可）");
+            return RevTask<RevHotUpdateResult>.FromResult(RevHotUpdateResult.Fail(notRun, 0));
+        }
+
+        /// <summary>
+        /// 装载框架钩子（幂等）。
+        /// ★ 必须发生在 RevResBootstrap.Init 之前 —— 之后每次 Init 都会带着热更钩子读映射表。
+        ///   InitializeAsync 内部已自动调用；只有"自己接管资源系统初始化"的工程才需要手动调它。
+        /// </summary>
+        public static void Install()
+        {
+            RevHotResBridge.Install();
+        }
+
+        /// <summary>排查用：把当前状态、错误、路径快照一次性打出来（贴给同事排查用）。</summary>
+        public static string Dump()
+        {
+            var sb = new System.Text.StringBuilder(256);
+            sb.AppendLine("[RevHotUpdate] 状态 " + _state);
+            sb.AppendLine("  本地资源版本：" + (_localResVersion.Length == 0 ? "（无）" : _localResVersion));
+            sb.AppendLine("  最近错误：" + (_lastError == null ? "（无）" : _lastError.ToString()));
+            sb.AppendLine("  " + RevHotStore.Describe());
+            return sb.ToString();
+        }
+
+        /// <summary>进 Play / 域重载复位（只清内存；磁盘上的版本数据是玩家数据，绝不碰）。</summary>
+        internal static void ResetForNewSession()
+        {
+            _state = RevHotState.Idle;
+            _lastError = null;
+            _localResVersion = "";
+            _activeConfig = null;
+            _pending = null;
+            _initTask = default;
+            _lastResult = null;
+            _hasResult = false;
+        }
+
+        // ============================================================
+        // 检查
+        // ============================================================
+
+        private static async RevTask<RevHotCheckResult> RunCheckAsync(RevHotConfig config, Action<RevHotProgress> onProgress, RevCancellationToken token)
+        {
+            token = token ?? new RevCancellationToken();
+            _activeConfig = config;
+            _state = RevHotState.Checking;
+            Report(onProgress, RevHotState.Checking, "正在检查更新…");
+
+            try
+            {
+                // ---------- ① 配置校验：错在源头，别等下载到一半 ----------
+                string configError = config.Validate();
+                if (configError != null)
+                {
+                    return Fail(onProgress, RevHotError.Of(RevHotErrorCode.ConfigInvalid, configError));
+                }
+
+                // ---------- ② 存储装配 + 本地版本 ----------
+                RevHotStore.Configure(config);
+                RevHotStore.PrepareLocalRoot();
+                _localResVersion = RevHotStore.ReadCurrentVersion();
+
+                RevHotManifest localBaseline = null;
+                if (string.IsNullOrEmpty(config.ResVersionOverride))
+                {
+                    localBaseline = await ReadLocalBaselineAsync(config, _localResVersion, token);
+                }
+                else
+                {
+                    // 调试语义：指定资源版本 = "本地状态作废"，按空基线重新全量拉该版本
+                    RevLog.Warn("ResVersionOverride=" + config.ResVersionOverride + "：忽略本地基线，按全量更新处理", config.LogTag);
+                }
+
+                // ---------- ③ 拉远端清单（多源 + 重试；失败保持当前版本，玩家照常玩） ----------
+                Func<RevHotSource, string> manifestUrl = delegate(RevHotSource source) { return RevHotUrlBuilder.ManifestUrl(config, source.Root); };
+                string manifestText = await RevHotDownloader.FetchTextAsync(config, manifestUrl, token);
+
+                RevHotManifest remote = RevHotManifest.Parse(manifestText, out string parseError);
+                if (remote == null)
+                {
+                    string detail = "清单前 200 字：" + (manifestText.Length > 200 ? manifestText.Substring(0, 200) : manifestText);
+                    RevHotError invalid = RevHotError.Of(RevHotErrorCode.ManifestInvalid, "版本清单格式错误：" + parseError, detail);
+                    return Fail(onProgress, invalid);
+                }
+
+                // ---------- ④ 大版本锚定校验（跨大版本必须重出包） ----------
+                bool appMismatch = RevHotVersion.AreEqual(remote.AppVersion, config.AppVersion) == false;
+                bool belowMin = string.IsNullOrEmpty(remote.MinAppVersion) == false
+                                && RevHotVersion.Compare(config.AppVersion, remote.MinAppVersion) < 0;
+
+                if (appMismatch || belowMin)
+                {
+                    var info = new RevHotForceUpdateInfo
+                    {
+                        RequiredAppVersion = appMismatch ? remote.AppVersion : remote.MinAppVersion,
+                        CurrentAppVersion = config.AppVersion,
+                        Message = "本资源包需要客户端 " + (appMismatch ? remote.AppVersion : remote.MinAppVersion)
+                                  + "，当前客户端是 " + config.AppVersion + "，请先更新游戏",
+                    };
+
+                    RevLog.Warn("大版本不匹配 → 需要更新客户端（" + info.Message + "）", config.LogTag);
+                    if (config.OnForceUpdateRequired != null) config.OnForceUpdateRequired(info);
+
+                    // "检查"本身是成功的：远端一切正常，只是客户端版本不行。状态回 Idle（等业务引导强更）。
+                    _state = RevHotState.Idle;
+                    return new RevHotCheckResult
+                    {
+                        Success = true,
+                        ForceUpdateRequired = true,
+                        ForceUpdate = info,
+                        RemoteResVersion = remote.ResVersion,
+                        LocalResVersion = _localResVersion,
+                        ManifestText = manifestText,
+                    };
+                }
+
+                // ---------- ⑤ 版本比对 ----------
+                RevHotPlan plan = RevHotPlanner.Build(remote, localBaseline);
+                _state = RevHotState.Idle;
+
+                return new RevHotCheckResult
+                {
+                    Success = true,
+                    HasUpdate = plan.IsEmpty == false,
+                    LocalResVersion = _localResVersion,
+                    RemoteResVersion = remote.ResVersion,
+                    TotalBytes = plan.TotalBytes,
+                    TotalBytesText = RevHotProgress.FormatBytes(plan.TotalBytes),
+                    AddedCount = plan.Added.Count,
+                    ChangedCount = plan.Changed.Count,
+                    Plan = plan,
+                    RemoteManifest = remote,
+                    ManifestText = manifestText,
+                };
+            }
+            catch (RevOperationCanceledException)
+            {
+                return Fail(onProgress, RevHotError.Of(RevHotErrorCode.Cancelled, "检查更新已取消"));
+            }
+            catch (RevHotException e)
+            {
+                return Fail(onProgress, e.Error);
+            }
+            catch (Exception e)
+            {
+                return Fail(onProgress, RevHotError.Of(RevHotErrorCode.Unexpected, "检查更新时出现预期外的异常：" + e.Message, e.StackTrace));
+            }
+        }
+
+        // ============================================================
+        // 更新
+        // ============================================================
+
+        private static async RevTask<RevHotUpdateResult> RunUpdateAsync(RevHotCheckResult check, Action<RevHotProgress> onProgress, RevCancellationToken token)
+        {
+            token = token ?? new RevCancellationToken();
+            Stopwatch clock = Stopwatch.StartNew();
+
+            if (check == null || check.Success == false || check.RemoteManifest == null || check.Plan == null)
+            {
+                return Fail(onProgress, RevHotError.Of(RevHotErrorCode.ConfigInvalid, "UpdateAsync 需要 CheckAsync 的成功结果（先检查、再更新）"), clock);
+            }
+
+            RevHotConfig config = _activeConfig;
+            RevHotManifest remote = check.RemoteManifest;
+            string resVersion = remote.ResVersion;
+
+            try
+            {
+                // ---------- ① 磁盘预检（文件型平台；小游戏没有磁盘概念，直接跳过） ----------
+                _state = RevHotState.Downloading;
+                RevHotStore.EnsureDiskSpace(check.Plan.TotalBytes);
+
+                // ---------- ② 下载差量 ----------
+                // 文件型平台（Android / iOS / PC）：下载 → 校验 → 原子落盘；
+                // URL 型平台（WebGL / 小游戏）：AB 由引擎按 URL 拉取并缓存，这里没有"下载"这一步。
+                if (RevHotPlatform.SupportsLocalFiles && check.Plan.IsEmpty == false)
+                {
+                    await RevHotDownloader.DownloadPlanAsync(check.Plan, config, resVersion, onProgress, token);
+                }
+
+                // URL 型平台：把"热更映射表"拉下来寄存在内存里（资源系统 Init 时通过钩子取走）
+                if (RevHotPlatform.IsWebGL && check.Plan.ResMapChanged)
+                {
+                    Func<RevHotSource, string> resMapUrl = delegate(RevHotSource source) { return RevHotUrlBuilder.ResMapUrl(config, source.Root, resVersion); };
+                    string resMapText = await RevHotDownloader.FetchTextAsync(config, resMapUrl, token);
+                    RevHotStore.SetActiveResMap(RevHotStore.ParseResMapText(resMapText));
+                }
+
+                // ---------- ③ 版本目录补齐（清单副本 + 映射表） ----------
+                _state = RevHotState.Applying;
+                if (RevHotPlatform.SupportsLocalFiles)
+                {
+                    // 清单原文存一份进版本目录：它是"下次差量计算的基线"，也是回滚 / 排查的证据
+                    Directory.CreateDirectory(RevHotStore.VersionDir(resVersion));
+                    File.WriteAllText(RevHotStore.ManifestPath(resVersion), check.ManifestText);
+                    await EnsureResMapSnapshotAsync(check, config, resVersion, token);
+                }
+
+                // ---------- ④ 完成标记 → 原子切版本 → 清理旧版本（顺序绝不能反：先 stamp 再切 current） ----------
+                RevHotStore.MarkVersionComplete(resVersion);
+                RevHotStore.WriteCurrentVersion(resVersion);
+                RevHotStore.SetActiveVersion(resVersion);
+                _localResVersion = resVersion;
+                RevHotStore.DeleteOldVersions(config.KeepVersions + 1, resVersion);
+
+                // ---------- ⑤ 重装资源策略：重读热更映射表、让路径钩子按新版本解析（Init 是幂等的） ----------
+                RevHotResBridge.ReinitResourceSystem();
+
+                _state = RevHotState.Ready;
+                string message = check.HasUpdate ? "已更新到 " + resVersion : "已是最新版本 " + resVersion;
+                RevLog.Info(message + "（耗时 " + clock.Elapsed.TotalSeconds.ToString("F1") + "s）", config.LogTag);
+                return RevHotUpdateResult.Ok(message, resVersion, clock.Elapsed.TotalSeconds);
+            }
+            catch (RevOperationCanceledException)
+            {
+                // 取消：已下载的部分保留在 .part / 版本目录里，下次从计划重算自然续上
+                return Fail(onProgress, RevHotError.Of(RevHotErrorCode.Cancelled, "更新已取消（已下载内容已保留，下次继续）"), clock);
+            }
+            catch (RevHotException e)
+            {
+                return Fail(onProgress, e.Error, clock);
+            }
+            catch (Exception e)
+            {
+                return Fail(onProgress, RevHotError.Of(RevHotErrorCode.Unexpected, "更新过程出现预期外的异常：" + e.Message, e.StackTrace), clock);
+            }
+        }
+
+        // ============================================================
+        // 初始化（一条龙）：登记"进行中的一轮" → 执行 → 回填结果
+        // ============================================================
+
+        /// <summary>
+        /// 入口：先登记"有一轮在跑"（防并发双跑，也是 WaitReadyAsync 的等待目标），再执行真正的初始化。
+        /// </summary>
+        private static async RevTask<RevHotUpdateResult> RunInitializeAsync(RevHotConfig config, Action<RevHotProgress> onProgress, RevCancellationToken token)
+        {
+            if (_pending != null) return await _pending.Task;
+
+            RevTaskCompletionSource<RevHotUpdateResult> pending = RevTask<RevHotUpdateResult>.CreateSource();
+            _pending = pending;
+            _initTask = RunInitializeCoreAsync(config, onProgress, token);      // 保活引用，防止任务被回收
+            return await pending.Task;
+        }
+
+        /// <summary>
+        /// 真正的初始化流程。★ 结束时（无论成败）必须把结果回填给挂起的等待者 ——
+        /// 否则 WaitReadyAsync / 重复调用会永远等下去（这类"静默卡死"是最难查的 bug）。
+        /// </summary>
+        private static async RevTask RunInitializeCoreAsync(RevHotConfig config, Action<RevHotProgress> onProgress, RevCancellationToken token)
+        {
+            RevHotUpdateResult result;
+            try
+            {
+                result = await RunInitializeCoreBodyAsync(config, onProgress, token);
+            }
+            catch (Exception e)
+            {
+                // 保险丝：任何漏网的异常都转成一次明确的失败，而不是把等待方永远挂在半空
+                result = RevHotUpdateResult.Fail(RevHotError.Of(RevHotErrorCode.Unexpected, "热更初始化出现预期外的异常：" + e.Message, e.StackTrace), 0);
+            }
+
+            _lastResult = result;
+            _hasResult = true;
+
+            RevTaskCompletionSource<RevHotUpdateResult> pending = _pending;
+            _pending = null;
+            if (pending != null) pending.SetResult(result);
+        }
+
+        /// <summary>初始化主体（检查 → 下载 → 落地 → 切版本 → 重装资源策略）。</summary>
+        private static async RevTask<RevHotUpdateResult> RunInitializeCoreBodyAsync(RevHotConfig config, Action<RevHotProgress> onProgress, RevCancellationToken token)
+        {
+            Stopwatch clock = Stopwatch.StartNew();
+            token = token ?? new RevCancellationToken();
+
+            Install();                                   // ① 先装钩子（幂等；之后业务自己的 Init 也会带上热更）
+
+            RevHotCheckResult check = await RunCheckAsync(config, onProgress, token);
+            if (check.Success == false)
+            {
+                return RevHotUpdateResult.Fail(check.Error, clock.Elapsed.TotalSeconds);
+            }
+
+            if (check.ForceUpdateRequired)
+            {
+                // 需要更新客户端：资源层保持"出包基线"可用（旧版本照常能玩），
+                // 怎么引导玩家（跳商店 / 公告 / 整包下载）由业务在 OnForceUpdateRequired 回调里决定。
+                _state = RevHotState.Ready;
+                return RevHotUpdateResult.Ok(check.ForceUpdate.Message, _localResVersion, clock.Elapsed.TotalSeconds);
+            }
+
+            if (check.HasUpdate)
+            {
+                return await RunUpdateAsync(check, onProgress, token);
+            }
+
+            // ---------- 没有更新：把"生效版本"钉下来即可（首次启动 = 内置基线的版本号） ----------
+            if (string.IsNullOrEmpty(_localResVersion))
+            {
+                // 内置基线的资源版本 = 远端清单的版本（比对一致才会走到这里）
+                string baselineVersion = check.RemoteManifest.ResVersion;
+                RevHotStore.WriteCurrentVersion(baselineVersion);
+                _localResVersion = baselineVersion;
+            }
+
+            RevHotStore.SetActiveVersion(_localResVersion);
+            RevHotResBridge.ReinitResourceSystem();
+
+            _state = RevHotState.Ready;
+            string okMessage = "已是最新版本 " + _localResVersion;
+            RevLog.Info(okMessage, config.LogTag);
+            return RevHotUpdateResult.Ok(okMessage, _localResVersion, clock.Elapsed.TotalSeconds);
+        }
+
+        // ============================================================
+        // 本地基线 / 版本目录补齐
+        // ============================================================
+
+        /// <summary>
+        /// 读本地基线清单：① 当前版本目录（热更过）→ ② 出包内置清单（首包基线）→ ③ null（纯远端）。
+        /// 基线是"差量计算"的参照物 —— 大版本锚定下，基线天然就是"出包状态"。
+        /// </summary>
+        private static async RevTask<RevHotManifest> ReadLocalBaselineAsync(RevHotConfig config, string localVersion, RevCancellationToken token)
+        {
+            if (string.IsNullOrEmpty(localVersion) == false && RevHotStore.IsVersionComplete(localVersion))
+            {
+                RevHotManifest fromDisk = TryParseFile(RevHotStore.ManifestPath(localVersion));
+                if (fromDisk != null) return fromDisk;
+                RevLog.Warn("当前版本的清单副本缺失（视为需要重新比对）：" + localVersion, config.LogTag);
+            }
+
+            try
+            {
+                string text = await RevHotStore.ReadTextAsync(RevHotStore.BuiltinManifestSource(), token);
+                RevHotManifest builtin = RevHotManifest.Parse(text, out string parseError);
+                if (builtin != null) return builtin;
+                RevLog.Warn("内置清单解析失败（按纯远端处理）：" + parseError, config.LogTag);
+            }
+            catch (RevOperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                // 没有内置清单 = 首包不含 AB（纯远端模式）：基线为空，所有远端包都算"新增"
+                RevLog.Info("没有内置清单（按纯远端处理）：" + e.Message, config.LogTag);
+            }
+
+            return null;
+        }
+
+        /// <summary>把"当前版本目录"补齐：清单原文 + 映射表（映射表没变也要从基线复制过来）。</summary>
+        private static async RevTask EnsureResMapSnapshotAsync(RevHotCheckResult check, RevHotConfig config, string resVersion, RevCancellationToken token)
+        {
+            // 映射表变化时，下载器已经把新表写到版本目录里了
+            if (check.Plan.ResMapChanged) return;
+
+            string target = RevHotStore.ResMapPath(resVersion);
+            if (File.Exists(target)) return;
+
+            // 映射表没变 → 内容与基线一致：从"旧版本目录 / 内置清单里的位置"复制一份过来。
+            // ★ 这一步不能省：加载路径按"当前版本目录"找映射表，少了它就会悄悄退回内置表。
+            string sourceText = await FindExistingResMapTextAsync(config, _localResVersion, token);
+            if (sourceText != null)
+            {
+                File.WriteAllText(target, sourceText);
+                return;
+            }
+
+            RevLog.Warn("没有找到可复用的映射表（纯远端首启）—— 本次版本将使用内置映射表", config.LogTag);
+        }
+
+        private static async RevTask<string> FindExistingResMapTextAsync(RevHotConfig config, string oldResVersion, RevCancellationToken token)
+        {
+            // ① 旧版本目录里的映射表（热更过至少一次）
+            if (string.IsNullOrEmpty(oldResVersion) == false && RevHotStore.IsVersionComplete(oldResVersion))
+            {
+                string path = RevHotStore.ResMapPath(oldResVersion);
+                if (File.Exists(path)) return File.ReadAllText(path);
+            }
+
+            // ② 出包时随包体发布的映射表（StreamingAssets；Android 上是 jar: URL）
+            try
+            {
+                string source = RevHotUrlBuilder.BuiltinBundlePath(config, "ResMap.txt");
+                return await RevHotStore.ReadTextAsync(source, token);
+            }
+            catch (RevOperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        // ============================================================
+        // 小工具
+        // ============================================================
+
+        private static RevHotManifest TryParseFile(string path)
+        {
+            try
+            {
+                if (File.Exists(path) == false) return null;
+                string text = File.ReadAllText(path);
+                return RevHotManifest.Parse(text, out _);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>把"调用方的回调"与"静态 Progress 事件"合成一个 sink：两边都能收到进度。</summary>
+        private static Action<RevHotProgress> WithEventSink(Action<RevHotProgress> onProgress)
+        {
+            if (onProgress == null) return RaiseProgress;
+            return delegate(RevHotProgress p) { RaiseProgress(p); onProgress(p); };
+        }
+
+        private static void RaiseProgress(RevHotProgress progress)
+        {
+            Action<RevHotProgress> handler = Progress;
+            if (handler != null) handler(progress);
+        }
+
+        private static RevHotCheckResult Fail(Action<RevHotProgress> onProgress, RevHotError error)
+        {
+            _state = RevHotState.Failed;
+            _lastError = error;
+            RevLog.Warn("热更检查失败：" + error.ToString(), LogTag());
+            Report(onProgress, RevHotState.Failed, error.Message);
+            return RevHotCheckResult.Fail(error);
+        }
+
+        private static RevHotUpdateResult Fail(Action<RevHotProgress> onProgress, RevHotError error, Stopwatch clock)
+        {
+            _state = RevHotState.Failed;
+            _lastError = error;
+            RevLog.Warn("热更失败：" + error.ToString(), LogTag());
+            Report(onProgress, RevHotState.Failed, error.Message);
+            return RevHotUpdateResult.Fail(error, clock == null ? 0 : clock.Elapsed.TotalSeconds);
+        }
+
+        private static void Report(Action<RevHotProgress> sink, RevHotState state, string text)
+        {
+            if (sink == null) return;
+            sink(new RevHotProgress { State = state, Text = text });
+        }
+
+        private static string LogTag()
+        {
+            return _activeConfig == null ? "HotUpdate" : _activeConfig.LogTag;
+        }
+    }
+}
