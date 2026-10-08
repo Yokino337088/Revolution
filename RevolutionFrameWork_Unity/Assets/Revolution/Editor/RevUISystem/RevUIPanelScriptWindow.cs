@@ -31,6 +31,7 @@ namespace Revolution.Editor
         private const string PrefLayer = "Revolution.RevUIGen.Layer";
         private const string PrefAttributes = "Revolution.RevUIGen.UseAttributes";
         private const string PrefFolder = "Revolution.RevUIGen.Folder";
+        private const string PrefPrefab = "Revolution.RevUIGen.PrefabPath";
         private bool _showCode;
         private string _message;
         private MessageType _messageType;
@@ -53,6 +54,20 @@ namespace Revolution.Editor
             _namespace = EditorPrefs.GetString(PrefNamespace, "");
             _layer = (RevUILayer)EditorPrefs.GetInt(PrefLayer, (int)RevUILayer.Normal);
             _useAttributes = EditorPrefs.GetBool(PrefAttributes, true);
+
+            // 恢复上次所选的预制体并重扫控件：脚本重编译（Domain Reload）会清空窗口状态，
+            // 不恢复的话用户在旧窗口上直接点生成，会得到一份没有任何绑定和事件的空壳。
+            string savedPrefab = EditorPrefs.GetString(PrefPrefab, "");
+            if (!string.IsNullOrEmpty(savedPrefab))
+            {
+                _prefab = AssetDatabase.LoadAssetAtPath<GameObject>(savedPrefab);
+                if (_prefab != null)
+                {
+                    if (string.IsNullOrEmpty(_className))
+                        _className = _prefab.name.EndsWith("Panel", StringComparison.Ordinal) ? _prefab.name : _prefab.name + "Panel";
+                    ScanPrefab();
+                }
+            }
         }
 
         private void OnDisable() => SavePrefs();
@@ -181,6 +196,9 @@ namespace Revolution.Editor
                 string output = OutputFolder();
                 string dest = output == null || string.IsNullOrWhiteSpace(_className) ? "（先选择有效输出目录与类名）" : output + "/" + _className + ".cs";
                 EditorGUILayout.LabelField("目标文件", dest, EditorStyles.wordWrappedMiniLabel);
+                EditorGUILayout.LabelField(
+                    $"已选：{_controls.Count(c => c.Bind)} 个绑定字段 · {_controls.Count(c => c.Events.Any(e => e.Enabled))} 个事件控件" +
+                    "（两者都没有时无法生成）", EditorStyles.miniLabel);
                 if (!string.IsNullOrEmpty(_message)) EditorGUILayout.HelpBox(_message, _messageType);
                 using (new EditorGUILayout.HorizontalScope())
                 {
@@ -244,6 +262,9 @@ namespace Revolution.Editor
             { error = "工程里已有同名面板类型：" + fullTypeName + "。请改类名或命名空间。"; return false; }
 
             var chosen = _controls.Where(c => c.Bind || c.Events.Any(e => e.Enabled)).ToList();
+            // ★ 空勾选会生成一份"没有任何字段和监听"的空壳，而且编译通过、极难发现 —— 必须在这里拦下。
+            if (chosen.Count == 0)
+            { error = "没有勾选任何控件绑定或事件 —— 请在第 03 区至少勾选一项，或点「重新扫描控件」刷新列表。"; return false; }
             var paths = new HashSet<string>(StringComparer.Ordinal);
             var eventNames = new HashSet<string>(StringComparer.Ordinal);
             foreach (PanelControl c in chosen)
@@ -318,6 +339,10 @@ namespace Revolution.Editor
                 else if (component is ScrollRect) row.Events.Add(new PanelEvent("滚动", "RevScrollChanged", "ScrollChanged", "float x, float y", false));
                 _controls.Add(row);
             }
+
+            // 记住所选预制体，配合 OnEnable 的恢复逻辑（清空选择时一并清掉偏好）。
+            if (_prefab != null) EditorPrefs.SetString(PrefPrefab, AssetDatabase.GetAssetPath(_prefab));
+            else EditorPrefs.DeleteKey(PrefPrefab);
         }
 
         private static string RelativePath(Transform node, Transform root)
