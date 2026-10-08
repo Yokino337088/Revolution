@@ -14,6 +14,7 @@
 // ============================================================
 using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 
@@ -387,6 +388,8 @@ namespace Revolution.Editor
     internal sealed class ABDuplicateView : ABAnalysisView
     {
         private Vector2 _scroll;
+        private ABResMapCheckReport _mapReport;
+        private bool _showAllMapIssues;
 
         // 同包重名的分组也按扫描代数缓存
         private int _version = -1;
@@ -406,8 +409,9 @@ namespace Revolution.Editor
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
 
             if (blocking == 0)
-                EditorGUILayout.HelpBox("没有会阻止打包的问题。", MessageType.Info);
+                EditorGUILayout.HelpBox("当前分包标记没有会阻止打包的问题。产物一致性需要在下方单独检查。", MessageType.Info);
 
+            DrawResMapCheck();
             DrawUnmarked(collect, cfg);
             DrawSameName(collect);
             DrawLogicClash(collect);
@@ -415,6 +419,52 @@ namespace Revolution.Editor
             DrawShared(collect);
 
             EditorGUILayout.EndScrollView();
+        }
+
+        /// <summary>磁盘上的表与产物不随标记缓存更新；只在用户点击时读取，结果标明平台和检查时间。</summary>
+        private void DrawResMapCheck()
+        {
+            if (!ABGUI.Foldout("check.resmap", "ResMap 映射表 / AB 产物一致性（打包后检查）", true)) return;
+
+            BuildTarget target = ABBuildSetting.ResolveBuildTarget();
+            string outputDir = ABBuildSetting.GetOutputDir(target).Replace('\\', '/');
+            EditorGUILayout.LabelField("映射表：" + ABBuildSetting.MapAssetPath, EditorStyles.wordWrappedMiniLabel);
+            EditorGUILayout.LabelField("目标产物：" + outputDir + "（打包页的目标平台）", EditorStyles.wordWrappedMiniLabel);
+            EditorGUILayout.HelpBox("只读检查：错误格式、重复逻辑名、映射指向不存在的包、与当前资源标记不一致。" +
+                "不会改资源或自动修复；先打包再检查，改过分包后请重新生成映射 / 打包。", MessageType.None);
+
+            if (GUILayout.Button("检查映射表与该平台 AB", GUILayout.Width(200)))
+            {
+                // 读取工程标记 / 磁盘在用户主动点击后进行；不在每帧 OnGUI 内扫描产物。
+                ABGUI.Defer(() =>
+                {
+                    _mapReport = ABResMapChecker.Check(target);
+                    _showAllMapIssues = false;
+                    EditorWindow.GetWindow<ABBuildWindow>().Repaint();
+                });
+            }
+
+            if (_mapReport == null) return;
+            if (_mapReport.Target != target || _mapReport.MarkerVersion != ABCollectCache.Version)
+                EditorGUILayout.HelpBox("平台或当前资源标记已变化，下面是旧结果；请重新检查。", MessageType.Warning);
+
+            EditorGUILayout.HelpBox($"{_mapReport.Platform} · {_mapReport.CheckedAt:HH:mm:ss} · {_mapReport.EntryCount} 条映射 · " +
+                $"{_mapReport.Errors.Count} 个错误 / {_mapReport.Warnings.Count} 个提醒" +
+                (_mapReport.Errors.Count == 0 ? "（仅说明已执行所列检查，不代表包内容一定正确）" : ""),
+                _mapReport.Errors.Count > 0 ? MessageType.Error : MessageType.Info);
+
+            int limit = _showAllMapIssues ? int.MaxValue : PageSize;
+            DrawMapIssues(_mapReport.Errors, MessageType.Error, limit);
+            DrawMapIssues(_mapReport.Warnings, MessageType.Warning, limit);
+            if (_mapReport.Errors.Count > limit || _mapReport.Warnings.Count > limit || _showAllMapIssues)
+                _showAllMapIssues = GUILayout.Toggle(_showAllMapIssues, "显示全部", EditorStyles.miniButton, GUILayout.Width(80));
+            EditorGUILayout.Space(8);
+        }
+
+        private static void DrawMapIssues(List<string> issues, MessageType type, int limit)
+        {
+            for (int i = 0; i < Math.Min(issues.Count, limit); i++) EditorGUILayout.HelpBox(issues[i], type);
+            if (issues.Count > limit) EditorGUILayout.LabelField($"…还有 {issues.Count - limit} 条", EditorStyles.miniLabel);
         }
 
         private void Rebuild(ABCollectResult collect)
@@ -573,6 +623,106 @@ namespace Revolution.Editor
             for (int i = 0; i < visible; i++)
                 RowWithPing(shared[i].Key, $"    {ABGUI.Short(shared[i].Key)}    被 {string.Join("、", shared[i].Value)} 引用");
             MoreToggle("check.shared", shared.Count);
+        }
+    }
+
+    /// <summary>点击按钮那一刻的只读快照；与打包前的 ABValidator 报告互不混淆。</summary>
+    internal sealed class ABResMapCheckReport
+    {
+        public BuildTarget Target;
+        public string Platform;
+        public DateTime CheckedAt;
+        public int MarkerVersion;
+        public int EntryCount;
+        public readonly List<string> Errors = new List<string>();
+        public readonly List<string> Warnings = new List<string>();
+    }
+
+    /// <summary>
+    /// 比对运行时实际读取的 Resources/ResMap.txt、当前资源标记和选定平台的磁盘 AB。
+    /// 只做诊断：不生成映射、不修改标记、不加载 AB（加载 AB 会占内存且可能要求先释放）。
+    /// </summary>
+    internal static class ABResMapChecker
+    {
+        public static ABResMapCheckReport Check(BuildTarget target)
+        {
+            ABCollectResult collect = ABCollectCache.Get();
+            string outputDir = ABBuildSetting.GetOutputDir(target);
+            var report = new ABResMapCheckReport
+            {
+                Target = target,
+                Platform = ABBuildSetting.GetPlatformName(target),
+                CheckedAt = DateTime.Now,
+                MarkerVersion = ABCollectCache.Version
+            };
+
+            try
+            {
+                if (!File.Exists(ABBuildSetting.MapAssetPath))
+                {
+                    report.Errors.Add("映射表不存在：" + ABBuildSetting.MapAssetPath + "。请在「打包」页点击「仅生成映射」或「打包」。");
+                    return report;
+                }
+
+                // 大小写严格匹配：安卓 / WebGL 的远端路径区分大小写，Windows 的 File.Exists 不区分。
+                HashSet<string> diskBundles = null;
+                if (!Directory.Exists(outputDir))
+                    report.Errors.Add("该平台还没有 AB 产物：" + outputDir + "。请先打包，再检查表里的包是否真的存在。");
+                else
+                {
+                    diskBundles = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (string path in Directory.GetFiles(outputDir)) diskBundles.Add(Path.GetFileName(path));
+                }
+
+                var expected = new Dictionary<string, ResMapEntry>(StringComparer.Ordinal);
+                foreach (ResMapEntry entry in collect.entries) expected[entry.logic] = entry;
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                var checkedBundles = new HashSet<string>(StringComparer.Ordinal);
+                var seenAssets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                string[] lines = File.ReadAllLines(ABBuildSetting.MapAssetPath);
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    // 与 RevResBootstrap.LoadResMap 一致：空行和 # 注释跳过；其他行必须是三列。
+                    string line = lines[i].Trim().TrimStart('\uFEFF');
+                    if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal)) continue;
+                    int number = i + 1;
+                    string[] parts = line.Split('|');
+                    if (parts.Length != 3 || string.IsNullOrWhiteSpace(parts[0]) ||
+                        string.IsNullOrWhiteSpace(parts[1]) || string.IsNullOrWhiteSpace(parts[2]) ||
+                        parts[0] != parts[0].Trim() || parts[1] != parts[1].Trim() || parts[2] != parts[2].Trim())
+                    {
+                        report.Errors.Add($"第 {number} 行格式错误：需要「逻辑名|包名|资源名」三列，字段不能为空或带首尾空格。");
+                        continue;
+                    }
+
+                    report.EntryCount++;
+                    string logic = parts[0], bundle = parts[1], asset = parts[2];
+                    if (!seen.Add(logic))
+                        report.Errors.Add($"第 {number} 行逻辑名重复：{logic}（运行时后面的记录会悄悄覆盖前面的）。");
+                    if (!seenAssets.Add(bundle + "|" + asset))
+                        report.Errors.Add($"第 {number} 行包内资源名重复：{bundle}|{asset}；LoadAsset 无法区分同名资源。");
+                    if (diskBundles != null && checkedBundles.Add(bundle) && !diskBundles.Contains(bundle))
+                        report.Errors.Add($"第 {number} 行指向的 AB 文件不存在：{outputDir}/{bundle}（请确认平台及大小写）。");
+
+                    if (!expected.TryGetValue(logic, out ResMapEntry current))
+                        report.Warnings.Add($"第 {number} 行的 {logic} 在当前资源标记中找不到；可能是资源已删、改名或映射未重新生成。");
+                    else if (current.bundle != bundle || current.asset != asset)
+                        report.Warnings.Add($"第 {number} 行 {logic} 与当前标记不一致：表={bundle}|{asset}，标记={current.bundle}|{current.asset}；请重新生成映射并打包。");
+                }
+
+                foreach (ResMapEntry entry in collect.entries)
+                    if (!seen.Contains(entry.logic))
+                        report.Warnings.Add($"当前资源 {entry.logic}（{entry.bundle}|{entry.asset}）不在映射表中；新增资源可能无法在 AB 模式下加载。");
+
+                if (report.EntryCount == 0)
+                    report.Errors.Add("映射表没有有效条目；请先在「打包」页生成映射。");
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+            {
+                report.Errors.Add("读取映射表或产物目录失败：" + e.Message);
+            }
+
+            return report;
         }
     }
 

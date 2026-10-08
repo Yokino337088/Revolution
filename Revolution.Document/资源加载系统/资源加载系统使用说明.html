@@ -397,7 +397,7 @@ Debug.Log($<span class="s">"缓存 {RevResManager.CachedCount} 份，其中待�
     <ol>
       <li><b>看缓存</b>：<code>RevResManager.CachedCount</code> 一直涨 → 有地方只拿不放（在界面关闭处找）；<code>UnusedCount</code> 一直不清 → 没人触发回收，调一次 <code>FlushUnused()</code> 看能不能清掉。</li>
       <li><b>看映射</b>：报"找不到"先在 <code>Assets/Revolution/Resources/ResourceSystem/ResMap.txt</code> 里搜这条逻辑路径；搜不到就是没生成映射。</li>
-      <li><b>看分包</b>：菜单 <code>Revolution.Tools / 资源 / RevAB 打包工具</code> → 「分包」页签（带自动同步）：确认资源<b>有没有 AB 标记</b>、「检查」页签有没有漏标。</li>
+      <li><b>看分包</b>：菜单 <code>Revolution.Tools / 资源 / RevAB 打包工具</code> → 「分包」页签（带自动同步）：确认资源<b>有没有 AB 标记</b>、「检查」页签有没有漏标；打完包后还可在「检查」页签点「检查映射表与该平台 AB」，核对 <code>ResMap.txt</code> 与产物是否一致。</li>
       <li><b>看体积</b>：「体积」页签找"哪个包突然变大"；「依赖」页签看有没有资源被复制多份。</li>
     </ol>
 

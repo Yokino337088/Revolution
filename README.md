@@ -231,6 +231,7 @@ git clone -b hotupdate https://github.com/Yokino337088/Revolution.git Assets/Rev
 
 ## 🆕 最近更新（2026-10-08）
 
+- **RevAB 检查页新增「ResMap 映射表 / AB 产物一致性」检查**：选平台一键核对磁盘上的 `ResMap.txt` 与 `AssetBundles/<平台>/` 产物 —— 格式错误、重复逻辑名 / 包内资源名、映射指向不存在的包、与当前资源标记不一致逐条列出（只读不改）；堵住"编辑器直读看不出、真机才 `FileNotExist`"的表包不一致问题。
 - **热更框架稳定性大修**：多轮审查修复 WebGL 同会话二次热更映射表残留、清单下载聚合器并发互踩等严重缺陷（明细见 `Revolution.Document/bug修复日志/`）。
 - **热更清单窗口改版**：按"环境 → 配置 → 生成/自检 → 上传"流程分区，新增大版本与 Player Settings 一致性校验（不一致会触发全量强更，窗口内一键同步）、资源版本一键 +1、上传顺序可视化清单。
 - **新增云发布工具链**：`Revolution.Could/` —— 腾讯云 COS 热更发布 **WPF 可视化工具**（分步引导、SHA-256 预检、内容先传清单最后传、同版本路径内容不同拒绝覆盖，附完整中文使用说明）；另配 `UploadToCos` / `UploadToOss` 命令行脚本（CI 友好）。用法见 [`Revolution.Could/README.md`](Revolution.Could/README.md) 与《[RevHotUpdate 使用说明](Revolution.Document/热更新/RevHotUpdate使用说明.md)》第五章。
