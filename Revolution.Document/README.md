@@ -54,6 +54,10 @@
 > 独立包 `Assets/Revolution.HotUpdate/`（程序集 `Revolution.HotUpdate`）：**导入即有、不导入零影响** ——
 > 给框架只加了两个默认为 `null` 的钩子（加载路径重定向 / 映射表覆盖），业务加载代码一行不用改。
 >
+> 🛠 **配套发布工具**：主推 [Revolution.Could](../../Revolution.Could/README.md)（腾讯云 COS 热更发布 WPF 可视化工具，
+> 源码在仓库根：选产物 → 校验 SHA-256 → 按"内容先传、清单最后传"的安全顺序上传）；
+> 另有 `UploadToCos` / `UploadToOss` 命令行脚本（`Assets/Revolution.Demo/RevHotUpdate.Demo/`）给 CI 用。
+>
 > ⚡ **想先跑起来看效果**：`Assets/Revolution.Demo/RevHotUpdate.Demo/`（演示面板 + 编辑器一键"打包 + 清单 +
 > 装配本地 CDN" + `起本地CDN.cmd` 假 CDN；3 步跑通，不需要真云账号）。
 > 能力：清单驱动版本比对与差量下载、断点续传、多源降级、尺寸 + SHA-256 校验、版本目录原子切换与回滚、

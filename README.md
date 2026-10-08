@@ -156,6 +156,9 @@ git clone -b hotupdate https://github.com/Yokino337088/Revolution.git Assets/Rev
 文档：《使用说明》（手把手）·《架构解析》（设计论证与失败收场）·《技术方案》（可行性、平台核实、存储选型、决策与分期），
 见 `Revolution.Document/热更新/`（网页版在文档站"扩展包"一节）。
 想直接跑起来看：`Assets/Revolution.Demo/RevHotUpdate.Demo/`（一键"打包 + 清单 + 装配本地 CDN" → 起本地假 CDN → 面板点三步，全程不需要真云账号）。
+发布侧配套工具：**Revolution.Could**（腾讯云 COS 热更发布 WPF 可视化工具，源码在仓库根 `Revolution.Could/`）与
+`UploadToCos` / `UploadToOss` 命令行脚本（`Assets/Revolution.Demo/RevHotUpdate.Demo/`，给 CI 用）——
+三者都按"内容先传、清单最后传"的顺序发布，详见 [`Revolution.Could/README.md`](Revolution.Could/README.md)。
 
 > ★ 配对前提：扩展包用的两个钩子是本体后加的 —— **本体版本必须"不早于"引入钩子的那一版**，否则编译不过。
 > 覆盖范围：**只做资源热更（AB）**；不做代码热更、加密、二进制差量、灰度。
@@ -225,6 +228,12 @@ git clone -b hotupdate https://github.com/Yokino337088/Revolution.git Assets/Rev
 | 还要改逻辑代码不发版 | **方案 C（HybridCLR）** ＋ A 或 B |
 
 ---
+
+## 🆕 最近更新（2026-10-08）
+
+- **热更框架稳定性大修**：多轮审查修复 WebGL 同会话二次热更映射表残留、清单下载聚合器并发互踩等严重缺陷（明细见 `Revolution.Document/bug修复日志/`）。
+- **热更清单窗口改版**：按"环境 → 配置 → 生成/自检 → 上传"流程分区，新增大版本与 Player Settings 一致性校验（不一致会触发全量强更，窗口内一键同步）、资源版本一键 +1、上传顺序可视化清单。
+- **新增云发布工具链**：`Revolution.Could/` —— 腾讯云 COS 热更发布 **WPF 可视化工具**（分步引导、SHA-256 预检、内容先传清单最后传、同版本路径内容不同拒绝覆盖，附完整中文使用说明）；另配 `UploadToCos` / `UploadToOss` 命令行脚本（CI 友好）。用法见 [`Revolution.Could/README.md`](Revolution.Could/README.md) 与《[RevHotUpdate 使用说明](Revolution.Document/热更新/RevHotUpdate使用说明.md)》第五章。
 
 ## 🆕 最近更新（2026-09-30）
 
@@ -406,6 +415,7 @@ Revolution/
 ├── Revolution.Document/                  设计文档（每个模块：使用说明 + 架构解析）
 ├── Skills/                              给 AI Agent 用的技能包（模块速查 / 规范 / 坑位 / 模板）
 ├── Revolution.ExcelTool/                 导表工具（WPF：Excel → C# 类 + 数据文件）
+├── Revolution.Could/                     腾讯云 COS 热更发布工具（WPF：选产物 → 校验 → 按安全顺序上传）
 └── .github/workflows/                    CI（自动同步 package / demo / hotupdate / skill 分支）
 ```
 

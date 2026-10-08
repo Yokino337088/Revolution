@@ -518,6 +518,22 @@ RevHotUpdateResult result = <span class="k">await</span> RevHotUpdate.UpdateAsyn
         </tbody>
       </table>
     </div>
+    <h3>发布工具（三选一，都不用去云控制台手点上传）</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>工具</th><th>适合</th><th>位置 / 依赖</th></tr></thead>
+        <tbody>
+          <tr><td><b>Revolution.Could</b><br>（WPF 可视化，主推腾讯云 COS）</td><td>Windows 上点几下就发布：分步引导、目标路径预览、进度与日志、可取消；上传前自动做两道安全预检（本地 SHA-256 对账 + 远端同路径内容比对，<b>同版本路径内容不同直接拒绝覆盖</b>）</td><td>仓库根 <code>Revolution.Could/</code>：<code>dotnet run --project Revolution.Could</code> 或 <code>dotnet publish</code> 出单文件 exe；详细用法见 <a href="https://github.com/Yokino337088/Revolution/blob/main/Revolution.Could/README.md"><code>Revolution.Could/README.md</code></a>。要求桶为<b>公有读 / 私有写</b></td></tr>
+          <tr><td><b>UploadToCos.cmd</b><br>（腾讯云命令行）</td><td>CI / 习惯命令行发版</td><td><code>Assets/Revolution.Demo/RevHotUpdate.Demo/UploadToCos.cmd</code>；依赖腾讯云官方 COSCLI（<code>coscli config init</code> 配密钥，密钥不进 Unity 工程）</td></tr>
+          <tr><td><b>UploadToOss.cmd</b><br>（阿里云命令行）</td><td>用阿里云 OSS 的项目</td><td>同目录 <code>UploadToOss.cmd</code>；依赖 ossutil</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout good">
+      <span class="t">顺序纪律已内置</span>
+      <p>三个工具都按同一条顺序发布：<b>内容（AB 包 + <code>ResMap.txt</code>）先传并设 <code>Cache-Control: immutable</code> 长缓存；<code>RevHotManifest.txt</code> 最后传并设 <code>no-cache</code></b> —— "先传内容、后传清单"不会搞反，SDK 密钥也都不会写进 Unity 工程或提交到 Git。</p>
+      <p>上传完成后记得两件 CDN 侧的事：<b>清单 URL 刷新缓存</b>（否则边缘节点一直回旧清单，玩家收不到新版本）；WebGL / 小游戏在桶上配好 <b>CORS</b>（GET + HEAD）。</p>
+    </div>
   </section>
 
   <!-- ==================== 六、本地目录长什么样 / 怎么回滚 ==================== -->

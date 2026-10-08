@@ -394,6 +394,17 @@ RevHotUpdateResult result = await RevHotUpdate.UpdateAsync(check, p => bar.Set(p
 | CORS | 允许 `GET` / `HEAD` / `Range` 与自定义 Header（小游戏必需，配错的现象是"网络错误"） |
 | 小游戏白名单 | 域名要在公众平台配置 + 备案 + 有效证书；一个域名搞定所有环境（用路径区分） |
 
+### 发布工具（三选一，都不用去云控制台手点上传）
+
+| 工具 | 适合 | 位置 / 依赖 |
+|---|---|---|
+| **Revolution.Could**（WPF 可视化，主推腾讯云 COS） | Windows 上点几下就发布：分步引导、目标路径预览、进度与日志、可取消；上传前自动做两道安全预检（本地 SHA-256 对账 + 远端同路径内容比对，**同版本路径内容不同直接拒绝覆盖**） | 仓库根 `Revolution.Could/`：`dotnet run --project Revolution.Could` 或 `dotnet publish` 出单文件 exe；详细用法见 [`Revolution.Could/README.md`](../../Revolution.Could/README.md)。要求桶为**公有读 / 私有写** |
+| **UploadToCos.cmd（腾讯云命令行）** | CI / 习惯命令行发版 | `Assets/Revolution.Demo/RevHotUpdate.Demo/UploadToCos.cmd`；依赖腾讯云官方 COSCLI（`coscli config init` 配密钥，密钥不进 Unity 工程） |
+| **UploadToOss.cmd（阿里云命令行）** | 用阿里云 OSS 的项目 | 同目录 `UploadToOss.cmd`；依赖 ossutil |
+
+三个工具都内置同一条顺序纪律：**内容（AB 包 + `ResMap.txt`）先传并设 `Cache-Control: immutable` 长缓存；`RevHotManifest.txt` 最后传并设 `no-cache`** —— "先传内容、后传清单"不会搞反，SDK 密钥也都不会写进 Unity 工程或提交到 Git。
+上传完成后记得两件 CDN 侧的事：**清单 URL 刷新缓存**（否则边缘节点一直回旧清单，玩家收不到新版本）；WebGL / 小游戏在桶上配好 **CORS**（GET + HEAD）。
+
 ---
 
 ## 六、本地目录长什么样 / 怎么回滚

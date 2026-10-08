@@ -216,6 +216,7 @@
         <h3><span class="ico">🔄</span>资源热更新（RevHotUpdate）</h3>
         <p class="desc">清单驱动版本比对与差量下载（只下变化过的包）、断点续传、多源降级、尺寸 + SHA-256 校验、版本目录原子切换与回滚；Android 首包落地、小游戏走版本化 URL + 引擎缓存。</p>
         <p class="desc">⚡ 想先跑起来看：示例 <code>Assets/Revolution.Demo/RevHotUpdate.Demo/</code>（一键装配本地 CDN + 起本地假 CDN + 面板三步，不需要真云账号）。</p>
+        <p class="desc">🛠 配套发布工具：主推 <b>Revolution.Could</b>（腾讯云 COS 热更发布 WPF 可视化工具，源码在仓库根 <code>Revolution.Could/</code>：选产物 → 校验 SHA-256 → 按安全顺序上传）；另有 <code>UploadToCos</code> / <code>UploadToOss</code> 命令行脚本给 CI 用。三者都内置"内容先传、清单最后传"纪律。</p>
         <div class="links">
           <a href="热更新/RevHotUpdate使用说明.html">使用说明</a>
           <a href="热更新/RevHotUpdate架构解析.html">架构解析</a>
