@@ -221,15 +221,35 @@ namespace Revolution.Editor
             }
         }
 
+        /// <summary>工具生成骨架的头部标记：带它才是"可以放心覆盖"的文件。</summary>
+        private const string SkeletonMarker = "面板代码骨架：由 Revolution.Tools/UI/面板代码生成器生成";
+
         private void Generate()
         {
             if (!TryGenerate(out string source, out string error)) { SetMessage(error, MessageType.Error); return; }
             string destination = OutputFolder() + "/" + _className + ".cs";
-            // 只创建新脚本。老业务代码可能已经写了逻辑，不能靠“重新生成”把它覆盖掉。
+
+            // 已存在时的策略：
+            //   · 本工具生成的骨架 → 弹窗确认后覆盖（改了预制体层级后"重新生成"是常规操作）；
+            //   · 其它文件 → 一律不动（里面可能有手写业务逻辑，覆盖就是事故）。
             if (File.Exists(destination))
             {
-                SetMessage("脚本已存在，未覆盖：" + destination + "。如需更新控件，请复制预览中的字段/事件方法手动合入旧文件。", MessageType.Warning);
-                return;
+                string firstLine = "";
+                try { using var reader = new StreamReader(destination); firstLine = reader.ReadLine() ?? ""; }
+                catch (IOException) { }
+
+                if (!firstLine.Contains(SkeletonMarker))
+                {
+                    SetMessage("目标文件已存在，且不是本工具生成的骨架（可能包含手写逻辑），为保护代码未覆盖：" + destination +
+                               "。如需更新控件，请复制预览中的字段/事件方法手动合入。", MessageType.Warning);
+                    return;
+                }
+
+                if (!EditorUtility.DisplayDialog("覆盖已生成的骨架？",
+                        destination + "\n\n这个文件是本工具之前生成的骨架，将被按当前勾选重新生成；" +
+                        "你之前在骨架里手改过的内容会丢失。",
+                        "覆盖", "取消"))
+                { SetMessage("已取消覆盖。", MessageType.Info); return; }
             }
             try
             {
@@ -419,7 +439,7 @@ namespace Revolution.Editor
             List<PanelControl> controls, bool attributes)
         {
             var sb = new StringBuilder(2048);
-            sb.AppendLine("// 面板代码骨架：由 Revolution.Tools/UI/面板代码生成器生成。首次生成后可自由修改；生成器不会覆盖此文件。");
+            sb.AppendLine("// 面板代码骨架：由 Revolution.Tools/UI/面板代码生成器生成。再次生成时会确认覆盖；手写逻辑请放在别的文件或生成后及时修改。");
             sb.AppendLine("using Revolution;");
             // 有内置 UGUI 绑定字段时补上对应 using，让生成的字段类型用短名、可读性更好。
             if (controls.Any(c => c.Bind && !c.TypeName.StartsWith("global::", StringComparison.Ordinal)))
