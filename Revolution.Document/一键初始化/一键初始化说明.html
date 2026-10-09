@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revolution 一键初始化 · 使用说明</title>
+<style>
+  :root{--accent:#2F6FED;--accent-soft:#EAF1FE;--page:#F4F6F9;--panel:#fff;--border:#E3E7ED;--text:#1F2329;--sub:#6B7280;--good:#12A150;--good-soft:#E8F8EF;--warn:#B7791F;--warn-soft:#FDF6E3;--bad:#D93F31;--bad-soft:#FDECEA;--code:#1E2430;--radius:12px}
+  *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--page);color:var(--text);font:15.5px/1.85 "Microsoft YaHei UI","Microsoft YaHei","PingFang SC","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .hero{background:linear-gradient(135deg,#2359C7 0%,#3978EC 55%,#75A2FF 100%);color:#fff;padding:48px 24px 40px;position:relative;overflow:hidden}.hero:after{content:"";position:absolute;width:340px;height:340px;border:1px solid rgba(255,255,255,.18);border-radius:50%;right:-90px;top:-170px;box-shadow:0 0 0 32px rgba(255,255,255,.05),0 0 0 64px rgba(255,255,255,.04)}.wrap{max-width:980px;margin:0 auto;position:relative;z-index:1}.kicker{display:inline-block;font-size:12px;letter-spacing:.12em;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.32);border-radius:999px;padding:3px 12px;margin-bottom:14px}.hero h1{font-size:32px;line-height:1.35;margin:0 0 10px}.hero p{max-width:760px;margin:0;color:rgba(255,255,255,.92);font-size:15px}.hero code{background:rgba(255,255,255,.17);color:#fff;border-color:rgba(255,255,255,.28)}
+  main{max-width:980px;margin:0 auto;padding:26px 22px 70px}section{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:26px 28px;margin-bottom:18px;box-shadow:0 3px 12px rgba(31,35,41,.025)}h2{font-size:21px;line-height:1.45;margin:0 0 8px;display:flex;align-items:center;gap:10px}h2 .num{min-width:30px;height:30px;line-height:30px;text-align:center;border-radius:9px;background:var(--accent);color:#fff;font-size:14px;padding:0 8px}h3{font-size:17px;margin:24px 0 8px}p{margin:10px 0}ul,ol{padding-left:24px;margin:10px 0}li{margin:6px 0}code{font:13px "Cascadia Mono",Consolas,monospace;background:#EEF2F8;border:1px solid #E1E7F0;border-radius:5px;padding:2px 5px;color:#22304A}pre{background:var(--code);color:#D7DEEA;border-radius:9px;padding:16px 18px;overflow:auto;font:13px/1.75 "Cascadia Mono",Consolas,monospace;margin:14px 0}.c{color:#8291AB}.k{color:#8FB8FF}.s{color:#A5D6A7}.callout{border-radius:9px;padding:14px 16px;margin:14px 0;border-left:4px solid var(--accent);background:var(--accent-soft)}.callout.good{border-color:var(--good);background:var(--good-soft)}.callout.warn{border-color:var(--warn);background:var(--warn-soft)}.callout.bad{border-color:var(--bad);background:var(--bad-soft)}.callout b.title{display:block;margin-bottom:3px}.flow{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:16px 0}.flow span{background:#F7F9FC;border:1px solid var(--border);border-radius:8px;padding:7px 11px;font-size:13px}.flow span.active{background:var(--accent-soft);border-color:#B9CEFB;color:#1F55BE}.flow i{color:var(--accent);font-style:normal;font-weight:700}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin:14px 0}.card{border:1px solid var(--border);border-radius:9px;background:#FBFCFE;padding:13px 15px}.card b{display:block;margin-bottom:4px}.card small{color:var(--sub);font-size:13px}.table-wrap{overflow-x:auto;margin:12px 0}table{border-collapse:collapse;width:100%;font-size:13.5px}th,td{border:1px solid var(--border);padding:10px 12px;text-align:left;vertical-align:top}th{background:#F3F6FB}tbody tr:nth-child(even){background:#FAFBFD}.sub{color:var(--sub);font-size:14px}.footer{text-align:center;color:var(--sub);font-size:12px;padding:8px}
+  @media(max-width:640px){.hero{padding:36px 18px}.hero h1{font-size:26px}main{padding:16px 12px 42px}section{padding:20px 17px}pre{font-size:12px;padding:13px}}
+</style>
+</head>
+<body>
+<header class="hero"><div class="wrap"><span class="kicker">REVOLUTION FRAMEWORK · BOOTSTRAP</span><h1>一键初始化 · 使用说明</h1><p>在游戏启动入口调用一次 <code>RevInitialize.Initialize()</code>，统一装配资源加载策略；不必再记住直接调用 <code>RevResBootstrap.Instance.Init()</code>。</p></div></header>
+<main>
+  <section>
+    <h2><span class="num">01</span>最快接入：启动时调用一行</h2>
+    <p>把初始化放在首个业务场景开始加载资源之前。推荐使用独立的 Boot 场景，在它的启动脚本 <code>Awake</code> 或 <code>Start</code> 中调用：</p>
+<pre><span class="k">using</span> UnityEngine;
+<span class="k">using</span> Revolution;
+
+<span class="k">public sealed class</span> GameBootstrap : MonoBehaviour
+{
+    <span class="k">private void</span> Awake()
+    {
+        RevInitialize.Initialize();
+    }
+}</pre>
+    <div class="callout good"><b class="title">调用成功后</b>资源加载策略已经注册。之后可正常使用 <code>RevUI.Open</code>、带资源路径的 <code>RevPool.Get</code>、<code>RevDataLoad</code> 等资源加载入口。</div>
+    <p class="sub">运行期间可通过 <code>RevInitialize.IsInitialized</code> 查询门面是否已完成初始化。当前门面是显式调用式，不会在进入 Play 时擅自启动；这样资源扩展和项目配置有机会先完成装配。</p>
+  </section>
+
+  <section>
+    <h2><span class="num">02</span>初始化做了什么</h2>
+    <div class="flow"><span>业务启动入口</span><i>→</i><span class="active">RevInitialize.Initialize()</span><i>→</i><span>RevResBootstrap.Init()</span><i>→</i><span>资源策略就绪</span></div>
+    <ul>
+      <li>初始化资源系统策略：编辑器默认注册工程资源直读策略；运行时按 AB / Resources 策略加载。</li>
+      <li>在本次运行会话内保持幂等：重复调用直接返回，不会再次清缓存、取消在途加载或重建 AB Loader。</li>
+      <li>初始化失败会记录异常并重新抛出；门面状态恢复为未完成，可修复问题后重试。</li>
+      <li>关闭 Unity Domain Reload 时，门面会在新 Play 会话的 <code>SubsystemRegistration</code> 阶段重置状态，便于下一次启动重新初始化。</li>
+    </ul>
+    <div class="callout warn"><b class="title">不要在运行过程中直接重复调用底层 Init</b><code>RevResBootstrap.Instance.Init()</code> 会取消异步资源请求、释放预加载并清空旧资源缓存。项目业务统一调用 <code>RevInitialize.Initialize()</code>；编辑器切换 AB 模式时框架内部会自行重建策略。</div>
+  </section>
+
+  <section>
+    <h2><span class="num">03</span>有资源扩展时的初始化顺序</h2>
+    <p>热更新等扩展可能需要在资源策略注册前安装 ResMap 或包路径钩子。门面提供了一个可选前置回调，用于先装配扩展，再初始化资源系统：</p>
+<pre><span class="c">// 示例结构：先安装资源扩展，再由门面注册资源策略</span>
+RevInitialize.Initialize(() =&gt;
+{
+    <span class="c">// 在这里调用当前已安装扩展提供的 Install / Configure 接口</span>
+    <span class="c">// 具体类型和调用方式以对应扩展包的使用说明为准</span>
+});</pre>
+    <p>前置回调只在本会话第一次成功初始化时运行。普通项目不接扩展时，无需传回调。</p>
+    <div class="callout"><b class="title">切勿递归初始化</b>不要在这个回调里再次调用 <code>RevInitialize.Initialize()</code> 或直接启动另一套资源策略；递归调用会明确抛出异常。</div>
+  </section>
+
+  <section>
+    <h2><span class="num">04</span>哪些模块不需要放进一键 Init</h2>
+    <p>一键门面只负责框架级必需装配，不会替项目决定业务配置。大多数模块已有自己的 Unity 生命周期钩子或按需创建逻辑：</p>
+    <div class="table-wrap"><table><thead><tr><th>模块 / 能力</th><th>启动方式</th><th>项目需要做什么</th></tr></thead><tbody>
+      <tr><td>事件、输入、计时器、对象池、UI、场景状态等</td><td>Unity Runtime 初始化钩子复位静态状态；驱动按需安装</td><td>正常使用公开门面，不要重复清理或手动重复驱动</td></tr>
+      <tr><td>应用前后台生命周期</td><td>框架在首场景前自动安装隐藏宿主</td><td>按需订阅 <code>RevAppLifecycle</code> 事件</td></tr>
+      <tr><td>服务定位器</td><td>由业务组合根注册并调用 <code>Build()</code></td><td>自行决定服务类型、作用域与释放时机；需要 <code>RevITickable</code> 时由自己的宿主逐帧调用 <code>Tick()</code></td></tr>
+      <tr><td>GM 命令、事件监听、输入绑定等业务注册</td><td>模块状态由钩子复位，业务注册表需按项目启动时机重新装配</td><td>在自己的启动入口显式注册业务内容</td></tr>
+    </tbody></table></div>
+    <div class="callout bad"><b class="title">服务定位器不会被自动 Build</b>服务注册表属于业务组合根。框架无法猜测项目需要哪些服务，也不能统一替所有作用域调用 <code>Tick</code> 或 <code>Dispose</code>。</div>
+  </section>
+
+  <section>
+    <h2><span class="num">05</span>常见问题</h2>
+    <h3>不调用会怎样？</h3>
+    <p>依赖资源系统路径加载的 UI、数据表、音效或对象池预制体可能加载失败，因为资源策略尚未注册。直接传入已持有 prefab 引用的 <code>RevPool.Get(prefab)</code> 不走路径资源加载，是例外。</p>
+    <h3>可以在多个场景的 Awake 都调用吗？</h3>
+    <p>可以，门面在一个运行会话内只初始化一次。不过推荐仍集中在唯一的 Boot / Bootstrap 入口，方便保证所有场景使用资源前已完成初始化。</p>
+    <h3>运行时修改了资源加载模式怎么办？</h3>
+    <p>编辑器的 AB 模式切换会由资源系统内部重建策略。普通业务不要用 <code>RevResBootstrap.Init()</code> 手动重复切换。</p>
+    <h3>接入失败先检查什么？</h3>
+    <ol><li>确认 <code>RevInitialize.Initialize()</code> 在第一次路径资源加载之前执行。</li><li>查看 Console 中的初始化异常和资源错误原因。</li><li>检查 AB 模式、资源映射表及资源根目录配置。</li><li>确认没有其他脚本在启动后直接重复调用 <code>RevResBootstrap.Instance.Init()</code>。</li></ol>
+  </section>
+  <div class="footer">Revolution Framework · 一键初始化门面</div>
+</main>
+</body>
+</html>
