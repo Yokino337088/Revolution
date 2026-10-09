@@ -230,7 +230,8 @@ namespace Revolution
                 rt.Elapsed -= duration;
                 rt.LoopsDone++;
 
-                bool lastLoop = rt.Spec.Loops >= 0 && rt.LoopsDone >= rt.Spec.Loops;
+                bool lastLoop = rt.Spec.Wrap == RevUIAnimWrap.Once ||
+                                (rt.Spec.Loops >= 0 && rt.LoopsDone >= rt.Spec.Loops);
 
                 if (rt.Spec.Wrap == RevUIAnimWrap.PingPong)
                 {
@@ -394,7 +395,8 @@ namespace Revolution
         {
             Active.Clear();
             Pool.Clear();
-            _nextId = 1;
+            // 不重置 ID：关闭 Domain Reload 时旧句柄可能被业务静态字段持有；
+            // 新会话若从 1 重新分配并复用相同 Version，旧句柄会误命中新动画。
             TotalPlayed = TotalFinished = TotalStopped = StepCount = 0;
         }
 

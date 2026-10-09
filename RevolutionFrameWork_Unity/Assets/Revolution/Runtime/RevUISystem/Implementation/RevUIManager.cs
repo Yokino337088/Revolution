@@ -44,11 +44,50 @@ namespace Revolution
         private readonly Dictionary<string, RevUIPanel> _opened = new Dictionary<string, RevUIPanel>(StringComparer.Ordinal);
 
         /// <summary>面板键 → 还在等这次加载结果的回调（在途合并）</summary>
-        private readonly Dictionary<string, List<Action<RevUIPanel>>> _loading =
-            new Dictionary<string, List<Action<RevUIPanel>>>(StringComparer.Ordinal);
+        private readonly Dictionary<string, OpenRequest> _loading =
+            new Dictionary<string, OpenRequest>(StringComparer.Ordinal);
+
+        // 请求对象身份覆盖“加载 + 打开动画”整个阶段，旧回调不能消费同键的新请求。
+        private sealed class OpenRequest
+        {
+            internal RevUIPanelMeta Meta;
+            internal object Data;
+            internal readonly List<Action<RevUIPanel>> Callbacks = new List<Action<RevUIPanel>>();
+            internal RevUIPanel Panel;
+        }
+
+        // 面板实例各持有一份 prefab 资源引用；只保存路径与 instance ID，
+        // 即使 Unity 对象在新会话已变成假 null，也能准确归还旧引用。
+        // 关闭转场另用同一租约跟踪所有权转移，避免 Shutdown 与晚到回调重复释放。
+
+        private sealed class ClosingResourceLease
+        {
+            internal readonly int InstanceId;
+            internal readonly string Root;
+            internal readonly string Name;
+            internal readonly RevUIPanel Panel;
+            internal bool Released;
+
+            internal ClosingResourceLease(RevUIPanel panel, string root, string name)
+            {
+                Panel = panel;
+                InstanceId = panel != null ? panel.GetInstanceID() : 0;
+                Root = root;
+                Name = name;
+            }
+        }
+
+        private bool _shuttingDown;
 
         /// <summary>打开顺序（层内排序 + 返回栈都读它）</summary>
         private readonly List<RevUIPanel> _openOrder = new List<RevUIPanel>();
+
+        /// <summary>所有尚未归还的面板 prefab 引用，包含打开中、打开态、池中及关闭转场中实例。</summary>
+        private readonly Dictionary<int, ClosingResourceLease> _panelResourceLeases =
+            new Dictionary<int, ClosingResourceLease>(16);
+
+        /// <summary>已从打开索引摘除、但关闭转场尚未完成的资源租约。</summary>
+        private readonly List<ClosingResourceLease> _closingResources = new List<ClosingResourceLease>(4);
 
         /// <summary>互斥组 → 当前占着这个组的面板</summary>
         private readonly Dictionary<string, RevUIPanel> _exclusive = new Dictionary<string, RevUIPanel>(StringComparer.Ordinal);
@@ -105,14 +144,20 @@ namespace Revolution
                 return null;
             }
 
+            if (_shuttingDown) { InvokeAll(callbacks, null); return null; }
             EnsureReady();
 
             string key = meta.Key;
 
-            // ① 正在加载中 → 并进在途那一次（同一面板并发打开只创建一个实例）
-            if (_loading.TryGetValue(key, out List<Action<RevUIPanel>> waiting))
+            // 合并到完全打开为止；最后一次非空数据优先，与已打开面板更新数据的规则一致。
+            if (_loading.TryGetValue(key, out OpenRequest waiting))
             {
-                if (callbacks != null) waiting.AddRange(callbacks);
+                if (callbacks != null) waiting.Callbacks.AddRange(callbacks);
+                if (data != null)
+                {
+                    waiting.Data = data;
+                    if (waiting.Panel != null) waiting.Panel.SetData(data);
+                }
                 RevUILog.Info($"{key} 正在加载中，本次请求并入在途的那一次");
                 return null;
             }
@@ -136,24 +181,32 @@ namespace Revolution
             if (pooled != null)
             {
                 RevUILog.Info($"{key} 命中实例池，直接复用");
-                pooled.InternalReuse();                    // ★ 清上一次的残留（业务在 OnReuse 里写）
+                OpenRequest request = BeginOpen(meta, data, callbacks);
+                request.Panel = pooled;
+                pooled.InternalReuse();
+                if (!IsCurrent(meta.Key, request) || _root == null) return null;
                 Register(pooled);
-                if (data != null) pooled.SetData(data);
-                pooled.InternalOpen(() => InvokeAll(callbacks, pooled));
+                if (request.Data != null) pooled.SetData(request.Data);
+                if (!IsCurrent(meta.Key, request)) return null;
+                pooled.InternalOpen(() => CompleteOpen(meta.Key, request, pooled));
                 return pooled;
             }
 
-            // ⑤ 预制体已经在**资源缓存**里（Preload 过 / 编辑器直读 / 之前加载过被留着）
-            //    → 同步实例化。★ 这就是"先 RevUI.Preload<T>() 再同步 Open<T>()"能成立的那条路；
-            //    编辑器直读时甚至连 Preload 都不需要（资源系统同步就能取到）。
-            if (RevResManager.Contains(meta.Root, meta.Name))
+            // ⑤ 预制体已经在**资源缓存**里且加载成功（Preload 过 / 编辑器直读 / 之前加载过被留着）
+            //    → 同步实例化。失败句柄也会留在资源缓存里；它不能当作"有可用预制体"，
+            //    否则 Load 会再加一份引用、返回 null，且错误会被误报为"不是 GameObject"。
+            RevResHandle cachedHandle = RevResManager.Get(meta.Root, meta.Name);
+            if (cachedHandle.IsLoaded)
             {
-                GameObject cached = RevResManager.Load<GameObject>(meta.Root, meta.Name, RevResGroup.UI);
-                if (cached == null)
+                // LoadHandle 会为本次面板持有增加一份引用；之后无论校验成功与否都必须归还或交给面板。
+                RevResHandle acquired = RevResManager.LoadHandle<GameObject>(meta.Root, meta.Name, RevResGroup.UI);
+                GameObject cached = acquired.Get<GameObject>();
+                if (!acquired.IsLoaded || cached == null)
                 {
                     RevUILog.Error(
-                        $"{meta.Key} 已经在资源缓存里，但取出来的不是 GameObject —— " +
-                        $"这个名字对应的资源不是预制体？检查面板特性里的 root / name 是不是指向了别的东西。");
+                        $"{meta.Key} 的缓存资源不是可用的 GameObject 预制体（原因：{acquired.ErrorReason}）。" +
+                        $"检查面板特性里的 root / name 是否指向了正确的预制体。");
+                    RevResManager.DecRef(acquired);
                     InvokeAll(callbacks, null);
                     return null;
                 }
@@ -161,42 +214,49 @@ namespace Revolution
                 return InstantiatePanel(meta, data, cached, callbacks);
             }
 
-            // ⑥ 真需要加载了：同步入口到这里就只能放弃（让调用方改用异步入口）
-            if (!allowLoad) return null;
+            // ⑥ 同步调用不能等待；异步调用继续往下走。
+            //    LoadAsync 遇到已完成且无人持有的失败句柄时会移除旧失败项并重新尝试，
+            //    因此修正资源路径后可以直接再次打开，无须等 FlushUnused。
+            if (!allowLoad)
+            {
+                if (cachedHandle.Key != 0)
+                {
+                    RevUILog.Warning(cachedHandle.IsLoading
+                        ? $"{meta.Key} 的预制体仍在异步加载中；本次同步 Open 不会等待，请使用 OpenAsync。"
+                        : $"{meta.Key} 的缓存资源加载失败（原因：{cachedHandle.ErrorReason}）；请改用 OpenAsync 重试，或先确认资源路径与资源系统已初始化。");
+                    InvokeAll(callbacks, null);
+                }
+                return null;
+            }
 
-            _loading[key] = callbacks ?? new List<Action<RevUIPanel>>();
+            OpenRequest pending = BeginOpen(meta, data, callbacks);
             RevUILog.Info($"开始加载面板 {key}");
 
-            RevResManager.LoadAsync<GameObject>(meta.Root, meta.Name,
-                prefab => OnPrefabLoaded(meta, data, prefab), RevResGroup.UI);
+            RevResManager.LoadAsync(meta.Root, meta.Name, typeof(GameObject), handle =>
+            {
+                // 用原始句柄释放，资源系统重置后不会误扣同路径新句柄的引用。
+                if (!IsCurrent(key, pending) || _root == null)
+                {
+                    RevResManager.DecRef(handle);
+                    CompleteOpen(key, pending, null);
+                    return;
+                }
+                GameObject prefab = handle.Content as GameObject;
+                if (prefab == null)
+                {
+                    RevUILog.Error(
+                        $"打开 {meta.Key} 失败：预制体加载不到。\n" +
+                        $"  逐条查：① 资源是否在「资源根目录」下、并设了 AB 名；" +
+                        $"② 打包工具「检查」页签有没有报漏标；③ 路径 \"{meta.Root}\" + \"{meta.Name}\" 是否写对。" +
+                        $"（默认资源名就是类名，不一致时用 [RevUIPanel(root, layer, \"名字\")] 写清楚）");
+                    RevResManager.DecRef(handle);
+                    CompleteOpen(key, pending, null);
+                    return;
+                }
+                InstantiatePanel(meta, pending.Data, prefab, pending.Callbacks, pending);
+            }, RevResGroup.UI);
 
             return null;
-        }
-
-        private void OnPrefabLoaded(RevUIPanelMeta meta, object data, GameObject prefab)
-        {
-            List<Action<RevUIPanel>> callbacks = TakeLoading(meta.Key);
-
-            // 加载期间根节点被销毁了（切大版本 / ShutdownAll）→ 把这次加载的引用还掉，别再建实例
-            if (_root == null)
-            {
-                if (prefab != null) RevResManager.Release(meta.Root, meta.Name);
-                InvokeAll(callbacks, null);
-                return;
-            }
-
-            if (prefab == null)
-            {
-                RevUILog.Error(
-                    $"打开 {meta.Key} 失败：预制体加载不到。\n" +
-                    $"  逐条查：① 资源是否在「资源根目录」下、并设了 AB 名；" +
-                    $"② 打包工具「检查」页签有没有报漏标；③ 路径 \"{meta.Root}\" + \"{meta.Name}\" 是否写对。" +
-                    $"（默认资源名就是类名，不一致时用 [RevUIPanel(root, layer, \"名字\")] 写清楚）");
-                InvokeAll(callbacks, null);
-                return;
-            }
-
-            InstantiatePanel(meta, data, prefab, callbacks);
         }
 
         /// <summary>
@@ -204,8 +264,9 @@ namespace Revolution
         /// ★ 同步路径（预制体已在缓存里）和异步路径（加载回来）共用这一份，避免两条路各写一遍走偏。
         /// </summary>
         private RevUIPanel InstantiatePanel(RevUIPanelMeta meta, object data, GameObject prefab,
-            List<Action<RevUIPanel>> callbacks)
+            List<Action<RevUIPanel>> callbacks, OpenRequest request = null)
         {
+            request = request ?? BeginOpen(meta, data, callbacks);
             // ★ 挂到哪：单 Canvas → 对应层挂点；三 Canvas → 静态 / 动态画布（仅 Scene 层）或常用画布的层挂点
             RevUICanvasType canvasType = ResolveCanvasType(meta);
             GameObject go = UnityEngine.Object.Instantiate(prefab, _root.GetPanelParent(meta.Layer, canvasType), false);
@@ -222,16 +283,20 @@ namespace Revolution
                     $"  默认约定：预制体名 = 面板类名；不一致就在特性里写第三个参数指定资源名。");
                 RevResManager.Release(meta.Root, meta.Name);      // 这次加载换来的引用要还回去
                 RevUIRoot.DestroyObject(go);
-                InvokeAll(callbacks, null);
+                CompleteOpen(meta.Key, request, null);
                 return null;
             }
 
+            request.Panel = panel;
+            TrackPanelResource(panel, meta.Root, meta.Name);
             panel.CanvasType = canvasType;
             panel.InternalSetup(meta);
+            if (!IsCurrent(meta.Key, request) || _root == null) return null;
             Register(panel);
-            if (data != null) panel.SetData(data);
+            if (request.Data != null) panel.SetData(request.Data);
+            if (!IsCurrent(meta.Key, request)) return null;
 
-            panel.InternalOpen(() => InvokeAll(callbacks, panel));
+            panel.InternalOpen(() => CompleteOpen(meta.Key, request, panel));
             return panel;
         }
 
@@ -271,6 +336,37 @@ namespace Revolution
             if (_exclusive.TryGetValue(meta.ExclusiveGroup, out RevUIPanel current) &&
                 current != null && current.State != RevUIPanelState.Closed)
                 Close(current);
+
+            // 还没加载完的请求尚未进入 _exclusive；不取消就会与新面板一起打开，破坏互斥语义。
+            var pending = new List<KeyValuePair<string, OpenRequest>>();
+            foreach (KeyValuePair<string, OpenRequest> pair in _loading)
+            {
+                if (pair.Key == meta.Key || pair.Value.Meta == null ||
+                    pair.Value.Meta.ExclusiveGroup != meta.ExclusiveGroup) continue;
+                pending.Add(pair);
+            }
+
+            for (int i = 0; i < pending.Count; i++)
+            {
+                KeyValuePair<string, OpenRequest> pair = pending[i];
+                OpenRequest request = pair.Value;
+                if (!IsCurrent(pair.Key, request)) continue;
+
+                _loading.Remove(pair.Key);
+                InvokeAll(request.Callbacks, null);
+                request.Callbacks.Clear();
+
+                // 罕见的 OnBindView 重入：实例尚未 Register，但已经持有资源引用。
+                if (request.Panel != null && !_openOrder.Contains(request.Panel))
+                {
+                    if (_root != null) _root.AddPendingRelease(request.Panel);
+                    else
+                    {
+                        ReleasePanelResource(request.Panel);
+                        RevUIRoot.DestroyObject(request.Panel.gameObject);
+                    }
+                }
+            }
         }
 
         /// <summary>把面板挪到"它所在层的最上面"（层内顺序由打开顺序决定，这里只改全局顺序）</summary>
@@ -295,19 +391,27 @@ namespace Revolution
 
             Unregister(panel);
 
+            _loading.TryGetValue(panel.PanelKey, out OpenRequest opening);
+            if (opening != null && opening.Panel == panel) _loading.Remove(panel.PanelKey);
+            else opening = null;
+            RevUIRoot closingRoot = _root;
+            ClosingResourceLease lease = GetPanelResourceLease(panel) ?? TrackPanelResource(panel, panel.PrefabRoot, panel.PrefabName);
+            _closingResources.Add(lease);
+
             bool keepAlive = ResolveCacheMode(panel) == RevUICacheMode.KeepAlive;
             bool canPool = keepAlive && !_pool.IsFull(panel.PanelKey);
 
             panel.InternalClose(() =>
             {
-                // ★ Bug 修复（2026-09-30）：关闭是异步的（转场 + 隐藏动画），这个回调可能在
-                //   ShutdownAll / 场景卸载（根节点已销毁，_root 为假 null）之后才执行 ——
-                //   那时面板 GameObject 早已随根销毁：回池只会把死实例塞进刚清空的池
-                //   （下次打开取出来就是已销毁对象），AddPendingRelease 的 _root 也已是 null。
-                //   这种情况下唯一还该做的事是把占用的资源引用还掉。
-                if (_root == null)
+                // ShutdownAll / 场景重建已经归还了这份引用。异步转场晚到的回调只能退出，
+                // 不能再读取已销毁面板的假 null 属性或重复 Release 同一路径。
+                if (lease.Released) return;
+                _closingResources.Remove(lease);
+
+                // 根节点已被销毁：用关闭时快照的路径归还，panel 此时可能已经是 Unity 假 null。
+                if (closingRoot == null || _root != closingRoot)
                 {
-                    ReleaseResourceOf(panel);
+                    ReleasePanelResource(lease);
                     return;
                 }
 
@@ -321,6 +425,11 @@ namespace Revolution
                 _root.AddPendingRelease(panel);        // 延迟一帧销毁：避免在事件/遍历里删对象
             });
 
+            if (opening != null)
+            {
+                InvokeAll(opening.Callbacks, null);
+                opening.Callbacks.Clear();
+            }
             return true;
         }
 
@@ -391,11 +500,14 @@ namespace Revolution
 
         private void Unregister(RevUIPanel panel)
         {
-            _opened.Remove(panel.PanelKey);
+            if (ReferenceEquals(panel, null)) return;
+            string key = panel.PanelKey;
+            if (key != null && _opened.TryGetValue(key, out RevUIPanel currentOpen) && ReferenceEquals(currentOpen, panel))
+                _opened.Remove(key);
             _openOrder.Remove(panel);
 
             if (panel.Meta != null && panel.Meta.ExclusiveGroup != null &&
-                _exclusive.TryGetValue(panel.Meta.ExclusiveGroup, out RevUIPanel current) && current == panel)
+                _exclusive.TryGetValue(panel.Meta.ExclusiveGroup, out RevUIPanel current) && ReferenceEquals(current, panel))
                 _exclusive.Remove(panel.Meta.ExclusiveGroup);
 
             _layoutDirty = true;
@@ -565,6 +677,11 @@ namespace Revolution
         /// </summary>
         internal void ResetForNewSession()
         {
+            // Domain Reload 关闭时面板已经随上一轮场景销毁，但这些 prefab 引用计数仍是静态状态。
+            ReleaseAllPanelResourceLeases();
+            _panelResourceLeases.Clear();
+            _closingResources.Clear();
+            foreach (OpenRequest request in _loading.Values) request.Callbacks.Clear();
             _opened.Clear();
             _loading.Clear();
             _openOrder.Clear();
@@ -577,6 +694,11 @@ namespace Revolution
         private void EnsureReady()
         {
             if (_root != null) return;                     // Unity 的假 null：根节点被销毁后这里会走重建
+
+            // 根节点可能已随场景卸载销毁；Unity 对象即使是假 null，保存的租约路径仍可用来归还。
+            ReleaseAllPanelResourceLeases();
+            _panelResourceLeases.Clear();
+            _closingResources.Clear();
 
             // 根节点没了 = 换了一轮运行（或第一次用）：索引里那些实例已经不存在了，清掉
             _opened.Clear();
@@ -592,17 +714,30 @@ namespace Revolution
         /// <summary>全部清空（回登录界面 / 切大版本）：所有面板实例 + 根节点一起销毁</summary>
         public int ShutdownAll()
         {
-            RevUIPanel[] snapshot = _openOrder.ToArray();
+            var destroying = new List<RevUIPanel>(_openOrder);
+            foreach (OpenRequest request in _loading.Values)
+            {
+                // OnBindView / OnInit 可重入 ShutdownAll；此时实例尚未 Register，必须纳入销毁快照。
+                if (request.Panel != null && !destroying.Contains(request.Panel)) destroying.Add(request.Panel);
+            }
+            for (int i = 0; i < _closingResources.Count; i++)
+            {
+                RevUIPanel closing = _closingResources[i].Panel;
+                if (closing != null && !destroying.Contains(closing)) destroying.Add(closing);
+            }
+            RevUIPanel[] snapshot = destroying.ToArray();
             List<RevUIPanel> idle = _pool.Drain();
 
             _opened.Clear();
-            _loading.Clear();                              // 在途加载的回调直接丢弃（加载回来时会被 _root == null 拦下）
+            _shuttingDown = true;                          // 取消回调中不能立即重开，避免清理过程重入
             _openOrder.Clear();
             _exclusive.Clear();
             _layoutDirty = true;
 
             int count = snapshot.Length + idle.Count;
             RevUILog.Info($"ShutdownAll：销毁 {snapshot.Length} 个打开中的 + {idle.Count} 个池中实例");
+            ReleaseClosingResources();
+            CancelPendingOpens();
 
             if (_root != null)
             {
@@ -614,18 +749,85 @@ namespace Revolution
             }
             else
             {
-                // 根节点已经没了（比如场景卸载）：这些实例多半也已经随着没了，只把资源引用还掉
-                for (int i = 0; i < snapshot.Length; i++) ReleaseResourceOf(snapshot[i]);
-                for (int i = 0; i < idle.Count; i++) ReleaseResourceOf(idle[i]);
+                // 根节点已随场景销毁，面板引用可能已是假 null；用创建时保存的租约路径归还。
+                ReleaseAllPanelResourceLeases();
+                _panelResourceLeases.Clear();
             }
 
+            _shuttingDown = false;
             return count;
         }
 
-        private static void ReleaseResourceOf(RevUIPanel panel)
+        private ClosingResourceLease TrackPanelResource(RevUIPanel panel, string root, string name)
         {
-            if (panel == null || panel.PrefabRoot == null) return;
-            RevResManager.Release(panel.PrefabRoot, panel.PrefabName);
+            if (ReferenceEquals(panel, null)) return null;
+
+            int instanceId = panel.GetInstanceID();
+            if (_panelResourceLeases.TryGetValue(instanceId, out ClosingResourceLease existing)) return existing;
+
+            var lease = new ClosingResourceLease(panel, root, name);
+            _panelResourceLeases.Add(instanceId, lease);
+            return lease;
+        }
+
+        private ClosingResourceLease GetPanelResourceLease(RevUIPanel panel)
+        {
+            if (ReferenceEquals(panel, null)) return null;
+            return _panelResourceLeases.TryGetValue(panel.GetInstanceID(), out ClosingResourceLease lease) ? lease : null;
+        }
+
+        /// <summary>根节点销毁面板前归还其租约；记录保留到 OnDestroy，防止重复回调重复 Release。</summary>
+        internal void ReleasePanelResource(RevUIPanel panel)
+        {
+            ClosingResourceLease lease = GetPanelResourceLease(panel);
+            if (lease != null) ReleasePanelResource(lease);
+        }
+
+        private void ReleasePanelResource(ClosingResourceLease lease)
+        {
+            if (lease == null || lease.Released) return;
+            lease.Released = true;
+            RevResManager.Release(lease.Root, lease.Name);
+        }
+
+        private void ReleaseAllPanelResourceLeases()
+        {
+            foreach (ClosingResourceLease lease in _panelResourceLeases.Values)
+                ReleasePanelResource(lease);
+        }
+
+        /// <summary>面板被业务直接 Destroy 时，从所有 UI 索引移除并归还其资源引用。</summary>
+        internal void NotifyPanelDestroyed(RevUIPanel panel)
+        {
+            if (ReferenceEquals(panel, null)) return;
+            panel.InternalRelease();
+
+            string key = panel.PanelKey;
+            if (key != null && _loading.TryGetValue(key, out OpenRequest request) && request.Panel == panel)
+            {
+                _loading.Remove(key);
+                InvokeAll(request.Callbacks, null);
+                request.Callbacks.Clear();
+            }
+
+            Unregister(panel);
+            _pool.Forget(panel);
+
+            if (_panelResourceLeases.TryGetValue(panel.GetInstanceID(), out ClosingResourceLease lease))
+            {
+                ReleasePanelResource(lease);
+                _panelResourceLeases.Remove(lease.InstanceId);
+                _closingResources.Remove(lease);
+            }
+
+            RevUIAnim.StopAllOf(panel);
+        }
+
+        private void ReleaseClosingResources()
+        {
+            for (int i = 0; i < _closingResources.Count; i++)
+                ReleasePanelResource(_closingResources[i]);
+            _closingResources.Clear();
         }
 
         // ============================================================
@@ -663,8 +865,8 @@ namespace Revolution
             if (_loading.Count > 0)
             {
                 sb.Append("在途加载：\n");
-                foreach (KeyValuePair<string, List<Action<RevUIPanel>>> pair in _loading)
-                    sb.Append("  ").Append(pair.Key).Append("（等待 ").Append(pair.Value.Count).Append(" 个回调）\n");
+                foreach (KeyValuePair<string, OpenRequest> pair in _loading)
+                    sb.Append("  ").Append(pair.Key).Append("（等待 ").Append(pair.Value.Callbacks.Count).Append(" 个回调）\n");
             }
 
             sb.Append(_pool.DumpStats());
@@ -675,12 +877,33 @@ namespace Revolution
         // 小工具
         // ============================================================
 
-        private List<Action<RevUIPanel>> TakeLoading(string key)
+        private OpenRequest BeginOpen(RevUIPanelMeta meta, object data, List<Action<RevUIPanel>> callbacks)
         {
-            if (!_loading.TryGetValue(key, out List<Action<RevUIPanel>> list)) return new List<Action<RevUIPanel>>();
+            var request = new OpenRequest { Meta = meta, Data = data };
+            if (callbacks != null) request.Callbacks.AddRange(callbacks);
+            _loading[meta.Key] = request;
+            return request;
+        }
 
-            _loading.Remove(key);
-            return list;
+        private bool IsCurrent(string key, OpenRequest request)
+            => _loading.TryGetValue(key, out OpenRequest current) && ReferenceEquals(current, request);
+
+        private void CompleteOpen(string key, OpenRequest request, RevUIPanel panel)
+        {
+            if (IsCurrent(key, request)) _loading.Remove(key);
+            InvokeAll(request.Callbacks, panel);
+            request.Callbacks.Clear();
+        }
+
+        private void CancelPendingOpens()
+        {
+            var requests = new List<OpenRequest>(_loading.Values);
+            _loading.Clear();
+            foreach (OpenRequest request in requests)
+            {
+                InvokeAll(request.Callbacks, null);
+                request.Callbacks.Clear();
+            }
         }
 
         private static void InvokeAll(List<Action<RevUIPanel>> callbacks, RevUIPanel panel)

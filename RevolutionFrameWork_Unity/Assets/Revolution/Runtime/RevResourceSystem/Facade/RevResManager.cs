@@ -265,23 +265,34 @@ namespace Revolution
 
             ulong key = ComputeKey(standardPath);
 
-            // ① 缓存命中（成功或已缓存失败）：保留原句柄与引用计数，不覆盖仍被外部持有的句柄。
+            // ① 缓存命中：成功句柄直接复用；在途句柄合并回调。
+            //    已完成失败句柄若引用归零，则丢弃失败项并重新尝试（例如 UI 资源路径修正后再次打开）。
             if (_cache.TryGetValue(key, out RevResHandle cached))
             {
-                cached.RefCount++;
-                cached.RemoveFlag(RevResInstanceFlag.MarkedUnused);
-                _unused.Remove(key);
-                cached.Touch();
-                AssignGroup(cached, group);
-
-                if (cached.IsLoaded || !cached.IsLoading)
+                if (!cached.IsLoaded && !cached.IsLoading && cached.RefCount <= 0)
                 {
-                    InvokeFinished(onFinished, cached);
+                    // 失败回调已完成且无人持有；没有在途请求可被打断，可以安全替换这一代句柄。
+                    ReleaseBundleOf(cached);
+                    _cache.Remove(key);
+                    _unused.Remove(key);
+                }
+                else
+                {
+                    cached.RefCount++;
+                    cached.RemoveFlag(RevResInstanceFlag.MarkedUnused);
+                    _unused.Remove(key);
+                    cached.Touch();
+                    AssignGroup(cached, group);
+
+                    if (cached.IsLoaded || !cached.IsLoading)
+                    {
+                        InvokeFinished(onFinished, cached);
+                        return cached;
+                    }
+
+                    AddPendingCallback(cached, onFinished);
                     return cached;
                 }
-
-                AddPendingCallback(cached, onFinished);
-                return cached;
             }
 
             // ② 建实体并"先入缓存"——异步要先登记句柄，后续同 key 请求才能合并。

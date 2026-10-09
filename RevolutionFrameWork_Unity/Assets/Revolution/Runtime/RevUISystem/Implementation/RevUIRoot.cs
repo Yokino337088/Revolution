@@ -244,7 +244,9 @@ namespace Revolution
                 return;
             }
 
-            if (FindObjectOfType<EventSystem>() != null) return;
+            // 必须包含未激活对象：场景里已有但暂时禁用的 EventSystem 后续可能启用，
+            // 此时再造一个 DontDestroyOnLoad EventSystem 就会产生重复输入系统。
+            if (FindObjectOfType<EventSystem>(true) != null) return;
 
             var go = new GameObject("[RevUIEventSystem]", typeof(EventSystem));
             DontDestroyOnLoad(go);
@@ -518,9 +520,9 @@ namespace Revolution
 
                 panel.InternalRelease();
 
-                // ★ 与创建时的那一次 RevResManager.LoadAsync 配对：实例销毁 = 那一份引用归还。
-                //   注意池里的实例**不还**（它还要被复用，引用留着，prefab 才不会被卸掉）。
-                if (panel.PrefabRoot != null) RevResManager.Release(panel.PrefabRoot, panel.PrefabName);
+                // ★ 与创建时的资源租约配对：实例销毁 = 归还一份引用。
+                //   管理器以 instance ID 保留路径快照，即使外部已使 Unity 引用变成假 null 也不会漏/重复释放。
+                RevUIManager.Instance.ReleasePanelResource(panel);
 
                 DestroyObject(panel.gameObject);
             }

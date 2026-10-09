@@ -83,7 +83,8 @@ namespace Revolution
             for (int i = 0; i < plan.Fields.Length; i++)
                 BindField(target, root, plan.Fields[i], partHost);
 
-            if (plan.WantsAnyEvent) InstallEvents(target, root, plan);
+            // 自定义控件扩展（RegisterAutoEvent）不依赖面板是否重写了回调，注册了就必须扫描。
+            if (plan.WantsAnyEvent || Extensions.Count > 0) InstallEvents(target, root, plan);
         }
 
         // ============================================================
@@ -249,6 +250,23 @@ namespace Revolution
             });
         }
 
+        private static bool IsOwnedBy(MonoBehaviour target, Transform root, Transform node)
+        {
+            for (Transform current = node; current != null; current = current.parent)
+            {
+                MonoBehaviour[] components = current.GetComponents<MonoBehaviour>();
+                for (int i = 0; i < components.Length; i++)
+                {
+                    if (!(components[i] is IRevUIUserEvents)) continue;
+                    return ReferenceEquals(components[i], target);
+                }
+
+                if (current == root) break;
+            }
+
+            return false;
+        }
+
         private static void InstallEvents(MonoBehaviour target, Transform root, RevUIBindPlan plan)
         {
             if (!(target is IRevUIUserEvents receiver)) return;
@@ -265,6 +283,7 @@ namespace Revolution
                 Button[] items = root.GetComponentsInChildren<Button>(true);
                 for (int i = 0; i < items.Length; i++)
                 {
+                    if (!IsOwnedBy(target, root, items[i].transform)) continue;
                     RevUINodeRelay relay = new RevUINodeRelay(receiver, items[i].name);
                     items[i].onClick.AddListener(relay.OnClick);
                 }
@@ -276,6 +295,7 @@ namespace Revolution
                 Button[] items = root.GetComponentsInChildren<Button>(true);
                 for (int i = 0; i < items.Length; i++)
                 {
+                    if (!IsOwnedBy(target, root, items[i].transform)) continue;
                     RevUIButtonPressRelay relay = items[i].GetComponent<RevUIButtonPressRelay>();
                     if (relay == null) relay = items[i].gameObject.AddComponent<RevUIButtonPressRelay>();
                     relay.Setup(receiver, items[i].name);
@@ -287,6 +307,7 @@ namespace Revolution
                 Toggle[] items = root.GetComponentsInChildren<Toggle>(true);
                 for (int i = 0; i < items.Length; i++)
                 {
+                    if (!IsOwnedBy(target, root, items[i].transform)) continue;
                     RevUINodeRelay relay = new RevUINodeRelay(receiver, items[i].name);
                     items[i].onValueChanged.AddListener(relay.OnToggle);
                 }
@@ -297,6 +318,7 @@ namespace Revolution
                 Slider[] items = root.GetComponentsInChildren<Slider>(true);
                 for (int i = 0; i < items.Length; i++)
                 {
+                    if (!IsOwnedBy(target, root, items[i].transform)) continue;
                     RevUINodeRelay relay = new RevUINodeRelay(receiver, items[i].name);
                     items[i].onValueChanged.AddListener(relay.OnSlider);
                 }
@@ -307,6 +329,7 @@ namespace Revolution
                 InputField[] items = root.GetComponentsInChildren<InputField>(true);
                 for (int i = 0; i < items.Length; i++)
                 {
+                    if (!IsOwnedBy(target, root, items[i].transform)) continue;
                     RevUINodeRelay relay = new RevUINodeRelay(receiver, items[i].name);
                     if (plan.WantsInput) items[i].onValueChanged.AddListener(relay.OnInput);
                     if (plan.WantsInputEndEdit) items[i].onEndEdit.AddListener(relay.OnInputEnd);
@@ -320,6 +343,7 @@ namespace Revolution
                 Dropdown[] items = root.GetComponentsInChildren<Dropdown>(true);
                 for (int i = 0; i < items.Length; i++)
                 {
+                    if (!IsOwnedBy(target, root, items[i].transform)) continue;
                     RevUINodeRelay relay = new RevUINodeRelay(receiver, items[i].name);
                     items[i].onValueChanged.AddListener(relay.OnDropdown);
                 }
@@ -330,6 +354,7 @@ namespace Revolution
                 ScrollRect[] items = root.GetComponentsInChildren<ScrollRect>(true);
                 for (int i = 0; i < items.Length; i++)
                 {
+                    if (!IsOwnedBy(target, root, items[i].transform)) continue;
                     RevUINodeRelay relay = new RevUINodeRelay(receiver, items[i].name);
                     items[i].onValueChanged.AddListener(relay.OnScroll);
                 }
@@ -344,7 +369,10 @@ namespace Revolution
                     Component[] items = root.GetComponentsInChildren(ext.ComponentType, true);
 
                     for (int j = 0; j < items.Length; j++)
+                    {
+                        if (!IsOwnedBy(target, root, items[j].transform)) continue;
                         ext.Bind(new RevUIEventDispatch(receiver, items[j].name), items[j]);
+                    }
                 }
             }
         }

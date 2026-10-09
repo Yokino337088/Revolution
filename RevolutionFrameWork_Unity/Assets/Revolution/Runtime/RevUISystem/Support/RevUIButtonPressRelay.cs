@@ -39,8 +39,22 @@ namespace Revolution
 
         internal void Setup(IRevUIUserEvents receiver, string nodeName)
         {
+            // 同一控件只归最近的面板/Part 所有；父面板扫描到 Part 子树时跳过，
+            // 即使父面板先装配，也不会抢走 Part 后续绑定的接收者。
+            if (!ReferenceEquals(FindNearestReceiver(), receiver)) return;
             _receiver = receiver;
             _nodeName = nodeName;
+        }
+
+        private IRevUIUserEvents FindNearestReceiver()
+        {
+            for (Transform current = transform; current != null; current = current.parent)
+            {
+                MonoBehaviour[] components = current.GetComponents<MonoBehaviour>();
+                for (int i = 0; i < components.Length; i++)
+                    if (components[i] is IRevUIUserEvents receiver) return receiver;
+            }
+            return null;
         }
 
         public void OnPointerDown(PointerEventData eventData)

@@ -34,8 +34,9 @@ namespace Revolution
             // 异常统一从框架日志出口出（采样回调 / 完成回调里写错了东西不至于静默）
             RevUIAnimEngine.OnException = (e, what) => RevUILog.Error($"{what} 抛异常（已隔离）：{e}");
 
+            // 延迟到第一次实际播放时挂 Tick：SubsystemRegistration 回调之间没有可靠顺序，
+            // 若此处先 AddUpdate，后执行的 RevMono.ResetForNewSession 会把它清掉，但 _installed 却为 true。
             _installed = false;
-            Install();
         }
 
         /// <summary>把每帧推进挂到框架的公共 Mono 驱动上（重复调用安全）。</summary>

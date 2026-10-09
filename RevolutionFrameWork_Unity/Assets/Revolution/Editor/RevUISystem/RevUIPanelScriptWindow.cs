@@ -481,8 +481,6 @@ namespace Revolution.Editor
             sb.Append(tab).AppendLine("    // 在这里把数据绘制到已绑定的控件上。");
             sb.Append(tab).AppendLine("}");
             var selected = controls.SelectMany(c => c.Events.Where(e => e.Enabled).Select(e => (control: c, evt: e))).ToList();
-            bool hasPress = selected.Any(p => p.evt.Hook == "LongPress" || p.evt.Hook == "Loosen");
-            bool hasClick = selected.Any(p => p.evt.Hook == "Click");
             if (attributes)
             {
                 var methods = new HashSet<string>(StringComparer.Ordinal);
@@ -499,33 +497,10 @@ namespace Revolution.Editor
                     sb.Append(tab).AppendLine("    // 在此处理该控件事件。");
                     sb.Append(tab).AppendLine("}");
                 }
-                if (hasPress && !hasClick)
-                {
-                    // 当前框架的 WantsAnyEvent 尚不包含 WantsButtonPress；只有长按时需用空点击特性开启事件装配。
-                    sb.AppendLine();
-                    sb.Append(tab).AppendLine("// 长按/松开需要事件扫描入口：当前框架仅有按压特性时不会进入 InstallEvents。");
-                    sb.Append(tab).Append("[RevButtonClick(\"").Append(Escape(selected.First(p => p.evt.Hook == "LongPress" || p.evt.Hook == "Loosen").control.Name)).AppendLine("\")]");
-                    sb.Append(tab).AppendLine("private void EnablePressEventBinding() { }");
-                }
             }
             else
             {
-                if (hasPress)
-                {
-                    // 重写回调本身不会让 WantsButtonPress 置 true；空特性只激活继电器，逻辑仅写在钩子里。
-                    foreach (var pair in selected.Where(p => p.evt.Hook == "LongPress" || p.evt.Hook == "Loosen"))
-                    {
-                        sb.AppendLine();
-                        sb.Append(tab).Append('[').Append(pair.evt.Attribute).Append("(\"").Append(Escape(pair.control.Name)).AppendLine("\")]");
-                        sb.Append(tab).Append("private void Enable").Append(SafeName(pair.control.Name)).Append(pair.evt.Hook).AppendLine("Binding() { }");
-                    }
-                    if (!hasClick)
-                    {
-                        sb.AppendLine();
-                        sb.Append(tab).AppendLine("// 当前框架仅有长按/松开时仍需开启事件扫描；此钩子不处理点击业务。");
-                        sb.Append(tab).AppendLine("protected override void OnClick(string nodeName) { }");
-                    }
-                }
+                // 框架已修复：只有长按/松开（特性或重写钩子）也会自动安装按压继电器，无需任何绕行代码。
                 foreach (var group in selected.GroupBy(p => p.evt.Hook))
                 {
                     PanelEvent evt = group.First().evt;

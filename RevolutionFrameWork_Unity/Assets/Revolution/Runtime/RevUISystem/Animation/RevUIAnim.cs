@@ -295,6 +295,16 @@ namespace Revolution
             return handle;
         }
 
+        /// <summary>恢复根节点及其后代已被动画写入的基准状态（面板回池复用时使用）。</summary>
+        internal static void RestoreAllBasesIn(Component root)
+        {
+            if (root == null) return;
+
+            RevUIAnimTarget[] targets = root.GetComponentsInChildren<RevUIAnimTarget>(true);
+            for (int i = 0; i < targets.Length; i++)
+                if (targets[i] != null) targets[i].RestoreBase();
+        }
+
         private static void StopTarget(RevUIAnimTarget target)
         {
             if (!target.Handle.IsValid) return;

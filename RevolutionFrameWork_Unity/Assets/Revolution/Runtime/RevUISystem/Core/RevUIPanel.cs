@@ -69,6 +69,10 @@ namespace Revolution
         /// <summary>是否已打开（可交互）</summary>
         public bool IsOpened => State == RevUIPanelState.Opened;
 
+        // 宿主关闭/复用时失效，异步 Part 创建不能跨越一次打开生命周期。
+        internal int LifetimeVersion { get; private set; }
+        private bool _released;
+
         /// <summary>是否正被上层的遮罩盖住（被盖住时通常要暂停动画/定时器/音效）</summary>
         public bool IsCovered { get; private set; }
 
@@ -278,9 +282,11 @@ namespace Revolution
 
             RevUIBindPlan plan = RevUIBindPlan.Get(GetType(), typeof(RevUIPanel));
             RevUILog.Guard($"{GetType().Name}.绑定控件", () => RevUIBinder.Bind(this, transform, plan, this));
+            if (_released) return;
 
             // ★ 到这里，[RevBind] 字段已经有值了 —— 所以 OnBindView 里可以放心用
             RevUILog.Guard($"{GetType().Name}.OnBindView", OnBindView);
+            if (_released) return;
             RevUILog.Guard($"{GetType().Name}.OnInit", OnInit);
         }
 
@@ -294,6 +300,7 @@ namespace Revolution
             }
 
             State = RevUIPanelState.Opening;
+            int version = ++LifetimeVersion;
             gameObject.SetActive(true);
 
             RevUILog.Guard($"{GetType().Name}.打开转场", () => PlayOpenTransition(() =>
@@ -303,19 +310,22 @@ namespace Revolution
                 //   Close 的防重入只拦 Closing/Closed）。没有守卫时，"打开完成"会在
                 //   正在关闭/已回池的面板上照常执行：State 被改回 Opened、OnOpen/OpenParts 被调、
                 //   业务的打开回调收到一个已经不在打开列表里的面板。
-                if (State != RevUIPanelState.Opening) return;
+                if (this == null || version != LifetimeVersion || State != RevUIPanelState.Opening) return;
 
                 State = RevUIPanelState.Opened;
 
                 RevUILog.Guard($"{GetType().Name}.OnOpen", OnOpen);
+                if (this == null || version != LifetimeVersion || !IsOpened) return;
                 RefreshView();
+                if (this == null || version != LifetimeVersion || !IsOpened) return;
                 OpenParts();
+                if (this == null || version != LifetimeVersion || !IsOpened) return;
 
                 // ★ 显示动画：播完才算"打开完成"（重写 ShowAnimation 一行就给面板加动效）
                 //   —— 动画期间同样可能被关闭，回调同样要守状态
                 PlayPanelAnimation(ShowAnimation, () =>
                 {
-                    if (State == RevUIPanelState.Opened) onOpened?.Invoke();
+                    if (this != null && version == LifetimeVersion && IsOpened) onOpened?.Invoke();
                 });
             }));
         }
@@ -330,6 +340,8 @@ namespace Revolution
             }
 
             State = RevUIPanelState.Closing;
+            ++LifetimeVersion;
+            RevUIPart.CancelCreates(this);
             CloseParts();
 
             RevUILog.Guard($"{GetType().Name}.关闭转场", () => PlayCloseTransition(() =>
@@ -385,6 +397,8 @@ namespace Revolution
             //   "复用的实例还挂着上一次的数据"是复用模式下最难查的一类 bug，
             //   框架直接把它清掉（业务不用记得清），业务只需要在 OnReuse 里清**界面上的残留**。
             InternalClearData();
+            RevUIAnim.StopAllOf(this);
+            RevUIAnim.RestoreAllBasesIn(this);
 
             RevUILog.Guard($"{GetType().Name}.OnReuse", OnReuse);
 
@@ -399,6 +413,16 @@ namespace Revolution
         /// <summary>销毁前：给业务释放外部资源的机会</summary>
         internal void InternalRelease()
         {
+            if (_released) return;
+            _released = true;
+            State = RevUIPanelState.Closed;
+            ++LifetimeVersion;
+            RevUIPart.CancelCreates(this);
+
+            RevUIPart[] parts = GetComponentsInChildren<RevUIPart>(true);
+            for (int i = 0; i < parts.Length; i++) RevUIAnim.StopAllOf(parts[i]);
+            RevUIAnim.StopAllOf(this);
+            RevUIAnim.RestoreAllBasesIn(this);
             RevUILog.Guard($"{GetType().Name}.OnRelease", OnRelease);
             RevEvent.RemoveAllByOwner(this);
         }
@@ -493,6 +517,8 @@ namespace Revolution
         /// </summary>
         protected virtual void OnDestroy()
         {
+            RevUIManager.Instance.NotifyPanelDestroyed(this);
+            RevUIAnim.StopAllOf(this);
             RevEvent.RemoveAllByOwner(this);
         }
 

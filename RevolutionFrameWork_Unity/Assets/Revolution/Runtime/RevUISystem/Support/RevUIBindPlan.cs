@@ -85,7 +85,8 @@ namespace Revolution
 
         /// <summary>这个类有没有任何"按节点名分发"的交互回调（一个都没重写时，绑定器连扫描子节点都省了）</summary>
         public bool WantsAnyEvent => WantsClick || WantsToggle || WantsSlider ||
-                                     WantsInput || WantsInputEndEdit || WantsDropdown || WantsScroll;
+                                     WantsInput || WantsInputEndEdit || WantsDropdown || WantsScroll ||
+                                     WantsButtonPress;    // ★ 只有长按/松开特性时也必须进入事件装配
 
         private static readonly Dictionary<Type, RevUIBindPlan> Cache = new Dictionary<Type, RevUIBindPlan>();
 
@@ -139,7 +140,10 @@ namespace Revolution
                           || RevUIWidgetEvents.Wants(targetType, RevUIWidgetEventKind.ScrollChanged);
 
             // 长按 / 松开：UGUI 的 Button 不报这两个事件，标了特性就得给交互节点挂指针继电器
-            WantsButtonPress = RevUIWidgetEvents.WantsPressEvents(targetType);
+            //   ★ 重写 OnLongPress / OnLoosen 钩子同样算（以前只认特性，重写钩子的面板永远收不到长按）
+            WantsButtonPress = RevUIWidgetEvents.WantsPressEvents(targetType)
+                               || Overrides(targetType, baseType, "OnLongPress", typeof(string))
+                               || Overrides(targetType, baseType, "OnLoosen", typeof(string));
         }
 
         /// <summary>

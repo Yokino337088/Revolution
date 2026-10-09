@@ -25,6 +25,7 @@
 // 【关闭时同样一行防泄漏】Part 关闭时框架自动执行 RevEvent.RemoveAllByOwner(this)。
 // ============================================================
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Revolution
@@ -57,6 +58,34 @@ namespace Revolution
 
         // 预制体 Part 会占用一份资源引用；销毁时还掉（和 RevPool 持有句柄的思路一致）
         private bool _holdsResourceRef;
+        private RevResHandle _resourceHandle;
+
+        private sealed class CreateRequest
+        {
+            internal IRevUIPartHost Host;
+            internal Transform Slot;
+            internal Type Type;
+            internal int Version;
+            internal readonly List<Action<RevUIPart>> Callbacks = new List<Action<RevUIPart>>();
+        }
+
+        private static readonly List<CreateRequest> PendingCreates = new List<CreateRequest>();
+
+        internal static void CancelCreates(IRevUIPartHost host)
+        {
+            var cancelled = PendingCreates.FindAll(r => ReferenceEquals(r.Host, host));
+            foreach (CreateRequest request in cancelled) PendingCreates.Remove(request);
+            foreach (CreateRequest request in cancelled) FinishCreate(request, null);
+        }
+
+        private static void FinishCreate(CreateRequest request, RevUIPart part)
+        {
+            PendingCreates.Remove(request);
+            var callbacks = request.Callbacks.ToArray();
+            request.Callbacks.Clear();
+            foreach (Action<RevUIPart> callback in callbacks)
+                RevUILog.Guard("Part 创建回调", () => callback(part));
+        }
 
         // ============================================================
         // 业务要重写的钩子（和面板同一套纪律）
@@ -153,6 +182,21 @@ namespace Revolution
                 return;
             }
 
+            RevUIPanel hostPanel = host as RevUIPanel;
+            if (!host.IsHostOpened || (hostPanel != null && hostPanel.State != RevUIPanelState.Opened))
+            {
+                onCreated?.Invoke(null);
+                return;
+            }
+            int version = hostPanel == null ? 0 : hostPanel.LifetimeVersion;
+            CreateRequest pending = PendingCreates.Find(r => ReferenceEquals(r.Host, host) &&
+                r.Slot == slot && r.Type == typeof(T) && r.Version == version);
+            if (pending != null)
+            {
+                if (onCreated != null) pending.Callbacks.Add(part => onCreated(part as T));
+                return;
+            }
+
             // 已经有同类型实例 → 复用（刷新一次就够）
             T exist = slot.GetComponentInChildren<T>(true);
             if (exist != null)
@@ -169,8 +213,19 @@ namespace Revolution
                 return;
             }
 
-            RevResManager.LoadAsync<GameObject>(meta.Root, meta.Name, prefab =>
+            var request = new CreateRequest { Host = host, Slot = slot, Type = typeof(T), Version = version };
+            if (onCreated != null) request.Callbacks.Add(part => onCreated(part as T));
+            PendingCreates.Add(request);
+            RevResManager.LoadAsync(meta.Root, meta.Name, typeof(GameObject), handle =>
             {
+                GameObject prefab = handle.Content as GameObject;
+                if (!PendingCreates.Contains(request) || !host.IsHostOpened ||
+                    (hostPanel != null && hostPanel.LifetimeVersion != version))
+                {
+                    RevResManager.DecRef(handle);
+                    FinishCreate(request, null);
+                    return;
+                }
                 // ★ Bug 修复（2026-09-30）：异步加载回来时宿主可能已经被关闭回池 / 销毁
                 //   （加载需要时间，这期间面板被关是常态）——此时 slot 已是假 null：
                 //   还往下走就会把 Part 实例化到已销毁的父节点上（抛异常）或场景根上（脱离宿主），
@@ -178,14 +233,16 @@ namespace Revolution
                 if (slot == null)
                 {
                     RevUILog.Warning($"创建 Part {typeof(T).Name} 中止：宿主在预制体加载完成前已被关闭/销毁。");
-                    onCreated?.Invoke(null);
+                    RevResManager.DecRef(handle);
+                    FinishCreate(request, null);
                     return;
                 }
 
                 if (prefab == null)
                 {
                     RevUILog.Error($"创建 Part {typeof(T).Name} 失败：加载不到预制体 {meta.Key}（可能是没打包 / 路径写错）。");
-                    onCreated?.Invoke(null);
+                    RevResManager.DecRef(handle);
+                    FinishCreate(request, null);
                     return;
                 }
 
@@ -201,15 +258,24 @@ namespace Revolution
                         $"Part 预制体 {meta.Key} 的根节点上没有 {typeof(T).Name} 组件 —— " +
                         $"预制体与脚本对不上（类名和预制体名默认应该一致）。");
                     Destroy(go);
-                    onCreated?.Invoke(null);
+                    RevResManager.DecRef(handle);
+                    FinishCreate(request, null);
                     return;
                 }
 
-                part._holdsResourceRef = true;                   // 这实例占用一份资源引用
+                part._holdsResourceRef = true;
+                part._resourceHandle = handle;
                 part.InternalInit(host);
+                if (!PendingCreates.Contains(request) || !host.IsHostOpened ||
+                    (hostPanel != null && hostPanel.LifetimeVersion != version))
+                {
+                    part.ClosePart();
+                    FinishCreate(request, null);
+                    return;
+                }
                 part.InternalOpen();
 
-                onCreated?.Invoke(part);
+                FinishCreate(request, part.IsOpened ? part : null);
             }, RevResGroup.UI);
         }
 
@@ -255,11 +321,14 @@ namespace Revolution
 
         internal void InternalOpen()
         {
+            if (IsOpened || (Host != null && !Host.IsHostOpened)) return;
             IsOpened = true;
             gameObject.SetActive(true);
 
             RevUILog.Guard($"{GetType().Name}.OnPartOpen", OnPartOpen);
-            InternalRefresh();                            // 打开即画一次，免得"宿主忘了刷"
+            if (this == null || !IsOpened) return;
+            InternalRefresh();
+            if (this == null || !IsOpened) return;                            // 打开即画一次，免得"宿主忘了刷"
 
             // ★ 显示动画（一行预设；None = 不做，行为与之前完全一致）
             if (ShowAnimation != RevUIAnimPreset.None)
@@ -277,16 +346,23 @@ namespace Revolution
             if (!IsOpened) return;
 
             IsOpened = false;
+            RevUIAnim.StopAllOf(this);                     // 与面板一致：关闭时不留以 Part 为 owner 的残余动画
             RevUILog.Guard($"{GetType().Name}.OnPartClose", OnPartClose);
             RevEvent.RemoveAllByOwner(this);               // 一行防泄漏（同面板）
         }
 
         private void ReleaseHeldResource()
         {
-            if (!_holdsResourceRef || Meta == null) return;
+            if (!_holdsResourceRef) return;
 
             _holdsResourceRef = false;
-            RevResManager.Release(Meta.Root, Meta.Name);      // 与 Create 里的 LoadAsync 配对
+            // 优先用加载时拿到的原始句柄归还：资源系统若已重置，也不会误扣同路径新句柄的引用。
+            if (_resourceHandle != null)
+            {
+                RevResManager.DecRef(_resourceHandle);
+                _resourceHandle = null;
+            }
+            else if (Meta != null) RevResManager.Release(Meta.Root, Meta.Name);
         }
 
         // ============================================================
@@ -353,6 +429,7 @@ namespace Revolution
 
         protected virtual void OnDestroy()
         {
+            RevUIAnim.StopAllOf(this);
             ReleaseHeldResource();       // 兜底：被外部销毁时也要把资源引用还掉，否则会漏一份引用
             RevEvent.RemoveAllByOwner(this);
         }

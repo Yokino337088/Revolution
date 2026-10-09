@@ -63,6 +63,24 @@ namespace Revolution
             return true;
         }
 
+        /// <summary>外部销毁实例时从池索引中摘掉它，避免池里留下 Unity 假 null 引用。</summary>
+        public bool Forget(RevUIPanel panel)
+        {
+            if (ReferenceEquals(panel, null) || panel.PanelKey == null || !_idle.TryGetValue(panel.PanelKey, out List<RevUIPanel> list))
+                return false;
+
+            for (int i = list.Count - 1; i >= 0; i--)
+            {
+                if (!ReferenceEquals(list[i], panel)) continue;
+                list.RemoveAt(i);
+                Count--;
+                if (list.Count == 0) _idle.Remove(panel.PanelKey);
+                return true;
+            }
+
+            return false;
+        }
+
         /// <summary>取一个空闲实例（没有则返回 null，由管理器走"新建"路径）</summary>
         public RevUIPanel Take(string key)
         {
