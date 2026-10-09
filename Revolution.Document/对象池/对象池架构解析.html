@@ -428,6 +428,15 @@ RevPool.TrimAll(<span class="n">64</span>);                         <span class=
   <section id="s4">
     <h2><span class="num">4</span>怎么用</h2>
 
+    <h3>4.0 推荐写法：按类型取，路径写在特性上</h3>
+    <pre><span class="c">// 路径只在脚本类上声明一次（与 UI 面板的 [RevUIPanel] 同一思路）；name 省略 = 类名</span>
+[RevPoolPrefab(<span class="s">"Battle/Bullet"</span>, <span class="s">"Blue"</span>, Group = RevResGroup.Battle)]
+<span class="k">public class</span> Bullet : MonoBehaviour { }
+
+Bullet b = RevPool.Get&lt;Bullet&gt;(firePoint);                         <span class="c">// 同步</span>
+RevPool.GetAsync&lt;Bullet&gt;(b =&gt; { <span class="k">if</span> (b != <span class="k">null</span>) { <span class="c">/* … */</span> } }, firePoint);   <span class="c">// 异步</span></pre>
+    <p>实现上它只是个<b>薄封装</b>：<code>RevPoolPrefabInfo&lt;T&gt;</code> 每个类型只反射一次特性（静态泛型缓存，之后零分配），解析出 root / name / group 后走下面 4.1~4.3 的同一条路径，池键、引用计数、分组卸载的行为完全一致。类型没写特性时报错并提示怎么加（同步返回 <code>null</code>，异步回调收到 <code>null</code>）；特性<b>不继承</b>。下面是手填路径的底层写法，没有脚本的预制体仍然用它。</p>
+
     <h3>4.1 一行取出（Unity 对象）</h3>
     <pre><span class="c">// 同步：池里有 → 直接复用；池里没有 → 通过资源系统加载 prefab 再实例化</span>
 GameObject bullet = RevPool.Get(RevResPath.Battle_Bullet, <span class="s">"Blue"</span>, firePoint, RevResGroup.Battle);</pre>

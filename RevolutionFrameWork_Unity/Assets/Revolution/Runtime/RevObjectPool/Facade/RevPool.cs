@@ -3,7 +3,15 @@
 //
 // 位置：Runtime\ObjectPool\Facade\
 //
-// 【一行取出、一行归还】
+// 【推荐：按类型取，路径写在脚本的 [RevPoolPrefab] 特性上（和 UI 面板的 [RevUIPanel] 一样）】
+//     [RevPoolPrefab("Battle/Bullet", "Bullet_Normal", Group = RevResGroup.Battle)]   // 名字省略 = 类名
+//     public class Bullet : MonoBehaviour { }
+//
+//     Bullet b = RevPool.Get<Bullet>(firePoint);                                       // 同步
+//     RevPool.GetAsync<Bullet>(b => b.transform.position = muzzle.position);           // 异步（真机首次 / WebGL）
+//     RevPool.Return(b);
+//
+// 【手填路径的老写法仍然可用（预制体上没有脚本、或临时取一下时）】
 //     GameObject bullet = RevPool.Get("Battle/Bullet/Blue", firePoint);          // 同步（池里有 / 已加载）
 //     Bullet b = RevPool.Get<Bullet>("Battle/Bullet/Blue", firePoint);           // 直接拿组件
 //     RevPool.Return(bullet);                                                    // 归还
@@ -142,6 +150,50 @@ namespace Revolution
             }, parent, group);
         }
 
+        // ==================== 取（按类型，路径写在特性上）====================
+
+        /// <summary>
+        /// 按类型取对象（推荐）：预制体路径从 <typeparamref name="T"/> 上的 <see cref="RevPoolPrefabAttribute"/> 读取，
+        /// 取用处不用再写任何路径字符串。
+        /// <code>
+        /// [RevPoolPrefab("Battle/Bullet", "Bullet_Normal", Group = RevResGroup.Battle)]
+        /// public class Bullet : MonoBehaviour { }
+        ///
+        /// Bullet b = RevPool.Get&lt;Bullet&gt;(firePoint);
+        /// </code>
+        /// ★ 同步加载在 WebGL / 小游戏上不可用，真机首次加载也会卡帧 —— 那两种情况用 <see cref="GetAsync{T}(Action{T}, Transform)"/>。
+        /// ★ 类型上没写特性 → 报错并返回 null（错误信息会告诉你怎么加）。
+        /// </summary>
+        /// <param name="parent">取出来挂到哪个节点下（可空）</param>
+        public static T Get<T>(Transform parent = null) where T : Component
+        {
+            if (!TryResolve<T>(out string root, out string name, out RevResGroup group)) return null;
+
+            GameObject item = RevGameObjectPools.Get(root, name, parent, group);
+            return ExtractComponent<T>(item, RevResPathUtil.Join(root, name));
+        }
+
+        /// <summary>
+        /// 按类型异步取对象（推荐；真机首次加载 / WebGL 必须走这条）。路径同样来自 <see cref="RevPoolPrefabAttribute"/>。
+        /// <code>
+        /// RevPool.GetAsync&lt;Bullet&gt;(b => b.transform.position = muzzle.position);
+        /// </code>
+        /// 加载失败 / 类型没写特性 / 预制体上没有该组件时，回调收到 <c>null</c>（并有明确报错），记得判空。
+        /// </summary>
+        /// <param name="onFinished">取到后的回调（池里有现成的会立即同步回调）</param>
+        /// <param name="parent">取出来挂到哪个节点下（可空）</param>
+        /// <returns>prefab 的资源句柄；类型没写特性时返回 <see cref="RevResHandle.Empty"/></returns>
+        public static RevResHandle GetAsync<T>(Action<T> onFinished, Transform parent = null) where T : Component
+        {
+            if (!TryResolve<T>(out string root, out string name, out RevResGroup group))
+            {
+                onFinished?.Invoke(null);
+                return RevResHandle.Empty;
+            }
+
+            return GetAsync<T>(root, name, onFinished, parent, group);
+        }
+
         // ==================== 归还 ====================
 
         /// <summary>
@@ -236,6 +288,26 @@ namespace Revolution
         // ==================== 内部 ====================
 
         private static int ResolveDelay(int delayFrames) => delayFrames < 0 ? _delayRecycleFrames : delayFrames;
+
+        /// <summary>读取类型上的 [RevPoolPrefab]；没写就报一条能直接照抄修复的错误。</summary>
+        private static bool TryResolve<T>(out string root, out string name, out RevResGroup group)
+        {
+            if (RevPoolPrefabInfo<T>.Declared)
+            {
+                root = RevPoolPrefabInfo<T>.Root;
+                name = RevPoolPrefabInfo<T>.ResName;
+                group = RevPoolPrefabInfo<T>.Group;
+                return true;
+            }
+
+            root = null;
+            name = null;
+            group = RevResGroup.Unknown;
+            RevPoolLog.Error($"{typeof(T).Name} 上没有 [RevPoolPrefab] 特性，不知道它的预制体在哪。" +
+                             $"在类上加一行：[RevPoolPrefab(\"资源根目录\", \"预制体名（可省略，默认 {typeof(T).Name}）\")]；" +
+                             $"（特性不会继承，子类要自己写）。也可以改用 RevPool.Get(\"根目录\", \"资源名\") 的手填路径写法。");
+            return false;
+        }
 
         private static T ExtractComponent<T>(GameObject item, string source) where T : Component
         {

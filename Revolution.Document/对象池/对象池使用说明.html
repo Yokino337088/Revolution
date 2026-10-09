@@ -170,9 +170,9 @@ footer{max-width:1000px;margin:0 auto;padding:0 24px 60px;color:var(--text-sub);
 
     <div class="callout good">
       <span class="t">只学 2 个东西就能干活（真的）</span>
-      <pre style="margin:10px 0 6px"><span class="k">var</span> bullet = RevPool.Get(<span class="s">"Battle/Bullet"</span>, <span class="s">"Bullet_Normal"</span>, parent: bulletRoot);  <span class="c">// ① 取一个</span>
+      <pre style="margin:10px 0 6px"><span class="k">var</span> bullet = RevPool.Get&lt;Bullet&gt;(bulletRoot);   <span class="c">// ① 取一个（预制体路径写在 Bullet 类的 [RevPoolPrefab] 特性上）</span>
 <span class="c">// …用一段时间（飞出屏幕 / 打中目标）…</span>
-RevPool.Return(bullet);                                                              <span class="c">// ② 还回去</span></pre>
+RevPool.Return(bullet);                          <span class="c">// ② 还回去</span></pre>
       <p style="margin-bottom:0">
         <code>Get</code> 会自动带上<b>资源引用</b>（池端着，不会被卸载掉），还会把对象复位（位置/旋转/激活状态按池的规则处理）。<br>
         想"延迟还"（比如让死亡动画播完）：<code>RevPool.Return(go, delayFrames: 30)</code>。
@@ -201,12 +201,16 @@ RevPool.Return(bullet);                                                         
 
   <section id="s1">
     <h2><span class="num">一</span>3 分钟做一把子弹池</h2>
-    <p class="lead">准备：预制体放在资源根目录的 <code>Battle/Bullet/Bullet_Normal.prefab</code>。</p>
+    <p class="lead">准备：预制体放在资源根目录的 <code>Battle/Bullet/Bullet_Normal.prefab</code>，根节点上挂一个 <code>Bullet</code> 脚本。</p>
 
-    <pre><span class="c">// ① 发射：取一个并放到枪口</span>
+    <pre><span class="c">// ⓪ 声明：把"预制体在哪"写在脚本自己身上（和 UI 面板的 [RevUIPanel] 是同一种写法）</span>
+[RevPoolPrefab(<span class="s">"Battle/Bullet"</span>, <span class="s">"Bullet_Normal"</span>, Group = RevResGroup.Battle)]   <span class="c">// 名字省略 = 用类名 "Bullet"</span>
+<span class="k">public class</span> Bullet : MonoBehaviour { <span class="c">/* … */</span> }
+
+<span class="c">// ① 发射：取一个并放到枪口（只写类型，不再手填任何路径字符串）</span>
 <span class="k">void</span> Fire()
 {
-    <span class="k">var</span> bullet = RevPool.Get(<span class="s">"Battle/Bullet"</span>, <span class="s">"Bullet_Normal"</span>, parent: bulletRoot);
+    Bullet bullet = RevPool.Get&lt;Bullet&gt;(bulletRoot);
     bullet.transform.position = muzzle.position;
     bullet.transform.rotation = muzzle.rotation;
 }
@@ -219,20 +223,25 @@ RevPool.Return(bullet);                                                         
 }
 
 <span class="c">// ③ 异步取（第一次还没加载完时不卡帧；真机首次加载/WebGL 上必须用它）</span>
-RevPool.GetAsync(<span class="s">"Battle/Bullet"</span>, <span class="s">"Bullet_Normal"</span>, go =&gt;
+RevPool.GetAsync&lt;Bullet&gt;(bullet =&gt;
 {
-    go.transform.position = muzzle.position;    <span class="c">// 回调里再用</span>
-});
-<span class="c">// 也有"整条路径一把传"的重载（框架源码里的推荐写法）：</span>
-<span class="c">// RevPool.GetAsync("Battle/Bullet/Blue", go =&gt; { … }, firePoint, RevResGroup.Battle);</span>
+    <span class="k">if</span> (bullet == <span class="k">null</span>) <span class="k">return</span>;                       <span class="c">// 加载失败 / 没写特性：回调收到 null（Console 有明确报错）</span>
+    bullet.transform.position = muzzle.position;    <span class="c">// 回调里再用</span>
+}, bulletRoot);
 
-<span class="c">// ④ 也支持直接给预制体（预制体已经是字段/引用时）</span>
+<span class="c">// ④ 老写法仍可用：没有脚本的预制体 / 临时取一下，手填"根目录 + 资源名"</span>
+<span class="k">var</span> go = RevPool.Get(<span class="s">"Battle/Bullet"</span>, <span class="s">"Bullet_Normal"</span>, bulletRoot);
+RevPool.GetAsync(<span class="s">"Battle/Bullet"</span>, <span class="s">"Bullet_Normal"</span>, g =&gt; { <span class="c">/* … */</span> });
+
+<span class="c">// ⑤ 也支持直接给预制体（预制体已经是字段/引用时）</span>
 <span class="k">var</span> slot = RevPool.Get(itemSlotPrefab, container);</pre>
 
     <div class="callout">
-      <span class="t">就这样，没有初始化步骤 + 一个防手滑技巧</span>
+      <span class="t">就这样，没有初始化步骤 + 路径只写一次</span>
       池是<b>按"目录 + 名字"自动创建</b>的：第一次 <code>Get</code> 时建、以后复用。你不需要 <code>new</code> 任何池对象。<br>
-      路径别手写字符串：用打包工具生成的 <code>RevResPath</code> 常量拼（改目录时<b>编译期就报错</b>，而不是运行时找不到）。
+      <code>[RevPoolPrefab]</code> 把路径收敛到<b>脚本类上的一处声明</b>：取用的地方只写类型，不会再出现"这里写错一个字母"的问题。
+      想要编译期保护，root 也可以写生成的 <code>RevResPath</code> 常量（改目录时<b>编译期就报错</b>）。<br>
+      注意：特性<b>不继承</b>（子类要自己写）；类上忘了写时会报错并告诉你怎么加，同步 <code>Get</code> 返回 <code>null</code>、异步回调收到 <code>null</code>。
     </div>
   </section>
 
@@ -244,9 +253,11 @@ RevPool.GetAsync(<span class="s">"Battle/Bullet"</span>, <span class="s">"Bullet
       <table>
         <thead><tr><th style="width:36%">我想…</th><th>这么写</th></tr></thead>
         <tbody>
-          <tr><td>取一个（按资源路径）</td><td><code>RevPool.Get(rootPath, resName, parent)</code></td></tr>
+          <tr><td>取一个（<b>推荐</b>：按类型，路径在 <code>[RevPoolPrefab]</code> 上）</td><td><code>RevPool.Get&lt;Bullet&gt;(parent)</code></td></tr>
+          <tr><td>取一个（按类型，可能还没加载完）</td><td><code>RevPool.GetAsync&lt;Bullet&gt;(b =&gt; { }, parent)</code></td></tr>
+          <tr><td>取一个（按资源路径，手填）</td><td><code>RevPool.Get(rootPath, resName, parent)</code></td></tr>
           <tr><td>取一个（按已有预制体）</td><td><code>RevPool.Get(prefab, parent)</code></td></tr>
-          <tr><td>取一个（可能还没加载完）</td><td><code>RevPool.GetAsync(rootPath, resName, go =&gt; { }, parent)</code></td></tr>
+          <tr><td>取一个（按资源路径，可能还没加载完）</td><td><code>RevPool.GetAsync(rootPath, resName, go =&gt; { }, parent)</code></td></tr>
           <tr><td>还一个</td><td><code>RevPool.Return(item)</code> / <code>RevPool.Return(component)</code></td></tr>
           <tr><td>延迟还（等动画/特效）</td><td><code>RevPool.Return(item, delayFrames: 30)</code></td></tr>
           <tr><td>清掉某个池的<b>空闲</b>对象</td><td><code>RevPool.Clear(rootPath, resName)</code>（返回清掉几个）</td></tr>
