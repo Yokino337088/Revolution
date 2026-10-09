@@ -21,6 +21,9 @@ namespace Revolution
         public const string Data = "Data/";
         public const string RevHotDemo = "RevHotDemo/";
         public const string RevUIDemo = "RevUIDemo/";
+        public const string Sound = "Sound/";
+        public const string Sound_BGM = "Sound/BGM/";
+        public const string Sound_SFX = "Sound/SFX/";
         public const string UI = "UI/";
     }
 }

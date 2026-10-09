@@ -22,10 +22,10 @@ namespace Revolution
     /// <summary>音效系统用的资源目录常量（自动生成；改目录请走打包工具窗口）</summary>
     public static class RevSoundPath
     {
-        /// <summary>音效根目录：Audio/Sfx/</summary>
-        public const string Sfx = "Audio/Sfx/";
+        /// <summary>音效根目录：Sound/SFX/</summary>
+        public const string Sfx = "Sound/SFX/";
 
-        /// <summary>背景音乐根目录：Audio/Bgm/</summary>
-        public const string Bgm = "Audio/Bgm/";
+        /// <summary>背景音乐根目录：Sound/BGM/</summary>
+        public const string Bgm = "Sound/BGM/";
     }
 }
