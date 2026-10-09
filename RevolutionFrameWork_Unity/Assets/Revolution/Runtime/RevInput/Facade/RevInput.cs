@@ -120,29 +120,62 @@ namespace Revolution
         public static bool Bind(string action, params RevKey[] keys)
         {
             RevInputCore core = Ensure();
-            RevInputBinding binding = core.Actions.Ensure(action, out RevInputErrorReason reason);
-            if (binding == null)
+            if (keys == null)
             {
-                core.Fail(reason, "Bind(" + action + ")");
+                core.Fail(RevInputErrorReason.BindingTextInvalid, "Bind 键位数组不能为 null");
+                return false;
+            }
+            for (int i = 0; i < keys.Length; i++)
+            {
+                if (!Enum.IsDefined(typeof(RevKey), keys[i]) || keys[i] == RevKey.None)
+                {
+                    core.Fail(RevInputErrorReason.UnknownKey, "Bind 收到无效键位值：" + (int)keys[i]);
+                    return false;
+                }
+            }
+            RevInputBinding binding = core.Actions.Find(action);
+            bool created = binding == null;
+            if (created)
+            {
+                binding = core.Actions.Ensure(action, out RevInputErrorReason reason);
+                if (binding == null)
+                {
+                    core.Fail(reason, "Bind(" + action + ")");
+                    return false;
+                }
+            }
+
+            int additions = 0;
+            for (int i = 0; i < keys.Length; i++)
+            {
+                if (binding.KeyMask.Get((int)keys[i])) continue;
+                bool repeatedInRequest = false;
+                for (int j = 0; j < i; j++)
+                    if (keys[j] == keys[i]) { repeatedInRequest = true; break; }
+                if (!repeatedInRequest) additions++;
+            }
+            if (binding.KeyCount + additions > RevInputLimits.MaxKeysPerAction)
+            {
+                if (created) core.Actions.Remove(action);
+                core.Fail(RevInputErrorReason.BindingTextInvalid,
+                    "动作 " + action + " 的键位超过上限 " + RevInputLimits.MaxKeysPerAction);
                 return false;
             }
 
-            bool all = true;
-            for (int i = 0; i < keys.Length; i++)
-                all &= binding.AddKey(keys[i]);
-            if (!all)
-            {
-                core.Fail(RevInputErrorReason.TooManyActions,
-                    "动作 " + action + " 的键位超过上限 " + RevInputLimits.MaxKeysPerAction);
-            }
+            for (int i = 0; i < keys.Length; i++) binding.AddKey(keys[i]);
             RevInputLog.V("[RevInput] 绑定 " + binding.ToText());
-            return all;
+            return true;
         }
 
         /// <summary>把一个动作绑到鼠标键。</summary>
         public static bool Bind(string action, RevMouseButton button)
         {
             RevInputCore core = Ensure();
+            if (!Enum.IsDefined(typeof(RevMouseButton), button))
+            {
+                core.Fail(RevInputErrorReason.BindingTextInvalid, "Bind 收到无效鼠标键值：" + (int)button);
+                return false;
+            }
             RevInputBinding binding = core.Actions.Ensure(action, out RevInputErrorReason reason);
             if (binding == null)
             {
@@ -158,6 +191,13 @@ namespace Revolution
         public static bool BindAxis(string action, RevKey negative, RevKey positive)
         {
             RevInputCore core = Ensure();
+            if ((negative != RevKey.None && !Enum.IsDefined(typeof(RevKey), negative))
+                || (positive != RevKey.None && !Enum.IsDefined(typeof(RevKey), positive))
+                || (negative != RevKey.None && negative == positive))
+            {
+                core.Fail(RevInputErrorReason.UnknownKey, "BindAxis 收到无效或重复的键位值");
+                return false;
+            }
             RevInputBinding binding = core.Actions.Ensure(action, out RevInputErrorReason reason);
             if (binding == null)
             {
@@ -177,13 +217,18 @@ namespace Revolution
         public static bool BindNamedAxis(string action, string axisName, bool invert = false)
         {
             RevInputCore core = Ensure();
+            if (string.IsNullOrWhiteSpace(axisName))
+            {
+                core.Fail(RevInputErrorReason.BindingTextInvalid, "BindNamedAxis 轴名不能为空");
+                return false;
+            }
             RevInputBinding binding = core.Actions.Ensure(action, out RevInputErrorReason reason);
             if (binding == null)
             {
                 core.Fail(reason, "BindNamedAxis(" + action + ")");
                 return false;
             }
-            binding.NamedAxis = axisName;
+            binding.NamedAxis = axisName.Trim();
             binding.NamedAxisInvert = invert;
             RevInputLog.V("[RevInput] 绑定 " + binding.ToText());
             return true;
@@ -192,15 +237,39 @@ namespace Revolution
         /// <summary>设某个动作的死区（轴用；默认 <see cref="RevInputLimits.DefaultDeadzone"/>）。</summary>
         public static void SetDeadzone(string action, float deadzone)
         {
-            RevInputBinding binding = Ensure().Actions.Find(action);
-            if (binding != null) binding.Deadzone = deadzone < 0f ? 0f : deadzone;
+            RevInputCore core = Ensure();
+            RevInputBinding binding = core.Actions.Find(action);
+            if (binding == null) return;
+            if (float.IsNaN(deadzone) || float.IsInfinity(deadzone))
+            {
+                core.Fail(RevInputErrorReason.BindingTextInvalid, "死区必须是有限数值");
+                return;
+            }
+            binding.Deadzone = deadzone < 0f ? 0f : (deadzone > 1f ? 1f : deadzone);
         }
 
         /// <summary>设某个动作的连发节拍（<paramref name="delay"/> 秒后开始，每 <paramref name="interval"/> 秒一次）。</summary>
         public static void SetRepeat(string action, float delay, float interval)
         {
-            RevInputBinding binding = Ensure().Actions.Find(action);
+            RevInputCore core = Ensure();
+            RevInputBinding binding = core.Actions.Find(action);
             if (binding == null) return;
+            if (float.IsNaN(delay) || float.IsInfinity(delay) || float.IsNaN(interval) || float.IsInfinity(interval))
+            {
+                core.Fail(RevInputErrorReason.BindingTextInvalid, "SetRepeat 的时间必须是有限数值");
+                return;
+            }
+            if (delay <= 0f)
+            {
+                binding.RepeatDelay = 0f;
+                binding.RepeatInterval = 0f;
+                return;
+            }
+            if (interval <= 0f)
+            {
+                core.Fail(RevInputErrorReason.BindingTextInvalid, "连发间隔必须大于 0");
+                return;
+            }
             binding.RepeatDelay = delay;
             binding.RepeatInterval = interval;
         }
@@ -215,10 +284,15 @@ namespace Revolution
         }
 
         /// <summary>解绑并删除一个动作（连事件订阅一起清）。</summary>
-        public static bool RemoveAction(string action) => Ensure().Actions.Remove(action);
+        public static bool RemoveAction(string action) => Ensure().RemoveAction(action);
 
         /// <summary>清空全部绑定（换模式 / 回登录）。</summary>
-        public static void ClearBindings() => Ensure().Actions.Clear();
+        public static void ClearBindings()
+        {
+            RevInputCore core = Ensure();
+            core.Actions.Clear();
+            core.ResetAxisSubscriptionValues();
+        }
 
         /// <summary>已绑定的动作数量。</summary>
         public static int ActionCount => Core.Actions.Count;
@@ -230,7 +304,11 @@ namespace Revolution
         public static bool LoadBindings(string text)
         {
             RevInputCore core = Ensure();
-            if (core.Actions.LoadText(text, out string error)) return true;
+            if (core.Actions.LoadText(text, out string error))
+            {
+                core.ResetAxisSubscriptionValues();
+                return true;
+            }
             core.Fail(RevInputErrorReason.BindingTextInvalid, error);
             return false;
         }
@@ -269,7 +347,7 @@ namespace Revolution
         public static int LastPressedFrame(string action)
         {
             RevInputActionState s = Core.Actions.State(action);
-            return s.LastDownTime > 0d ? s.LastDownFrame : -1;
+            return s.HasLastDown ? s.LastDownFrame : -1;
         }
 
         /// <summary>轴读数（-1..1，已过死区）。没绑轴的动作会退化成"按下即 1"。</summary>

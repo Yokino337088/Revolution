@@ -304,7 +304,7 @@ git clone -b hotupdate https://github.com/Yokino337088/Revolution.git Assets/Rev
 - ✅ **动作名绑定**：业务只写 `RevInput.Pressed("Jump")`，键位/鼠标/触屏/手柄怎么绑由绑定表决定（`RevInput.Bind(...)`，或从存档 `LoadBindings` 读）
 - ✅ **键鼠 + 触屏 + 手柄全覆盖**：三套输入压成同一份快照，判定只有一份逻辑；设备类型自动识别
 - ✅ **7 种手势**：点击 / 双击 / 长按 / 拖动 / **八向滑动（带速度）** / 双指捏合 / 双指旋转，阈值全可调
-- ✅ **屏蔽栈（精确到指针）**：`using (var s = RevInput.OpenScope()) { s.Block(); }` —— 弹窗挡世界输入、ESC 照常可用；屏蔽期间**轴读数一并归零**（角色不会在弹窗里继续移动）、**仍记按下时间**，解除瞬间缓冲输入立刻生效
+- ✅ **屏蔽栈（精确到指针）**：`using (var s = RevInput.OpenScope()) { s.Block(); }` —— 弹窗屏蔽世界动作与手势（当前没有 ESC / 返回键的系统动作例外）；屏蔽期间**轴读数一并归零**、**仍记录按下时间**；指针屏蔽也会同步排除 Tap/Swipe 与双指手势
 - ✅ **手感补偿**：输入缓冲窗口 `PressedBuffered(action, 0.15s)`、连发节拍 `SetRepeat`、死区 `SetDeadzone`
 - ✅ **切后台自动复位**：失焦/切后台清按键与手势（"切回来角色一直跑"的解药）
 - ✅ **事件驱动接入**：`RevInput.AddListener(this)` 登记一次，按下 / 抬起 / 连发 / 轴变化 / 手势全部由框架推给你 —— **业务里不用写 Update 轮询**（轮询 API 仍保留，问"此刻状态"时用）

@@ -5,7 +5,7 @@
 //
 // 【典型用法】
 // <code>
-// // 打开设置面板期间：挡掉世界输入，但 ESC 照常可用（ESC 是动作，不受 World 屏蔽影响）
+// // 打开弹窗期间：Block(World) 会屏蔽本模块的所有动作与手势（包括 ESC；当前无系统动作例外）
 // using (var scope = RevInput.OpenScope())
 // {
 //     scope.Block();                                   // 等价于 RevInput.Block(owner: scope)
@@ -39,20 +39,22 @@ namespace Revolution
 
         /// <summary>申请屏蔽（默认只挡世界输入；<paramref name="pointerId"/> 只有 <c>Pointer</c> 种类才需要）。</summary>
         public RevInputBlock Block(RevInputBlockKind kind = RevInputBlockKind.World, int pointerId = -1)
-            => RevInput.Block(kind, pointerId, owner: this);
+            => _disposed ? RevInputBlock.Empty : RevInput.Block(kind, pointerId, owner: this);
 
         /// <summary>解除本作用域申请的一次屏蔽（也可等 Dispose 一次清）。</summary>
         public bool Unblock(RevInputBlock handle) => RevInput.Unblock(handle);
 
         /// <summary>订阅某动作按下（owner = 本作用域）。</summary>
-        public bool OnPressed(string action, Action handler) => RevInput.OnPressed(action, handler, owner: this);
+        public bool OnPressed(string action, Action handler) => !_disposed && RevInput.OnPressed(action, handler, owner: this);
 
         /// <summary>订阅某动作抬起（owner = 本作用域）。</summary>
-        public bool OnReleased(string action, Action handler) => RevInput.OnReleased(action, handler, owner: this);
+        public bool OnReleased(string action, Action handler) => !_disposed && RevInput.OnReleased(action, handler, owner: this);
 
         /// <summary>订阅手势（owner = 本作用域）。</summary>
         public void OnGesture(Action<RevGestureEvent> handler, RevGestureKind kind = RevGestureKind.None)
-            => RevInput.OnGesture(handler, kind, owner: this);
+        {
+            if (!_disposed) RevInput.OnGesture(handler, kind, owner: this);
+        }
 
         /// <summary>只清掉本作用域登记的内容（不想等出块时用）。</summary>
         public int Close()

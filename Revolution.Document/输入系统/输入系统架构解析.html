@@ -219,12 +219,12 @@
           <tr><td>1</td><td>快照 <code>Reset()</code>（保留容量）</td><td><code>RevInputCore.Tick</code></td><td>定长掩码 + 复用数组 → <b>零分配</b></td></tr>
           <tr><td>2</td><td>设备 <code>Poll(snapshot)</code> 写原始输入</td><td><code>RevInputUnityDevice</code></td><td>设备坏了只隔离它自己（本帧按"无输入"处理）</td></tr>
           <tr><td>3</td><td>判相位 + 算轴（<b>一次遍历算完所有动作</b>）</td><td><code>RevInputActionTable.Update</code></td><td>位运算命中判定；屏蔽期间动作相位与轴一并按"无输入"处理，但仍记"按下时间"（缓冲不丢）</td></tr>
-          <tr><td>4</td><td>手势识别（指针采样 → 7 种手势）</td><td><code>RevGestureRecognizer.Update</code></td><td>屏蔽期间只跟踪不产出，且不秋后算账</td></tr>
+          <tr><td>4</td><td>手势识别（指针采样 → 7 种手势）</td><td><code>RevGestureRecognizer.Update</code></td><td>World 屏蔽期间只跟踪不产出；Pointer 屏蔽的单指被排除出 Tap/Swipe 与双指组合</td></tr>
           <tr><td>5</td><td>派发动作事件（按下/抬起）</td><td><code>RevInputCore</code></td><td>就地 <code>try/catch</code> 隔离；不用 lambda（零闭包分配）</td></tr>
           <tr><td>6</td><td>派发手势事件</td><td><code>RevInputCore</code></td><td>同上</td></tr>
           <tr><td>7</td><td>派发连发事件（按住按节拍）</td><td><code>RevInputCore</code></td><td>只有配了 <code>SetRepeat</code> 的动作才有；逐动作查表命中才派</td></tr>
-          <tr><td>8</td><td>派发轴事件（<b>只在数值变化时</b>）</td><td><code>RevInputCore</code></td><td>每个轴记"上次投递值"；订阅后第一帧先给一次当前值（方便初始化移动/UI）</td></tr>
-          <tr><td>9</td><td>投给监听者（按下 / 抬起 / 连发）</td><td><code>RevInputCore</code></td><td>按动作表遍历（<b>不依赖有没有人订阅委托</b>：只注册监听者也能收到）；逐条隔离</td></tr>
+          <tr><td>8</td><td>派发轴事件（<b>只在数值变化时</b>）</td><td><code>RevInputCore</code></td><td>每个轴订阅独立记忆上次投递值；新增订阅后首帧先给当前值（包括 0）</td></tr>
+          <tr><td>9</td><td>投给监听者（按下 / 抬起 / 连发 / 手势 / 轴）</td><td><code>RevInputCore</code></td><td>按动作表遍历（<b>不依赖有没有人订阅委托</b>：只注册监听者也能收到）；逐条隔离</td></tr>
           <tr><td>10</td><td>业务查询（<code>RevInput.Pressed(...)</code>）</td><td><code>Facade/RevInput</code></td><td>全是读结果，<b>不重算</b></td></tr>
         </tbody>
       </table>
@@ -233,7 +233,7 @@
     <ul>
       <li><b>相位先算、事件后派</b>：事件回调里读到的状态和业务在同一帧读到的一致（不会"回调里读到的是上一帧"）；</li>
       <li><b>屏蔽判定在采集之后、判定之前</b>：被屏蔽时设备照样采集（指针位置可读），但动作相位与手势按"无输入"处理；</li>
-      <li><b>事件驱动与轮询同帧同源</b>：监听者、<code>OnPressed</code> 这类委托、轮询 API 读的是同一份状态；而 ⑦⑧⑨ 在"没有订阅者 / 没有监听者"时<b>提前 return，零开销</b>（不影响逐帧性能）。</li>
+      <li><b>事件驱动与轮询同帧同源</b>：监听者、<code>OnPressed</code> 这类委托、轮询 API 读的是同一份状态；轴订阅者各自记录上次值，新订阅首帧先收到当前值（包括 0）；回调中增删订阅从下一帧生效。</li>
     </ul>
   </section>
 
@@ -250,7 +250,7 @@
           <tr><td>4</td><td><b>纯 C# 内核 + 一个采集委托</b></td><td>手感参数（死区、双击窗口、滑动阈值、多指抢占）必须能<b>脱机断言</b>；引擎适配层只通过一个采集委托接进来（内核不认识任何引擎类型，也不认识"输入从哪来"）</td><td>内核不能用 <code>Vector2</code>（返回自定结构）、时间要当参数传</td></tr>
           <tr><td>5</td><td><b>相位只有 4 种</b>（<code>Down/Held/Up/None</code>）</td><td>少即是多："双击""长按""连发"都是<b>派生读数</b>（<code>PressedBuffered</code> / <code>Repeat</code> / 手势），不是新相位</td><td>业务要知道去哪儿找这些派生读数</td></tr>
           <tr><td>6</td><td><b>输入缓冲窗口</b>（<code>PressedBuffered(action, 0.15s)</code>）</td><td>动作游戏标配的"提前按也算"——落到地面前的跳跃不再白按</td><td>业务要显式选"用缓冲还是用严格按下"</td></tr>
-          <tr><td>7</td><td><b>屏蔽精确到指针 + 屏蔽期间仍记缓冲</b></td><td>① 弹窗挡世界输入但不能挡 ESC ② 屏蔽解除瞬间，缓冲窗口里的输入<b>立刻生效</b>（否则手感会莫名迟钝）</td><td>屏蔽栈要留 owner（用于一行清理）</td></tr>
+          <tr><td>7</td><td><b>屏蔽精确到指针 + 屏蔽期间仍记缓冲</b></td><td>① World 屏蔽当前也会挡 ESC 等动作（暂无系统动作例外） ② 屏蔽解除瞬间，缓冲窗口里的输入<b>立刻生效</b>（否则手感会莫名迟钝）</td><td>屏蔽栈要留 owner（用于一行清理）</td></tr>
           <tr><td>8</td><td><b>手势八向 + 带速度；双指不做秋后算账</b></td><td>斜向滑动是真实需求（"左上闪避"）；而被屏蔽/双指期间开始的手势，抬手时不补发 Tap</td><td>手势阈值需要按项目调（默认值只是起点）</td></tr>
           <tr><td>9</td><td><b>热路径零分配</b>（就地问 try/catch，不传 lambda）</td><td><code>Guard(() =&gt; …)</code> 这类写法每次都要分配一个闭包；输入是逐帧热路径，600 帧零分配是硬指标</td><td>异常上下文只带动作名（不带拼好的句子）</td></tr>
           <tr><td>10</td><td><b>失败给原因码，不打日志</b></td><td>与框架其它模块一致的契约：正常路径一条日志不打；失败可订阅 <code>RevInput.Failed</code>，要诊断开 <code>VerboseLog</code></td><td>排查要主动订阅或开开关（不能指望控制台自己冒日志）</td></tr>

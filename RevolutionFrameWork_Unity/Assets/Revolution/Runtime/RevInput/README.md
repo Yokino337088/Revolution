@@ -30,7 +30,7 @@ if (RevInput.Swipe(out var sw) && sw.Direction == RevSwipeDirection.Left) Dodge(
 if (RevInput.HasGesture(RevGestureKind.DoubleTap)) ZoomIn();
 if (RevInput.HasGesture(RevGestureKind.Pinch)) Camera.OrthographicSize /= RevInput.PinchScale;
 
-// ④ 弹窗 / 过场：挡掉世界输入（ESC 之类照样能用）
+// ④ 弹窗 / 过场：挡掉世界动作与手势（注意：当前没有 ESC 等系统动作例外）
 using (var scope = RevInput.OpenScope())
 {
     scope.Block();                                     // 只挡"动作 + 手势"，指针位置还能读
@@ -60,7 +60,7 @@ using (var scope = RevInput.OpenScope())
 ## 四条铁律
 
 1. **先绑后用**：`RevInput.Bind(...)` 一次（或 `LoadBindings` 读存档）；没绑过的动作**不报错**，永远返回 false。
-2. **切后台必须复位**：宿主已自动处理（失焦 / 切后台 → 清按键与手势）；你换场景时再调一次 `RevInput.ResetAll("换场景")` 更稳。
+2. **切后台必须复位**：宿主已自动处理（失焦 / 切后台 → 清按键、缓冲、连发计时与手势；不合成 `OnReleased`）；你换场景时再调一次 `RevInput.ResetAll("换场景")` 更稳。
 3. **弹窗用屏蔽，不要停模块**：`RevInput.OpenScope()` + `scope.Block()`；停模块会把 ESC / 返回键一起停掉。
 4. **不要用本模块点 UI**：UI 按钮走 UI 系统（`RevUIPanel.OnClick`）；本模块管世界输入，并提供 `RevInput.IsPointerOverUI()` 帮你分流。
 

@@ -46,6 +46,7 @@ namespace Revolution
         /// 内核**不认识任何引擎类型**，只认这个委托 —— 这就是"内核纯 C#"的接缝。
         /// </summary>
         internal Action<RevInputSnapshot> Poll;
+        internal Action ResetDeviceState;
 
         /// <summary>采集源名字（只用于自检输出）。</summary>
         internal string SourceName = "无";
@@ -61,6 +62,22 @@ namespace Revolution
 
         /// <summary>手动驱动中（宿主让位，业务自己调 <c>Tick</c>）。</summary>
         internal bool ManualDriven;
+        private bool _isTicking;
+
+        // 可复用派发快照：订阅在回调期间发生增删时，本轮派发仍按开始时的订阅集完成；下一次派发应用变更。
+        private readonly List<ActionEntry> _pressedDispatch = new List<ActionEntry>(16);
+        private readonly List<ActionEntry> _releasedDispatch = new List<ActionEntry>(16);
+        private readonly List<GestureEntry> _gestureDispatch = new List<GestureEntry>(8);
+        private readonly List<ListenerEntry> _listenerDispatch = new List<ListenerEntry>(8);
+        private readonly List<AxisEntry> _axisDispatch = new List<AxisEntry>(8);
+        private readonly List<RepeatEntry> _repeatDispatch = new List<RepeatEntry>(8);
+        private readonly List<ActionStateEntry> _actionStateDispatch = new List<ActionStateEntry>(RevInputLimits.MaxActions);
+        private readonly Func<int, bool> _pointerBlockPredicate;
+
+        internal RevInputCore()
+        {
+            _pointerBlockPredicate = IsPointerBlocked;
+        }
 
         // ── 本帧信息（供查询与诊断）──────────────────────────
         internal double Realtime;
@@ -114,9 +131,20 @@ namespace Revolution
 
         private struct AxisEntry
         {
+            public int Id;
             public string Axis;
             public Action<float> Handler;
             public object Owner;
+            public bool HasValue;
+            public float LastValue;
+        }
+
+        private struct ListenerAxisEntry
+        {
+            public RevInputListener Listener;
+            public string Axis;
+            public bool HasValue;
+            public float LastValue;
         }
 
         private struct RepeatEntry
@@ -126,15 +154,22 @@ namespace Revolution
             public object Owner;
         }
 
+        private struct ActionStateEntry
+        {
+            public string Action;
+            public RevInputActionState State;
+        }
+
         /// <summary>轴变化判定阈值（小于它不算变化，避免摇杆抖动刷屏）。</summary>
         private const float AxisChangeEpsilon = 0.001f;
 
         private readonly List<ListenerEntry> _listeners = new List<ListenerEntry>(8);
         private readonly List<AxisEntry> _axisHandlers = new List<AxisEntry>(8);
+        private readonly List<ListenerAxisEntry> _listenerAxisLast = new List<ListenerAxisEntry>(32);
         private readonly List<RepeatEntry> _repeatHandlers = new List<RepeatEntry>(8);
+        private int _nextAxisHandlerId = 1;
 
         /// <summary>每个轴上次投递的值（只在变化时回调；换会话时清空）。</summary>
-        private readonly Dictionary<string, float> _axisLast = new Dictionary<string, float>(32);
 
         // ── 每帧推进 ────────────────────────────────────────
 
@@ -142,6 +177,20 @@ namespace Revolution
         /// 推进一帧。**由驱动调用**（隐藏宿主或 <c>RevInput.Tick</c>）。
         /// </summary>
         internal void Tick(float deltaTime, float unscaledDeltaTime, double realtime, int frame)
+        {
+            if (_isTicking) throw new InvalidOperationException("RevInput.Tick 不能从采集或事件回调中重入。");
+            _isTicking = true;
+            try
+            {
+                TickCore(deltaTime, unscaledDeltaTime, realtime, frame);
+            }
+            finally
+            {
+                _isTicking = false;
+            }
+        }
+
+        private void TickCore(float deltaTime, float unscaledDeltaTime, double realtime, int frame)
         {
             TickCount++;
             DeltaTime = deltaTime;
@@ -164,7 +213,12 @@ namespace Revolution
                 }
                 catch (Exception e)
                 {
-                    // 采集坏了不能拖垮整帧输入：隔离 + 继续（本帧按"无输入"处理）
+                    // Poll 可能在抛异常前已经写入部分字段；整帧回滚为无输入，避免半份快照驱动状态。
+                    Snapshot.Reset();
+                    Snapshot.DeltaTime = deltaTime;
+                    Snapshot.UnscaledDeltaTime = unscaledDeltaTime;
+                    Snapshot.Realtime = realtime;
+                    Snapshot.Frame = frame;
                     RevInputLog.OnException?.Invoke(e, "输入采集(" + SourceName + ")");
                 }
             }
@@ -182,14 +236,15 @@ namespace Revolution
 
             // ② 判相位 / 算轴：一次遍历算完所有动作
             Actions.Update(Snapshot, realtime, worldBlocked, AxisProvider);
+            SnapshotDispatchSubscriptions();
 
             // ③ 手势识别（全部屏蔽时连识别都不做：指针位置也读不到）
             Gestures.BeginFrame();
-            Gestures.Update(Snapshot, realtime, worldBlocked || allBlocked);
+            Gestures.Update(Snapshot, realtime, worldBlocked || allBlocked, _pointerBlockPredicate);
 
             // ④ 派发动作事件
-            DispatchActionEvents(_pressed, pressed: true);
-            DispatchActionEvents(_released, pressed: false);
+            DispatchActionEvents(_pressedDispatch, pressed: true);
+            DispatchActionEvents(_releasedDispatch, pressed: false);
 
             // ⑤ 派发手势事件
             if (Gestures.Count > 0)
@@ -198,9 +253,9 @@ namespace Revolution
                 for (int i = 0; i < Gestures.Count; i++)
                 {
                     RevGestureEvent e = Gestures.At(i);
-                    for (int h = 0; h < _gestureHandlers.Count; h++)
+                    for (int h = 0; h < _gestureDispatch.Count; h++)
                     {
-                        GestureEntry entry = _gestureHandlers[h];
+                        GestureEntry entry = _gestureDispatch[h];
                         if (entry.Kind != RevGestureKind.None && entry.Kind != e.Kind) continue;
 
                         Action<RevGestureEvent> handler = entry.Handler;
@@ -231,17 +286,45 @@ namespace Revolution
             if (Snapshot.KeyHeld.Any || Snapshot.PointerCount > 0) FramesWithInput++;
         }
 
+        private static void ReserveCapacity<T>(List<T> list, int required)
+        {
+            if (list.Capacity < required) list.Capacity = required;
+        }
+
+        private void SnapshotDispatchSubscriptions()
+        {
+            _pressedDispatch.Clear();
+            _pressedDispatch.AddRange(_pressed);
+            _releasedDispatch.Clear();
+            _releasedDispatch.AddRange(_released);
+            _gestureDispatch.Clear();
+            _gestureDispatch.AddRange(_gestureHandlers);
+            _listenerDispatch.Clear();
+            _listenerDispatch.AddRange(_listeners);
+            _axisDispatch.Clear();
+            _axisDispatch.AddRange(_axisHandlers);
+            _repeatDispatch.Clear();
+            _repeatDispatch.AddRange(_repeatHandlers);
+            _actionStateDispatch.Clear();
+            for (int i = 0; i < Actions.Count; i++)
+            {
+                RevInputBinding binding = Actions.At(i);
+                _actionStateDispatch.Add(new ActionStateEntry
+                {
+                    Action = binding.Action,
+                    State = Actions.State(binding.Action),
+                });
+            }
+        }
+
         private void DispatchActionEvents(List<ActionEntry> list, bool pressed)
         {
             if (list.Count == 0) return;
             for (int i = list.Count - 1; i >= 0; i--)
             {
                 ActionEntry entry = list[i];
-                if (string.IsNullOrEmpty(entry.Action) || entry.Handler == null)
-                {
-                    list.RemoveAt(i);
+                if (string.IsNullOrEmpty(entry.Action) || entry.Handler == null || Actions.Find(entry.Action) == null)
                     continue;
-                }
 
                 RevInputActionState s = Actions.State(entry.Action);
                 bool fire = pressed ? s.Down : s.Up;
@@ -273,29 +356,24 @@ namespace Revolution
         /// <summary>把本帧的动作事件推给监听者。**不依赖有没有人订阅委托**（只注册监听者也能收到）。</summary>
         private void DispatchToListeners()
         {
-            if (_listeners.Count == 0) return;
-            for (int i = 0; i < Actions.Count; i++)
+            if (_listenerDispatch.Count == 0) return;
+            for (int i = 0; i < _actionStateDispatch.Count; i++)
             {
-                RevInputBinding b = Actions.At(i);
-                if (b == null) continue;
-                RevInputActionState s = Actions.State(b.Action);
-                if (s.Down) NotifyActionToListeners(b.Action, NotifyKind.Pressed);
-                if (s.Up) NotifyActionToListeners(b.Action, NotifyKind.Released);
-                if (s.Repeat) NotifyActionToListeners(b.Action, NotifyKind.Repeat);
+                ActionStateEntry entry = _actionStateDispatch[i];
+                if (Actions.Find(entry.Action) == null) continue;
+                RevInputActionState state = entry.State;
+                if (state.Down) NotifyActionToListeners(entry.Action, NotifyKind.Pressed);
+                if (state.Up) NotifyActionToListeners(entry.Action, NotifyKind.Released);
+                if (state.Repeat) NotifyActionToListeners(entry.Action, NotifyKind.Repeat);
             }
         }
 
         private void NotifyActionToListeners(string action, NotifyKind kind)
         {
-            // ★ Bug 修复（2026-09-30）：不能用循环外缓存的 Count（旧代码 `for (int i = 0, n = ...; i < n; i++)`）——
-            //   监听者回调里完全可能注销自己（如 OnInputPressed 里 RevInput.OffAllOf(this)，这是文档推荐的清理方式），
-            //   列表变短后下一轮 `_listeners[i]` 越界，而这个取元素在 try **之外**，
-            //   异常会直接冲出 Tick 炸到驱动的 Update 里。
-            //   改为倒序 + 实时 Count：回调里注销自己时，已通知的（尾部）不受影响、未通知的（头部）位置不变 ——
-            //   不越界、也不跳过任何人，与上面 DispatchActionEvents 委托版的倒序遍历行为一致。
-            for (int i = _listeners.Count - 1; i >= 0; i--)
+            // 使用本帧起始时的派发快照：回调内增删订阅从下一帧起生效，不会跳过其它监听者。
+            for (int i = _listenerDispatch.Count - 1; i >= 0; i--)
             {
-                RevInputListener listener = _listeners[i].Listener;
+                RevInputListener listener = _listenerDispatch[i].Listener;
                 if (listener == null) continue;
                 try
                 {
@@ -321,12 +399,10 @@ namespace Revolution
 
         private void NotifyGestureToListeners(in RevGestureEvent gesture)
         {
-            if (_listeners.Count == 0) return;
-            // ★ Bug 修复（2026-09-30）：同 NotifyActionToListeners —— 倒序 + 实时 Count，
-            //   防止"回调里注销自己"导致的越界（旧代码缓存 Count 且取元素在 try 外）。
-            for (int i = _listeners.Count - 1; i >= 0; i--)
+            if (_listenerDispatch.Count == 0) return;
+            for (int i = _listenerDispatch.Count - 1; i >= 0; i--)
             {
-                RevInputListener listener = _listeners[i].Listener;
+                RevInputListener listener = _listenerDispatch[i].Listener;
                 if (listener == null) continue;
                 RevGestureEvent evt = gesture;
                 try
@@ -343,16 +419,16 @@ namespace Revolution
         /// <summary>连发事件：投给 <c>OnRepeat</c> 的订阅者。</summary>
         private void DispatchRepeatEvents()
         {
-            if (_repeatHandlers.Count == 0) return;
-            for (int i = 0; i < Actions.Count; i++)
+            if (_repeatDispatch.Count == 0) return;
+            for (int i = 0; i < _actionStateDispatch.Count; i++)
             {
-                RevInputBinding b = Actions.At(i);
-                if (b == null || !Actions.State(b.Action).Repeat) continue;
+                ActionStateEntry action = _actionStateDispatch[i];
+                if (!action.State.Repeat) continue;
 
-                for (int h = _repeatHandlers.Count - 1; h >= 0; h--)
+                for (int h = _repeatDispatch.Count - 1; h >= 0; h--)
                 {
-                    RepeatEntry entry = _repeatHandlers[h];
-                    if (entry.Action != b.Action || entry.Handler == null) continue;
+                    RepeatEntry entry = _repeatDispatch[h];
+                    if (entry.Action != action.Action || entry.Handler == null || Actions.Find(entry.Action) == null) continue;
                     Action handler = entry.Handler;
                     try
                     {
@@ -360,7 +436,7 @@ namespace Revolution
                     }
                     catch (Exception e)
                     {
-                        RevInputLog.OnException?.Invoke(e, "OnRepeat(" + b.Action + ")");
+                        RevInputLog.OnException?.Invoke(e, "OnRepeat(" + action.Action + ")");
                     }
                 }
             }
@@ -372,54 +448,106 @@ namespace Revolution
         /// </summary>
         private void DispatchAxisEvents()
         {
-            if (_axisHandlers.Count == 0 && _listeners.Count == 0) return;
+            if (_axisDispatch.Count == 0 && _listenerDispatch.Count == 0) return;
 
-            for (int i = 0; i < Actions.Count; i++)
+            for (int i = 0; i < _actionStateDispatch.Count; i++)
             {
-                RevInputBinding b = Actions.At(i);
-                if (b == null) continue;
+                ActionStateEntry action = _actionStateDispatch[i];
+                if (Actions.Find(action.Action) == null) continue;
+                float value = action.State.Axis;
 
-                float value = Actions.State(b.Action).Axis;
-                float last;
-                bool known = _axisLast.TryGetValue(b.Action, out last);
-                if (known && Math.Abs(value - last) < AxisChangeEpsilon) continue;
-                _axisLast[b.Action] = value;
-                if (!known && value == 0f) continue;      // 一直没动过的轴不打扰业务
-
-                for (int h = _axisHandlers.Count - 1; h >= 0; h--)
+                for (int h = _axisDispatch.Count - 1; h >= 0; h--)
                 {
-                    AxisEntry entry = _axisHandlers[h];
-                    if (entry.Axis != b.Action || entry.Handler == null) continue;
+                    AxisEntry entry = _axisDispatch[h];
+                    if (entry.Axis != action.Action || entry.Handler == null) continue;
+                    if (entry.HasValue && Math.Abs(value - entry.LastValue) < AxisChangeEpsilon) continue;
+
+                    entry.HasValue = true;
+                    entry.LastValue = value;
                     Action<float> handler = entry.Handler;
-                    float v = value;
                     try
                     {
-                        handler(v);
+                        handler(value);
                     }
                     catch (Exception e)
                     {
-                        RevInputLog.OnException?.Invoke(e, "OnAxis(" + b.Action + ")");
+                        RevInputLog.OnException?.Invoke(e, "OnAxis(" + action.Action + ")");
                     }
+                    StoreAxisHandlerValue(entry);
                 }
 
-                // ★ Bug 修复（2026-09-30）：同 NotifyActionToListeners —— 倒序 + 实时 Count，
-                //   防止"轴回调里注销自己"导致的越界（旧代码缓存 Count 且取元素在 try 外）。
-                for (int l = _listeners.Count - 1; l >= 0; l--)
+                if (Actions.Find(action.Action) == null) continue;
+                for (int l = _listenerDispatch.Count - 1; l >= 0; l--)
                 {
-                    RevInputListener listener = _listeners[l].Listener;
+                    RevInputListener listener = _listenerDispatch[l].Listener;
                     if (listener == null) continue;
-                    string axis = b.Action;
-                    float v = value;
+                    int stateIndex = FindListenerAxis(listener, action.Action);
+                    bool hasValue = stateIndex >= 0 && _listenerAxisLast[stateIndex].HasValue;
+                    float lastValue = hasValue ? _listenerAxisLast[stateIndex].LastValue : 0f;
+                    if (hasValue && Math.Abs(value - lastValue) < AxisChangeEpsilon) continue;
+
                     try
                     {
-                        listener.OnInputAxis(axis, v);
+                        listener.OnInputAxis(action.Action, value);
                     }
                     catch (Exception e)
                     {
-                        RevInputLog.OnException?.Invoke(e, "OnInputAxis(" + axis + ")");
+                        RevInputLog.OnException?.Invoke(e, "OnInputAxis(" + action.Action + ")");
                     }
+                    StoreListenerAxisValue(listener, action.Action, value);
                 }
             }
+        }
+
+        internal void ResetAxisSubscriptionValues()
+        {
+            _listenerAxisLast.Clear();
+            for (int i = 0; i < _axisHandlers.Count; i++)
+            {
+                AxisEntry entry = _axisHandlers[i];
+                entry.HasValue = false;
+                _axisHandlers[i] = entry;
+            }
+        }
+
+        private void StoreAxisHandlerValue(AxisEntry updated)
+        {
+            for (int i = 0; i < _axisHandlers.Count; i++)
+            {
+                if (_axisHandlers[i].Id != updated.Id) continue;
+                _axisHandlers[i] = updated;
+                return;
+            }
+        }
+
+        private int FindListenerAxis(RevInputListener listener, string axis)
+        {
+            for (int i = 0; i < _listenerAxisLast.Count; i++)
+                if (ReferenceEquals(_listenerAxisLast[i].Listener, listener) && _listenerAxisLast[i].Axis == axis) return i;
+            return -1;
+        }
+
+        private void StoreListenerAxisValue(RevInputListener listener, string axis, float value)
+        {
+            for (int i = 0; i < _listenerAxisLast.Count; i++)
+            {
+                if (!ReferenceEquals(_listenerAxisLast[i].Listener, listener) || _listenerAxisLast[i].Axis != axis) continue;
+                ListenerAxisEntry existing = _listenerAxisLast[i];
+                existing.HasValue = true;
+                existing.LastValue = value;
+                _listenerAxisLast[i] = existing;
+                return;
+            }
+
+            if (IsListenerRegistered(listener))
+                _listenerAxisLast.Add(new ListenerAxisEntry { Listener = listener, Axis = axis, HasValue = true, LastValue = value });
+        }
+
+        private bool IsListenerRegistered(RevInputListener listener)
+        {
+            for (int i = 0; i < _listeners.Count; i++)
+                if (ReferenceEquals(_listeners[i].Listener, listener)) return true;
+            return false;
         }
 
         internal void AddListener(RevInputListener listener, object owner)
@@ -427,18 +555,23 @@ namespace Revolution
             if (listener == null) return;
             for (int i = 0; i < _listeners.Count; i++)
                 if (ReferenceEquals(_listeners[i].Listener, listener)) return;   // 重复登记忽略
+            ReserveCapacity(_listenerDispatch, _listeners.Count + 1);
             _listeners.Add(new ListenerEntry { Listener = listener, Owner = owner });
         }
 
         internal bool RemoveListener(RevInputListener listener)
         {
+            bool removed = false;
             for (int i = _listeners.Count - 1; i >= 0; i--)
             {
                 if (!ReferenceEquals(_listeners[i].Listener, listener)) continue;
                 _listeners.RemoveAt(i);
-                return true;
+                removed = true;
             }
-            return false;
+            if (removed)
+                for (int i = _listenerAxisLast.Count - 1; i >= 0; i--)
+                    if (ReferenceEquals(_listenerAxisLast[i].Listener, listener)) _listenerAxisLast.RemoveAt(i);
+            return removed;
         }
 
         internal int ListenerCount => _listeners.Count;
@@ -446,39 +579,43 @@ namespace Revolution
         internal bool AddAxisHandler(string axis, Action<float> handler, object owner)
         {
             if (!RevInputActionTable.IsValidName(axis) || handler == null) return false;
-            _axisHandlers.Add(new AxisEntry { Axis = axis, Handler = handler, Owner = owner });
+            ReserveCapacity(_axisDispatch, _axisHandlers.Count + 1);
+            _axisHandlers.Add(new AxisEntry { Id = _nextAxisHandlerId++, Axis = axis, Handler = handler, Owner = owner });
             return true;
         }
 
         internal bool RemoveAxisHandler(string axis, Action<float> handler)
         {
+            bool removed = false;
             for (int i = _axisHandlers.Count - 1; i >= 0; i--)
             {
                 if (_axisHandlers[i].Axis != axis) continue;
                 if (handler != null && !ReferenceEquals(_axisHandlers[i].Handler, handler)) continue;
                 _axisHandlers.RemoveAt(i);
-                return true;
+                removed = true;
             }
-            return false;
+            return removed;
         }
 
         internal bool AddRepeatHandler(string action, Action handler, object owner)
         {
             if (!RevInputActionTable.IsValidName(action) || handler == null) return false;
+            ReserveCapacity(_repeatDispatch, _repeatHandlers.Count + 1);
             _repeatHandlers.Add(new RepeatEntry { Action = action, Handler = handler, Owner = owner });
             return true;
         }
 
         internal bool RemoveRepeatHandler(string action, Action handler)
         {
+            bool removed = false;
             for (int i = _repeatHandlers.Count - 1; i >= 0; i--)
             {
                 if (_repeatHandlers[i].Action != action) continue;
                 if (handler != null && !ReferenceEquals(_repeatHandlers[i].Handler, handler)) continue;
                 _repeatHandlers.RemoveAt(i);
-                return true;
+                removed = true;
             }
-            return false;
+            return removed;
         }
 
         // ── 复位 ────────────────────────────────────────────
@@ -486,7 +623,18 @@ namespace Revolution
         /// <summary>新会话复位（进 Play）：清掉上一局的一切（静态字段不会自己清）。</summary>
         internal void ResetForNewSession()
         {
+            _isTicking = false;
+            _pressedDispatch.Clear();
+            _releasedDispatch.Clear();
+            _gestureDispatch.Clear();
+            _listenerDispatch.Clear();
+            _axisDispatch.Clear();
+            _repeatDispatch.Clear();
+            _actionStateDispatch.Clear();
+            ResetDeviceState?.Invoke();
             Actions.Clear();
+            _listenerAxisLast.Clear();
+            _nextAxisHandlerId = 1;
             Gestures.ResetAll();
             Snapshot.Reset();
             _blocks.Clear();
@@ -496,7 +644,6 @@ namespace Revolution
             _listeners.Clear();
             _axisHandlers.Clear();
             _repeatHandlers.Clear();
-            _axisLast.Clear();
             _nextBlockId = 1;
 
             // ★ Bug 修复（2026-09-30）：Failed 事件的订阅必须一并放掉 —— 上面清了全部六类
@@ -513,13 +660,15 @@ namespace Revolution
         }
 
         /// <summary>
-        /// 局部复位（失焦 / 切后台 / 换场景）：**清按键与进行中的手势，保留绑定与屏蔽**。
+        /// 局部复位（失焦 / 切后台 / 换场景）：**清按键、缓冲、连发和进行中的手势，保留绑定与屏蔽**。
         /// 这是"切后台回来按键卡住"的正解 —— 抬起事件丢了，就把状态当成"全部松手"。
+        /// 复位是静默清理：不会合成 OnReleased；业务若需收尾，应监听应用生命周期的 Paused/Resumed。
         /// </summary>
         internal void ResetAll(string reason)
         {
             Snapshot.FlushKeys();
             Actions.Update(Snapshot, Realtime, false, AxisProvider);   // 让动作状态立刻归一（Held 变 false）
+            Actions.ClearTransientInput();                               // 取消尚未消费的缓冲、边沿和连发节拍
             Gestures.ResetAll();
             Snapshot.Reset();
             RevInputLog.V("[RevInput] 复位：" + (reason ?? "未说明") + "（按键与手势已清空，绑定与屏蔽保留）");
@@ -652,6 +801,41 @@ namespace Revolution
 
         // ── 事件订阅 ────────────────────────────────────────
 
+        internal bool RemoveAction(string action)
+        {
+            if (!Actions.Remove(action)) return false;
+            RemoveActionSubscriptions(action);
+            for (int i = _listenerAxisLast.Count - 1; i >= 0; i--)
+                if (_listenerAxisLast[i].Axis == action) _listenerAxisLast.RemoveAt(i);
+            return true;
+        }
+
+        private void RemoveActionSubscriptions(string action)
+        {
+            RemoveActionEntries(_pressed, action);
+            RemoveActionEntries(_released, action);
+            RemoveRepeatEntries(action);
+            RemoveAxisEntries(action);
+        }
+
+        private static void RemoveActionEntries(List<ActionEntry> entries, string action)
+        {
+            for (int i = entries.Count - 1; i >= 0; i--)
+                if (entries[i].Action == action) entries.RemoveAt(i);
+        }
+
+        private void RemoveRepeatEntries(string action)
+        {
+            for (int i = _repeatHandlers.Count - 1; i >= 0; i--)
+                if (_repeatHandlers[i].Action == action) _repeatHandlers.RemoveAt(i);
+        }
+
+        private void RemoveAxisEntries(string action)
+        {
+            for (int i = _axisHandlers.Count - 1; i >= 0; i--)
+                if (_axisHandlers[i].Axis == action) _axisHandlers.RemoveAt(i);
+        }
+
         internal bool AddActionHandler(string action, Action handler, object owner, bool pressed, out RevInputErrorReason reason)
         {
             reason = RevInputErrorReason.None;
@@ -663,6 +847,7 @@ namespace Revolution
             if (handler == null) return false;
 
             var list = pressed ? _pressed : _released;
+            ReserveCapacity(pressed ? _pressedDispatch : _releasedDispatch, list.Count + 1);
             var entry = new ActionEntry { Action = action, Handler = handler, Owner = owner };
             list.Add(entry);
             return true;
@@ -684,6 +869,7 @@ namespace Revolution
         internal void AddGestureHandler(RevGestureKind kind, Action<RevGestureEvent> handler, object owner)
         {
             if (handler == null) return;
+            ReserveCapacity(_gestureDispatch, _gestureHandlers.Count + 1);
             _gestureHandlers.Add(new GestureEntry { Kind = kind, Handler = handler, Owner = owner });
         }
 
@@ -699,6 +885,8 @@ namespace Revolution
                 if (ReferenceEquals(_gestureHandlers[i].Owner, owner)) { _gestureHandlers.RemoveAt(i); removed++; }
             for (int i = _listeners.Count - 1; i >= 0; i--)                 // 事件驱动接入面
                 if (ReferenceEquals(_listeners[i].Owner, owner)) { _listeners.RemoveAt(i); removed++; }
+            for (int i = _listenerAxisLast.Count - 1; i >= 0; i--)
+                if (!IsListenerRegistered(_listenerAxisLast[i].Listener)) _listenerAxisLast.RemoveAt(i);
             for (int i = _axisHandlers.Count - 1; i >= 0; i--)
                 if (ReferenceEquals(_axisHandlers[i].Owner, owner)) { _axisHandlers.RemoveAt(i); removed++; }
             for (int i = _repeatHandlers.Count - 1; i >= 0; i--)

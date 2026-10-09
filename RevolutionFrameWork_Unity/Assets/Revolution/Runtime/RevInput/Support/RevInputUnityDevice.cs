@@ -48,6 +48,16 @@ namespace Revolution
             BuildKeyTable();
         }
 
+        internal void ResetForNewSession()
+        {
+            _tracked.ClearAll();
+            _lastHeld.ClearAll();
+            _lastKind = RevInputDeviceKind.Unknown;
+            _lastMouseX = _lastMouseY = 0f;
+            _lastMouseValid = false;
+            _badAxisNames.Clear();
+        }
+
         /// <summary>建"RevKey 名字 → Unity KeyCode"映射表（启动一次）。</summary>
         private void BuildKeyTable()
         {
@@ -107,6 +117,7 @@ namespace Revolution
 
             RevKeyMask held = default;
             bool keyboardActive = false;
+            bool gamepadButtonActive = false;
 
             for (int word = 0; word < RevKeyMask.Words; word++)
             {
@@ -121,20 +132,24 @@ namespace Revolution
                     KeyCode code = _keyCodes[index];
                     if (code == KeyCode.None) continue;
 
+                    bool gamepadButton = index >= (int)RevKey.JoystickButton0 && index <= (int)RevKey.JoystickButton19;
                     if (Input.GetKey(code))
                     {
                         held.Set(index);
-                        keyboardActive = true;
+                        if (gamepadButton) gamepadButtonActive = true;
+                        else keyboardActive = true;
                     }
                     if (Input.GetKeyDown(code))
                     {
                         snapshot.KeyDown.Set(index);
-                        keyboardActive = true;
+                        if (gamepadButton) gamepadButtonActive = true;
+                        else keyboardActive = true;
                     }
                     if (Input.GetKeyUp(code))
                     {
                         snapshot.KeyUp.Set(index);
-                        keyboardActive = true;
+                        if (gamepadButton) gamepadButtonActive = true;
+                        else keyboardActive = true;
                     }
                 }
             }
@@ -161,7 +176,8 @@ namespace Revolution
             snapshot.ScrollX = scroll.x;
             snapshot.ScrollY = scroll.y;
 
-            bool mouseActive = Math.Abs(snapshot.MouseDeltaX) > 0.01f || Math.Abs(snapshot.MouseDeltaY) > 0.01f;
+            bool mouseActive = Math.Abs(snapshot.MouseDeltaX) > 0.01f || Math.Abs(snapshot.MouseDeltaY) > 0.01f
+                               || Math.Abs(snapshot.ScrollX) > 0.01f || Math.Abs(snapshot.ScrollY) > 0.01f;
             for (int b = 0; b <= (int)RevMouseButton.Forward; b++)
             {
                 byte bit = (byte)(1 << b);
@@ -198,8 +214,8 @@ namespace Revolution
             }
 
             // ④ 手柄：按钮已经在键位表里（JoystickButtonN）；这里只看"有没有摇杆/扳机在动"
-            bool gamepadActive = false;
-            if (!touchActive && !keyboardActive)
+            bool gamepadActive = gamepadButtonActive;
+            if (!touchActive && !keyboardActive && !mouseActive && !gamepadButtonActive)
             {
                 for (int i = 0; i < _joyAxes.Length; i++)
                 {

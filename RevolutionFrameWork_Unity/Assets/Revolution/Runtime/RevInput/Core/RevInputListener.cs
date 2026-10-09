@@ -19,7 +19,8 @@
 //         public override void OnInputGesture(RevGestureEvent g) { if (g.Kind == RevGestureKind.Swipe) Dodge(g.Direction); }
 //     }
 //
-//   投递顺序（每帧）：按下 → 抬起 → 连发 → 手势 → 轴变化。
+//   投递顺序（每帧）：按下 → 抬起 → 手势 → 连发 → 轴变化。
+//   本帧派发开始时会快照订阅：回调中增删订阅从下一帧生效，保证同帧其它监听者不会漏收。
 //   每个回调都**逐条隔离**：一个监听者抛异常不会影响其它监听者与其它事件。
 //
 // 【两条铁律】

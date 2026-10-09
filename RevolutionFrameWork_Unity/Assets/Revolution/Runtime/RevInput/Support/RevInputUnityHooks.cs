@@ -51,6 +51,7 @@ namespace Revolution
             {
                 var device = new RevInputUnityDevice();
                 core.Poll = device.Poll;
+                core.ResetDeviceState = device.ResetForNewSession;
                 core.SourceName = device.Name;
                 core.AxisProvider = device.ReadAxis;
                 RevInputLog.V("[RevInput] 采集口已接上：" + device.Name);

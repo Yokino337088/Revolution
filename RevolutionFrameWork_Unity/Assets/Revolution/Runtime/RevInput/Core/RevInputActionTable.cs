@@ -51,6 +51,12 @@ namespace Revolution
         /// <summary>最近一次按下的帧号。</summary>
         public int LastDownFrame;
 
+        /// <summary>是否发生过按下（时间戳 0 是合法值，不能拿它作为未按过的哨兵）。</summary>
+        public bool HasLastDown;
+
+        /// <summary>连发计时是否已启动。</summary>
+        internal bool RepeatClockActive;
+
         /// <summary>本帧是否被"世界输入屏蔽"挡掉了（诊断用：能区分"没按"与"被挡"）。</summary>
         public bool Blocked;
 
@@ -126,6 +132,26 @@ namespace Revolution
             return true;
         }
 
+        /// <summary>清掉短按边沿、缓冲与连发计时，但保留绑定和当前轴值。</summary>
+        public void ClearTransientInput()
+        {
+            for (int i = 0; i < _list.Count; i++)
+            {
+                string action = _list[i].Action;
+                RevInputActionState state = _states[action];
+                state.Down = state.Up = state.Held = state.Repeat = false;
+                state.HeldFrames = 0;
+                state.HeldSeconds = 0f;
+                state.HasLastDown = false;
+                state.LastDownTime = 0d;
+                state.LastDownFrame = 0;
+                state.RepeatClockActive = false;
+                state.NextRepeatTime = 0d;
+                state.Blocked = false;
+                _states[action] = state;
+            }
+        }
+
         /// <summary>清空（换场景 / 换模式时用；下个会话重新加载绑定）。</summary>
         public void Clear()
         {
@@ -187,6 +213,7 @@ namespace Revolution
                 {
                     s.LastDownTime = realtime;
                     s.LastDownFrame = snapshot.Frame;
+                    s.HasLastDown = true;
                     shifted = true;
                 }
 
@@ -213,27 +240,29 @@ namespace Revolution
                 //   角色在"输入被屏蔽"时照样移动。轴是动作读数的组成部分，属于世界输入。
                 s.Axis = worldBlocked ? 0f : ComputeAxis(b, snapshot, axisProvider);
 
-                // 连发：首帧按下算一次，之后按 delay/interval 节拍（只有配了连发的动作会为真）
+                // 连发按 deltaTime 累加：暂停（timeScale = 0）时不推进计时；delay <= 0 表示关闭。
                 if (down)
                 {
-                    // ★ Bug 修复（2026-09-30）：RepeatDelay == 0 表示"不连发"（RevInputBinding.RepeatDelay
-                    //   的注释如此承诺），原实现 >= 0 把 0 当"立即开始连发"：首帧 Repeat 就为真、
-                    //   NextRepeatTime = realtime，之后每 interval 连发不停 ——
-                    //   想关连发的业务（把 delay 设 0）反而得到最凶的连发。
-                    //   改为 > 0 才配连发；不连发时 NextRepeatTime 归 0，下面 held 分支的 > 0d 守卫会拦住。
-                    bool repeatEnabled = b.RepeatDelay > 0f;
+                    bool repeatEnabled = b.RepeatDelay > 0f && b.RepeatInterval > 0f;
                     s.Repeat = repeatEnabled;                       // 首帧按下算一次（仅限配了连发的动作）
-                    s.NextRepeatTime = repeatEnabled ? realtime + b.RepeatDelay : 0d;
+                    s.RepeatClockActive = repeatEnabled;
+                    s.NextRepeatTime = repeatEnabled ? b.RepeatDelay : 0d;
                 }
-                else if (held && s.NextRepeatTime > 0d && realtime >= s.NextRepeatTime)
+                else if (held && s.RepeatClockActive)
                 {
-                    s.Repeat = true;
-                    s.NextRepeatTime = realtime + b.RepeatInterval;
+                    s.NextRepeatTime -= snapshot.DeltaTime;
+                    if (s.NextRepeatTime <= 0d)
+                    {
+                        s.Repeat = true;
+                        s.NextRepeatTime = b.RepeatInterval;
+                    }
+                    else s.Repeat = false;
                 }
                 else
                 {
                     s.Repeat = false;
-                    if (!held) s.NextRepeatTime = 0d;
+                    s.RepeatClockActive = false;
+                    s.NextRepeatTime = 0d;
                 }
 
                 _states[b.Action] = s;
@@ -265,7 +294,7 @@ namespace Revolution
             if (value != 0f) return value;
 
             // 没有键位轴也没命名轴 → 退化成"按钮当 0/1 轴"，方便新手（按下即 1）
-            if (b.HasButton && b.HitKeys(snapshot.KeyHeld)) return 1f;
+            if (b.HitKeys(snapshot.KeyHeld) || b.HitMouse(snapshot.MouseHeld)) return 1f;
             return 0f;
         }
 
@@ -273,8 +302,9 @@ namespace Revolution
         public bool Buffered(string action, double realtime, float windowSeconds)
         {
             RevInputActionState s = State(action);
-            if (s.LastDownTime <= 0d) return false;
-            return (realtime - s.LastDownTime) <= windowSeconds;
+            if (!s.HasLastDown || windowSeconds < 0f) return false;
+            double elapsed = realtime - s.LastDownTime;
+            return elapsed >= 0d && elapsed <= windowSeconds;
         }
 
         /// <summary>
@@ -312,6 +342,10 @@ namespace Revolution
                     //   BindAxis("MoveX", A, D) 与 Bind("Skill", A) 这种典型改键冲突报不出来，
                     //   "改键后必须查一次冲突"的承诺对轴形同虚设。轴键与对方的键位掩码 / 轴键互查。
                     //   （两个方向都要查，不能短路：a 的轴撞 b、b 的轴撞 a 可能同时存在。）
+                    if (!string.IsNullOrEmpty(a.NamedAxis) &&
+                        System.String.Equals(a.NamedAxis, b.NamedAxis, System.StringComparison.OrdinalIgnoreCase))
+                        report = Append(report, "命名轴 " + a.NamedAxis + " 同时绑给了 " + a.Action + " 和 " + b.Action);
+
                     if (AxisKeyConflicts(a, b, out string axisReportA)) report = Append(report, axisReportA);
                     if (AxisKeyConflicts(b, a, out string axisReportB)) report = Append(report, axisReportB);
                 }
@@ -360,10 +394,15 @@ namespace Revolution
         public bool LoadText(string text, out string error)
         {
             error = null;
-            if (string.IsNullOrEmpty(text)) return true;
+            if (string.IsNullOrEmpty(text))
+            {
+                Clear();
+                return true;
+            }
 
             string[] lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
             var parsed = new List<RevInputBinding>(64);
+            var actionNames = new HashSet<string>(System.StringComparer.Ordinal);
 
             for (int i = 0; i < lines.Length; i++)
             {
@@ -383,9 +422,18 @@ namespace Revolution
                     error = "第 " + (i + 1) + " 行动作名不合法：" + action;
                     return false;
                 }
+                if (!actionNames.Add(action))
+                {
+                    error = "第 " + (i + 1) + " 行动作名重复：" + action;
+                    return false;
+                }
 
                 string rest = line.Substring(eq + 1).Trim();
                 var binding = new RevInputBinding(action);
+                bool repeatSeen = false;
+                bool namedAxisSeen = false;
+                bool negativeAxisSeen = false;
+                bool positiveAxisSeen = false;
 
                 int dz = rest.IndexOf("deadzone=", System.StringComparison.OrdinalIgnoreCase);
                 if (dz >= 0)
@@ -393,9 +441,14 @@ namespace Revolution
                     string number = rest.Substring(dz + 9).Trim();
                     int space = number.IndexOf(' ');
                     if (space > 0) number = number.Substring(0, space);
-                    if (float.TryParse(number, System.Globalization.NumberStyles.Float,
-                            System.Globalization.CultureInfo.InvariantCulture, out float d))
-                        binding.Deadzone = d;
+                    if (!float.TryParse(number, System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out float d)
+                        || float.IsNaN(d) || float.IsInfinity(d) || d < 0f || d > 1f)
+                    {
+                        error = "第 " + (i + 1) + " 行死区不合法（应为 0..1）";
+                        return false;
+                    }
+                    binding.Deadzone = d;
                     rest = rest.Substring(0, dz).TrimEnd(' ', ',');
                 }
 
@@ -407,6 +460,12 @@ namespace Revolution
 
                     if (token.StartsWith("repeat:", System.StringComparison.OrdinalIgnoreCase))
                     {
+                        if (repeatSeen)
+                        {
+                            error = "第 " + (i + 1) + " 行重复声明了连发配置";
+                            return false;
+                        }
+                        repeatSeen = true;
                         // ★ Bug 修复（2026-09-30）：连发节拍必须随存档往返 —— 原实现不导出也不解析，
                         //   SaveText ⇄ LoadText 一趟下来连发配置全部回默认值，违反本类铁律③
                         //   "SaveText ⇄ LoadText 必须无损往返（改键存档靠它）"。
@@ -417,7 +476,10 @@ namespace Revolution
                             || !float.TryParse(pair.Substring(0, slash).Trim(), System.Globalization.NumberStyles.Float,
                                 System.Globalization.CultureInfo.InvariantCulture, out float rd)
                             || !float.TryParse(pair.Substring(slash + 1).Trim(), System.Globalization.NumberStyles.Float,
-                                System.Globalization.CultureInfo.InvariantCulture, out float ri))
+                                System.Globalization.CultureInfo.InvariantCulture, out float ri)
+                            || float.IsNaN(rd) || float.IsInfinity(rd) || rd < 0f
+                            || float.IsNaN(ri) || float.IsInfinity(ri) || ri < 0f
+                            || (rd > 0f && ri <= 0f))
                         {
                             error = "第 " + (i + 1) + " 行连发配置不合法（应为 repeat:delay/interval）：" + token;
                             return false;
@@ -427,9 +489,20 @@ namespace Revolution
                     }
                     else if (token.StartsWith("axis:", System.StringComparison.OrdinalIgnoreCase))
                     {
+                        if (namedAxisSeen)
+                        {
+                            error = "第 " + (i + 1) + " 行重复声明了命名轴";
+                            return false;
+                        }
+                        namedAxisSeen = true;
                         string name = token.Substring(5).Trim();
                         bool invert = name.EndsWith("-");
                         if (invert) name = name.Substring(0, name.Length - 1).Trim();
+                        if (name.Length == 0)
+                        {
+                            error = "第 " + (i + 1) + " 行命名轴名称不能为空";
+                            return false;
+                        }
                         binding.NamedAxis = name;
                         binding.NamedAxisInvert = invert;
                     }
@@ -446,17 +519,37 @@ namespace Revolution
                     }
                     else if (token[0] == '-' || token[0] == '+')
                     {
-                        if (!System.Enum.TryParse(token.Substring(1), out RevKey axisKey))
+                        if (!System.Enum.TryParse(token.Substring(1), out RevKey axisKey)
+                            || axisKey == RevKey.None || !System.Enum.IsDefined(typeof(RevKey), axisKey))
                         {
                             error = "第 " + (i + 1) + " 行轴键位不认识：" + token;
                             return false;
                         }
-                        if (token[0] == '-') binding.AxisNegative = axisKey;
-                        else binding.AxisPositive = axisKey;
+                        if (token[0] == '-')
+                        {
+                            if (negativeAxisSeen)
+                            {
+                                error = "第 " + (i + 1) + " 行重复声明了负向轴键";
+                                return false;
+                            }
+                            negativeAxisSeen = true;
+                            binding.AxisNegative = axisKey;
+                        }
+                        else
+                        {
+                            if (positiveAxisSeen)
+                            {
+                                error = "第 " + (i + 1) + " 行重复声明了正向轴键";
+                                return false;
+                            }
+                            positiveAxisSeen = true;
+                            binding.AxisPositive = axisKey;
+                        }
                     }
                     else
                     {
-                        if (!System.Enum.TryParse(token, out RevKey key) || key == RevKey.None)
+                        if (!System.Enum.TryParse(token, out RevKey key)
+                            || key == RevKey.None || !System.Enum.IsDefined(typeof(RevKey), key))
                         {
                             error = "第 " + (i + 1) + " 行键位不认识：" + token + "（键位名要与 Unity KeyCode 一致）";
                             return false;
@@ -467,6 +560,12 @@ namespace Revolution
                             return false;
                         }
                     }
+                }
+
+                if (binding.AxisNegative != RevKey.None && binding.AxisNegative == binding.AxisPositive)
+                {
+                    error = "第 " + (i + 1) + " 行轴的正向与负向键不能相同";
+                    return false;
                 }
 
                 binding.RebuildMasks();

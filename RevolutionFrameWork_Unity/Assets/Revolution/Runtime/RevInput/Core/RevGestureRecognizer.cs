@@ -66,12 +66,15 @@ namespace Revolution
         public float SwipeMinSpeed = RevInputLimits.DefaultSwipeMinSpeed;
 
         private double _lastTapTime;
+        private bool _hasLastTap;
         private float _lastTapX, _lastTapY;
 
         // 双指（捏合 / 旋转）
         private bool _twoActive;
         private float _prevPinchDistance;
         private float _prevPinchAngle;
+        private int _firstPointerId = int.MinValue;
+        private int _secondPointerId = int.MinValue;
 
         /// <summary>本帧识别出的手势条数。</summary>
         public int Count => _count;
@@ -122,7 +125,9 @@ namespace Revolution
             for (int i = 0; i < _tracks.Length; i++) _tracks[i] = default;
             _count = 0;
             _twoActive = false;
+            _firstPointerId = _secondPointerId = int.MinValue;
             _lastTapTime = 0d;
+            _hasLastTap = false;
             PinchScale = 1f;
             RotateDegrees = 0f;
         }
@@ -134,10 +139,16 @@ namespace Revolution
         /// <param name="realtime">真实时间（秒）—— 手势窗口按它算，不受暂停影响。</param>
         /// <param name="blocked">本帧世界输入是否被屏蔽（屏蔽则只跟踪、不产出）。</param>
         public void Update(in RevInputSnapshot snapshot, double realtime, bool blocked)
+            => Update(snapshot, realtime, blocked, null);
+
+        /// <summary>推进一帧，并可独立屏蔽单指；原始快照保持不变。</summary>
+        internal void Update(in RevInputSnapshot snapshot, double realtime, bool blocked, System.Func<int, bool> pointerBlocked)
         {
             for (int i = 0; i < snapshot.PointerCount; i++)
             {
                 RevPointerSample p = snapshot.Pointer(i);
+                bool pointerMuted = pointerBlocked != null && pointerBlocked(p.Id);
+                bool muted = blocked || pointerMuted;
                 Track t = Find(p.Id);
                 bool isNew = !t.Active;
 
@@ -145,7 +156,7 @@ namespace Revolution
                               || p.Phase == RevPointerPhase.Stationary))
                 {
                     t = NewTrack(p, realtime);
-                    if (blocked) t.Suppressed = true;
+                    if (muted) t.Suppressed = true;
                 }
                 else if (!isNew && t.Id != p.Id)
                 {
@@ -153,25 +164,26 @@ namespace Revolution
                 }
 
                 if (!t.Active) continue;
+                if (pointerMuted) t.Suppressed = true;
 
                 switch (p.Phase)
                 {
                     case RevPointerPhase.Began:
                     case RevPointerPhase.Moved:
                     case RevPointerPhase.Stationary:
-                        UpdateMoving(ref t, p, realtime, blocked);
+                        UpdateMoving(ref t, p, realtime, muted, snapshot.Frame);
                         break;
 
                     case RevPointerPhase.Ended:
                     case RevPointerPhase.Canceled:
-                        FinishPointer(ref t, p, realtime, blocked, p.Phase == RevPointerPhase.Canceled);
+                        FinishPointer(ref t, p, realtime, muted, p.Phase == RevPointerPhase.Canceled, snapshot.Frame);
                         break;
                 }
 
                 Store(t);
             }
 
-            UpdateTwoFinger(snapshot, blocked);
+            UpdateTwoFinger(snapshot, blocked, pointerBlocked, snapshot.Frame);
         }
 
         private Track NewTrack(in RevPointerSample p, double realtime)
@@ -186,7 +198,7 @@ namespace Revolution
             return t;
         }
 
-        private void UpdateMoving(ref Track t, in RevPointerSample p, double realtime, bool blocked)
+        private void UpdateMoving(ref Track t, in RevPointerSample p, double realtime, bool blocked, int frame)
         {
             t.TotalX = p.X - t.StartX;
             t.TotalY = p.Y - t.StartY;
@@ -200,7 +212,7 @@ namespace Revolution
                 {
                     Emit(new RevGestureEvent(RevGestureKind.Drag, t.Id, RevSwipeDirection.None,
                         p.X, p.Y, t.StartX, t.StartY, p.DeltaX, p.DeltaY, 0f,
-                        (float)(realtime - t.StartTime), 0));
+                        (float)(realtime - t.StartTime), frame));
                 }
             }
 
@@ -214,7 +226,7 @@ namespace Revolution
                 {
                     Emit(new RevGestureEvent(RevGestureKind.LongPress, t.Id, RevSwipeDirection.None,
                         p.X, p.Y, t.StartX, t.StartY, 0f, 0f,
-                        (float)(realtime - t.StartTime), (float)(realtime - t.StartTime), 0));
+                        (float)(realtime - t.StartTime), (float)(realtime - t.StartTime), frame));
                 }
             }
 
@@ -223,10 +235,12 @@ namespace Revolution
             t.LastTime = realtime;
         }
 
-        private void FinishPointer(ref Track t, in RevPointerSample p, double realtime, bool blocked, bool canceled)
+        private void FinishPointer(ref Track t, in RevPointerSample p, double realtime, bool blocked, bool canceled, int frame)
         {
             double duration = realtime - t.StartTime;
-            float distance = Farthest(t.MaxDistance, p.X - t.StartX, p.Y - t.StartY);
+            t.TotalX = p.X - t.StartX;
+            t.TotalY = p.Y - t.StartY;
+            float distance = Farthest(t.MaxDistance, t.TotalX, t.TotalY);
             float speed = duration > 0.0001d ? (float)(distance / duration) : 0f;
 
             bool muted = blocked || t.Suppressed || canceled;
@@ -236,26 +250,28 @@ namespace Revolution
                 {
                     Emit(new RevGestureEvent(RevGestureKind.Swipe, t.Id, DirectionOf(t.TotalX, t.TotalY),
                         p.X, p.Y, t.StartX, t.StartY, t.TotalX, t.TotalY,
-                        speed, (float)duration, 0));
+                        speed, (float)duration, frame));
                 }
                 else if (duration <= TapMaxSeconds && distance <= TapMaxDistance && !t.LongPressFired)
                 {
                     Emit(new RevGestureEvent(RevGestureKind.Tap, t.Id, RevSwipeDirection.None,
-                        p.X, p.Y, t.StartX, t.StartY, 0f, 0f, (float)duration, (float)duration, 0));
+                        p.X, p.Y, t.StartX, t.StartY, 0f, 0f, (float)duration, (float)duration, frame));
 
                     // 双击：与上一次轻点的时间 + 距离都够近
-                    if (_lastTapTime > 0d
+                    if (_hasLastTap
                         && (realtime - _lastTapTime) <= DoubleTapSeconds
                         && Distance(p.X, p.Y, _lastTapX, _lastTapY) <= DoubleTapDistance)
                     {
                         Emit(new RevGestureEvent(RevGestureKind.DoubleTap, t.Id, RevSwipeDirection.None,
                             p.X, p.Y, t.StartX, t.StartY, 0f, 0f,
-                            (float)(realtime - _lastTapTime), (float)duration, 0));
+                            (float)(realtime - _lastTapTime), (float)duration, frame));
                         _lastTapTime = 0d;   // 双击后归零：三连击 = 双击 + 轻点（不会无限滚）
+                        _hasLastTap = false;
                     }
                     else
                     {
                         _lastTapTime = realtime;
+                        _hasLastTap = true;
                         _lastTapX = p.X;
                         _lastTapY = p.Y;
                     }
@@ -265,24 +281,52 @@ namespace Revolution
             t.Active = false;
         }
 
-        private void UpdateTwoFinger(in RevInputSnapshot snapshot, bool blocked)
+        private void UpdateTwoFinger(in RevInputSnapshot snapshot, bool blocked,
+            System.Func<int, bool> pointerBlocked, int frame)
         {
-            int firstId = int.MinValue, secondId = int.MinValue;
+            int firstId = int.MaxValue, secondId = int.MaxValue;
             float firstX = 0f, firstY = 0f, secondX = 0f, secondY = 0f;
             int found = 0;
 
-            for (int i = 0; i < snapshot.PointerCount && found < 2; i++)
+            // 以稳定 pointer id 选择最小两根有效手指；采样数组顺序改变不会翻转角度 180 度。
+            for (int i = 0; i < snapshot.PointerCount; i++)
             {
                 RevPointerSample p = snapshot.Pointer(i);
                 if (p.Phase == RevPointerPhase.Ended || p.Phase == RevPointerPhase.Canceled) continue;
-                if (found == 0) { firstId = p.Id; firstX = p.X; firstY = p.Y; }
-                else { secondId = p.Id; secondX = p.X; secondY = p.Y; }
-                found++;
+                if (pointerBlocked != null && pointerBlocked(p.Id)) continue;
+
+                if (found == 0)
+                {
+                    firstId = p.Id; firstX = p.X; firstY = p.Y; found = 1;
+                }
+                else if (found == 1)
+                {
+                    secondId = p.Id; secondX = p.X; secondY = p.Y; found = 2;
+                    if (secondId < firstId)
+                    {
+                        int id = firstId; firstId = secondId; secondId = id;
+                        float x = firstX; firstX = secondX; secondX = x;
+                        float y = firstY; firstY = secondY; secondY = y;
+                    }
+                }
+                else if (p.Id < secondId)
+                {
+                    if (p.Id < firstId)
+                    {
+                        secondId = firstId; secondX = firstX; secondY = firstY;
+                        firstId = p.Id; firstX = p.X; firstY = p.Y;
+                    }
+                    else
+                    {
+                        secondId = p.Id; secondX = p.X; secondY = p.Y;
+                    }
+                }
             }
 
             if (found < 2)
             {
                 _twoActive = false;
+                _firstPointerId = _secondPointerId = int.MinValue;
                 return;
             }
 
@@ -290,43 +334,40 @@ namespace Revolution
             float dy = secondY - firstY;
             float distance = (float)System.Math.Sqrt(dx * dx + dy * dy);
             float angle = (float)(System.Math.Atan2(dy, dx) * 180d / System.Math.PI);
+            bool samePair = _twoActive && firstId == _firstPointerId && secondId == _secondPointerId;
 
-            if (_twoActive && distance > 0.01f && _prevPinchDistance > 0.01f)
+            if (samePair && distance > 0.01f && _prevPinchDistance > 0.01f && !blocked)
             {
                 float scale = distance / _prevPinchDistance;
                 float rotate = NormalizeAngle(angle - _prevPinchAngle);
                 int mx = (int)((firstX + secondX) * 0.5f);
                 int my = (int)((firstY + secondY) * 0.5f);
 
-                if (!blocked)
+                if (System.Math.Abs(scale - 1f) > 0.001f)
                 {
-                    if (System.Math.Abs(scale - 1f) > 0.001f)
-                    {
-                        PinchScale *= scale;
-                        Emit(new RevGestureEvent(RevGestureKind.Pinch, firstId < secondId ? firstId : secondId,
-                            RevSwipeDirection.None, mx, my, mx, my, 0f, 0f, scale, 0f, 0));
-                    }
-                    if (System.Math.Abs(rotate) > 0.01f)
-                    {
-                        RotateDegrees += rotate;
-                        Emit(new RevGestureEvent(RevGestureKind.Rotate, firstId < secondId ? firstId : secondId,
-                            RevSwipeDirection.None, mx, my, mx, my, 0f, 0f, rotate, 0f, 0));
-                    }
+                    PinchScale *= scale;
+                    Emit(new RevGestureEvent(RevGestureKind.Pinch, firstId,
+                        RevSwipeDirection.None, mx, my, mx, my, 0f, 0f, scale, 0f, frame));
+                }
+                if (System.Math.Abs(rotate) > 0.01f)
+                {
+                    RotateDegrees += rotate;
+                    Emit(new RevGestureEvent(RevGestureKind.Rotate, firstId,
+                        RevSwipeDirection.None, mx, my, mx, my, 0f, 0f, rotate, 0f, frame));
                 }
             }
 
             _twoActive = true;
+            _firstPointerId = firstId;
+            _secondPointerId = secondId;
             _prevPinchDistance = distance;
             _prevPinchAngle = angle;
 
-            // 双指进行中时，禁止单指手势"秋后算账"：把这两根标记为不产出抬手手势
-            if (!blocked)
+            // 两指组合只使用未屏蔽指针；组合开始或换指时都抑制它们的单指抬起手势。
+            for (int i = 0; i < _tracks.Length; i++)
             {
-                for (int i = 0; i < _tracks.Length; i++)
-                {
-                    if (!_tracks[i].Active) continue;
-                    if (_tracks[i].Id == firstId || _tracks[i].Id == secondId) _tracks[i].Suppressed = true;
-                }
+                if (!_tracks[i].Active) continue;
+                if (_tracks[i].Id == firstId || _tracks[i].Id == secondId) _tracks[i].Suppressed = true;
             }
         }
 

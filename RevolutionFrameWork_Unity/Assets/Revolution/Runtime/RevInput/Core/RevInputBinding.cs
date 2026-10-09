@@ -90,7 +90,7 @@ namespace Revolution
         /// <summary>加一个键位（重复加不报错；超上限返回 false 并让调用方报原因码）。</summary>
         public bool AddKey(RevKey key)
         {
-            if (key == RevKey.None) return false;
+            if (key == RevKey.None || !System.Enum.IsDefined(typeof(RevKey), key)) return false;
             if (_keys.Contains(key)) return true;
             if (_keys.Count >= RevInputLimits.MaxKeysPerAction) return false;
             _keys.Add(key);
@@ -109,6 +109,7 @@ namespace Revolution
         /// <summary>加一个鼠标键。</summary>
         public bool AddMouse(RevMouseButton button)
         {
+            if (!System.Enum.IsDefined(typeof(RevMouseButton), button)) return false;
             if (_mouse.Contains(button)) return true;
             if (_mouse.Count >= 5) return false;
             _mouse.Add(button);
@@ -170,13 +171,13 @@ namespace Revolution
             if (RepeatDelay != RevInputLimits.DefaultRepeatDelay
                 || RepeatInterval != RevInputLimits.DefaultRepeatInterval)
             {
-                parts.Add("repeat:" + RepeatDelay.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)
-                          + "/" + RepeatInterval.ToString("F3", System.Globalization.CultureInfo.InvariantCulture));
+                parts.Add("repeat:" + RepeatDelay.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
+                          + "/" + RepeatInterval.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
             }
 
             string text = Action + " = " + string.Join(", ", parts);
             if (Deadzone != RevInputLimits.DefaultDeadzone)
-                text += "  deadzone=" + Deadzone.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                text += "  deadzone=" + Deadzone.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
             return text;
         }
 
