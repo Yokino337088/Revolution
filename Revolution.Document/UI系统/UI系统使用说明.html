@@ -334,7 +334,7 @@ RevUI.Close&lt;BagPanel&gt;();</pre>
           <tr><td><code>OnBindView()</code> <b>（必须实现）</b></td><td>紧随 OnInit，一次</td><td>绑定 UI 元素、挂必要的内部结构</td></tr>
           <tr><td><code>OnOpen()</code></td><td><b>每次</b>打开</td><td>刷新数据、播开场动画（最常用）</td></tr>
           <tr><td><code>OnReuse()</code></td><td>从池里<b>复用</b>打开时</td><td>想区分"全新"与"复用"时用（一般不需要）</td></tr>
-          <tr><td><code>OnRefreshView()</code></td><td>你调 <code>RefreshView()</code> 时</td><td>只重刷显示内容（不动结构）</td></tr>
+          <tr><td><code>OnRefreshView()</code></td><td><b>每次打开时</b>自动调 · 面板<b>开着时</b> <code>SetData(...)</code> 自动调 · 你手动调 <code>RefreshView()</code> 时</td><td>只重刷显示内容（不动结构）。详见第四节"它到底什么时候被调用"</td></tr>
           <tr><td><code>OnCovered(bool)</code></td><td>上面盖了别人 / 别人关了</td><td>被盖住时停特效、暂停刷新（省性能）</td></tr>
           <tr><td><code>OnClose()</code></td><td>关闭时（对象还在池里）</td><td>停协程/计时器、退订事件、<b>释放资源</b></td></tr>
           <tr><td><code>OnRelease()</code></td><td>对象真正销毁时</td><td>清理非托管/静态引用（少见）</td></tr>
@@ -390,32 +390,144 @@ RevUI.Close&lt;BagPanel&gt;();</pre>
 
   <section id="s4">
     <h2><span class="num">四</span>带数据的面板（一个面板多处复用）</h2>
-    <p class="lead">同一个界面既要显示"英雄详情"又要显示"道具详情"时，用泛型面板传数据。</p>
+    <p class="lead">同一个界面既要显示"英雄详情"又要显示"道具详情"时，用泛型面板传数据。这一节专门讲清楚新手最容易混淆的一件事：<b>数据变化和界面刷新到底是什么关系</b>。</p>
 
-    <pre><span class="c">// ① 数据类随便定义（class / struct 都行）</span>
-<span class="k">public class</span> DetailData { <span class="k">public int</span> Id; <span class="k">public string</span> Title; }
+    <h3>4.1 基本写法（先照抄跑通）</h3>
+    <pre><span class="c">// ① 数据类：推荐用 class（纯 C#，别在里面碰 UnityEngine，方便单测）</span>
+<span class="k">public class</span> DetailData
+{
+    <span class="k">public int</span> Id;
+    <span class="k">public string</span> Title;
+}
 
-<span class="c">// ② 面板继承 RevUIPanel&lt;TData&gt;：重写 OnDataChanged 收数据</span>
+<span class="c">// ② 面板继承 RevUIPanel&lt;TData&gt;：三个钩子各管一件事</span>
 [RevUIPanel(<span class="s">"UI/Common"</span>, RevUILayer.Normal, <span class="s">"DetailPanel"</span>)]
 <span class="k">public class</span> DetailPanel : RevUIPanel&lt;DetailData&gt;
 {
-    <span class="k">protected override void</span> OnBindView() { }                 <span class="c">// 仍需实现（做绑定）</span>
-    <span class="k">protected override void</span> OnRefreshView() { }               <span class="c">// 用 _data 刷新显示</span>
+    <span class="k">protected override void</span> OnBindView() { }        <span class="c">// 装配：拿控件、挂交互（只做一次）</span>
+
+    <span class="k">protected override void</span> OnRefreshView()          <span class="c">// 落屏：把 Data 画到界面上（★ 必须实现）</span>
+    {
+        <span class="c">// ★ 这里直接用 Data 属性 —— 它一定已经是最新一次 SetData 进来的数据</span>
+        <span class="k">if</span> (Data == <span class="k">null</span>) { <span class="c">/* 面板复用回池后 Data 会被清掉，记得判空 */</span> <span class="k">return</span>; }
+        <span class="c">// _title.text = Data.Title; ...</span>
+    }
+
     <span class="k">protected override void</span> OnDataChanged(DetailData oldData, DetailData newData)
     {
-        <span class="c">// 数据换了：刷新界面（最常写的地方）</span>
+        <span class="c">// 增量刷新（可选）：数据被"换成"新对象时触发。</span>
+        <span class="c">// 想省性能就只更新变化的那几个控件，不整屏重画。</span>
     }
 }
 
-<span class="c">// ③ 打开时传进去</span>
+<span class="c">// ③ 打开时传数据（面板还没开 → 先存着，打开时统一画）</span>
 RevUI.Open&lt;DetailPanel, DetailData&gt;(<span class="k">new</span> DetailData { Id = 1001, Title = <span class="s">"亚瑟"</span> });
 
-<span class="c">// ④ 已经开着时再传一份新数据（不会重开面板）</span>
+<span class="c">// ④ 面板已经开着 → 换一份数据，界面自动重画（不用再调 RefreshView）</span>
 RevUI.Get&lt;DetailPanel&gt;()?.SetData(<span class="k">new</span> DetailData { Id = 1002, Title = <span class="s">"妲己"</span> });</pre>
 
+    <h3>4.2 核心概念：<code>Data</code> 是什么、什么时候有值</h3>
+    <p><code>RevUIPanel&lt;TData&gt;</code> 的 <code>Data</code> 属性 = <b>最新一次 <code>SetData(...)</code> 设置进来的强类型数据</b>。</p>
+    <p>调用 <code>SetData</code> 时框架内部按这个顺序走：</p>
+    <pre>SetData(新数据)
+  ├─ ① Data / DataObject 同步成新值          ← 先赋值
+  ├─ ② OnDataChanged(旧数据, 新数据)          ← 此时 Data 已是新值
+  └─ ③ 面板正开着？→ RefreshView() → OnRefreshView()   ← 此时 Data 已是新值
+       （没开着就不画，等打开那次统一画，省一次重复刷新）</pre>
+    <p>所以在 <code>OnRefreshView</code> / <code>OnDataChanged</code> 里读 <code>Data</code>，拿到的<b>永远是新数据</b>，不用担心拿到旧的。</p>
+
+    <div class="callout warn">
+      <span class="t">两个数据相关的坑</span>
+      <p>· <b><code>SetData(null)</code> 会把 <code>Data</code> 清成 null</b> —— <code>OnRefreshView</code> 里用 <code>Data</code> 前要判空。</p>
+      <p style="margin-bottom:0">· <b>面板回池再取出时 <code>Data</code> 也被清掉</b>（防"上次的数据还在"）—— 所以打开面板<b>没传数据</b>时 <code>OnRefreshView</code> 里 <code>Data</code> 是 null，必须判空兜底。</p>
+    </div>
+
+    <h3>4.3 重点：<code>OnRefreshView()</code> 到底什么时候被调用</h3>
+    <p>这是新手最容易混淆的地方，一张表说清：</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:42%">场景</th><th style="width:22%">界面会自动刷新吗</th><th>你该做什么</th></tr></thead>
+        <tbody>
+          <tr><td>打开面板（无论首次还是复用）</td><td>✅ 会</td><td><code>OnRefreshView</code> 里写好"怎么画 Data"即可</td></tr>
+          <tr><td>面板开着时 <code>SetData(新对象)</code></td><td>✅ 会</td><td>什么都不用做，框架自动重画</td></tr>
+          <tr><td>对已开面板再 <code>RevUI.Open&lt;T&gt;(新数据)</code></td><td>✅ 会（内部走 <code>SetData</code>，顺带置顶）</td><td>同上</td></tr>
+          <tr><td>面板还没开就 <code>SetData(...)</code>，之后才 <code>Open</code></td><td>✅ 会（打开时统一画一次）</td><td>同上</td></tr>
+          <tr><td><b>原地改数据内容</b>：<code>Data.Id = 5;</code> / <code>Data.Items.Add(...)</code></td><td>❌ <b>不会</b></td><td><b>改完手动调 <code>RefreshView()</code></b></td></tr>
+          <tr><td>面板关着，业务在别处改了数据</td><td>❌ 不会</td><td>下次打开时自然会画；急用就先 <code>SetData</code> 再开</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>一句话记忆：<b>框架不监听你的数据对象</b>（不是双向绑定）。"自动刷新"只发生在三个时机——<b>打开、SetData（可见时）、手动 RefreshView()</b>。数据对象内部字段变了，框架是不知道的。</p>
+    <pre><span class="c">// 场景对比：同一个面板，两种"改数据"</span>
+
+<span class="c">// 写法 A：原地改内容 → 界面不会动，要手动刷</span>
+Data.Count++;
+RefreshView();                    <span class="c">// ← 这行不能省</span>
+
+<span class="c">// 写法 B：换个新对象 → 自动刷，还能吃到 OnDataChanged 增量回调</span>
+SetData(<span class="k">new</span> DetailData { Id = Data.Id, Count = Data.Count + 1 });</pre>
+
     <div class="callout good">
-      <span class="t">为什么要泛型面板</span>
-      避免"详情弹窗"写三份、也避免用 <code>object</code> 到处强转。<b>数据从特性/框架外进来，界面只管显示。</b>
+      <span class="t">两种刷法怎么选</span>
+      <p>· 数据是一次性整体换掉（打开详情、切角色）→ 走 <b>SetData 换新对象</b>，自动刷、还能增量更新。</p>
+      <p>· 数据是频繁的小改动（倒计时每秒 -1、金币 +1）→ 原地改 + <b>手动 RefreshView()</b>，或者干脆只刷新那一两个控件（不整屏重画，别在 <code>OnRefreshView</code> 里重建整个列表）。</p>
+      <p style="margin-bottom:0"><b>为什么框架不做自动绑定</b>：双向绑定需要每个字段都包一层可观察对象（ObservableProperty），写起来啰嗦、性能开销也大。这里的取舍是"数据落屏"单向契约——<code>OnRefreshView</code> 只负责把 <code>Data</code> 画上去，改数据是你自己的事，改完说一声（<code>RefreshView()</code>）就行。逻辑一目了然，没有魔法。</p>
+    </div>
+
+    <h3>4.4 <code>OnRefreshView</code> 与 <code>OnDataChanged</code> 的分工</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:26%">钩子</th><th style="width:36%">触发时机</th><th>适合做什么</th></tr></thead>
+        <tbody>
+          <tr><td><code>OnRefreshView()</code></td><td>打开时 + SetData（可见时）+ 手动 <code>RefreshView()</code></td><td><b>全量落屏</b>：按当前 <code>Data</code> 把界面画一遍（必写）</td></tr>
+          <tr><td><code>OnDataChanged(old, new)</code></td><td>仅 <code>SetData</code> 换数据时</td><td><b>增量刷新</b>：只更新变化的那几个控件；<code>old</code>/<code>new</code> 由参数区分（若传的是同一个对象引用，两者相等）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout note">
+      <span class="t">新手最省心的起步方式</span>
+      一开始只实现 <code>OnRefreshView</code>（全量重画）就够了，功能完全正确；等界面复杂了、Profiler 显示整屏重刷太贵，再把变化频繁的那部分挪到 <code>OnDataChanged</code> 做增量。两条路不冲突。<br><br>
+      另外注意纪律：<code>OnRefreshView</code> 里<b>只画界面</b>——不发请求、不改数据（发请求/改数据放 <code>OnOpen</code> 和按钮回调里）。在落屏回调里改数据再触发刷新，就是"刷新死循环"的来源。
+    </div>
+
+    <h3>4.5 <code>SetData</code> 在哪里调用？（调用权归属）</h3>
+    <p>新手常见疑问："<code>SetData</code> 应该写在面板里吗？"——<b>不</b>。<code>SetData</code> 是给<b>业务侧</b>用的接口，永远写在"<b>数据产生 / 变化的地方</b>"：点按钮的地方、收到服务器数据的地方、算出新值的地方。面板从头到尾只做一件事——在 <code>OnRefreshView</code> 里把 <code>Data</code> 画出来（它是数据的<b>消费方</b>，不生产数据）。</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:28%">谁在调</th><th style="width:34%">调什么</th><th>典型位置</th></tr></thead>
+        <tbody>
+          <tr><td>业务代码：打开面板的那次交互</td><td><code>RevUI.Open&lt;T, TData&gt;(data)</code></td><td>点列表项打开详情（已开/没开不用区分，Open 一条路全包）</td></tr>
+          <tr><td>业务代码：面板已开、想换内容</td><td><code>RevUI.Get&lt;T&gt;()?.SetData(新数据)</code></td><td>详情面板上点"下一个 / 上一个"切换目标，不重开面板</td></tr>
+          <tr><td>业务代码：数据异步到达</td><td>回调里 <code>panel.SetData(...)</code></td><td>网络回包、协程加载完成、定时器算出新值</td></tr>
+          <tr><td>面板内部</td><td>一般<b>不调</b> <code>SetData</code>；改了 class 数据内容后手动 <code>RefreshView()</code></td><td>面板只负责画，不负责"喂"数据</td></tr>
+          <tr><td>框架内部</td><td>Open 流程自动 <code>SetData</code>、可见时自动 <code>RefreshView</code></td><td>你不用管</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre><span class="c">// 场景 1：点列表项 → 打开详情（最常见，写"发起打开"的回调里）</span>
+<span class="k">private void</span> OnItemClick(ItemConfig item)
+{
+    RevUI.Open&lt;ItemDetailPanel, ItemData&gt;(<span class="k">new</span> ItemData { Id = item.Id, Title = item.Name });
+}
+
+<span class="c">// 场景 2：详情面板已开 → 点"下一个"换内容（不重开）</span>
+<span class="k">private void</span> OnNextClick()
+{
+    RevUI.Get&lt;ItemDetailPanel&gt;()?.SetData(BuildData(_nextIndex));
+}
+
+<span class="c">// 场景 3：数据是异步来的 → 在回调里喂（面板没开就先 Open 顺手打开）</span>
+<span class="k">private void</span> OnPlayerInfoReceived(PlayerInfo info)
+{
+    <span class="k">var</span> data = <span class="k">new</span> PlayerData { Name = info.name, Level = info.level };
+    <span class="k">var</span> panel = RevUI.Get&lt;PlayerPanel&gt;();
+    <span class="k">if</span> (panel != <span class="k">null</span>) panel.SetData(data);          <span class="c">// 已开 → 换数据，自动重画</span>
+    <span class="k">else</span> RevUI.Open&lt;PlayerPanel, PlayerData&gt;(data);  <span class="c">// 没开 → 存着等打开时画</span>
+}</pre>
+    <div class="callout good">
+      <span class="t">一句话记忆</span>
+      <b><code>SetData</code> 永远写在"数据出生的地方"</b>（业务侧），<b><code>RefreshView()</code> 只在面板内部、原地改了 class 数据内容之后才需要</b>；走 <code>SetData</code> 换数据的路，刷新是框架的事。
     </div>
   </section>
 
@@ -587,7 +699,7 @@ RevUIAnim.StopAllOf(<span class="k">this</span>);                               
       </table>
     </div>
 
-    <h3>进阶：另外 6 条（多数和"复用 / 生命周期"有关）</h3>
+    <h3>进阶：另外 7 条（多数和"复用 / 生命周期"有关）</h3>
     <div class="table-wrap">
       <table>
         <thead><tr><th style="width:40%">坑</th><th>正确做法</th></tr></thead>
@@ -598,6 +710,7 @@ RevUIAnim.StopAllOf(<span class="k">this</span>);                               
           <tr><td>⑩ 把飘字放在参与返回栈的层</td><td><code>Toast</code> 层不参与 <code>Back()</code>；自定义面板若不想被返回键关掉，设 <code>InBackStack = false</code></td></tr>
           <tr><td>⑪ 遮罩把不该挡的挡住了</td><td>想"看一眼但不打断操作"的浮层，显式写 <code>Mask = RevUIMaskMode.None</code>（<code>Popup</code> / <code>Guide</code> / <code>Top</code> 层默认是挡的）</td></tr>
           <tr><td>⑫ 池里实例占内存</td><td><code>KeepAlive</code> 的界面会一直留着一份实例（连同它端的预制体引用）→ 大界面用 <code>CacheMode = DestroyOnClose</code>，或把 <code>MaxCachedPanels</code> 调小</td></tr>
+          <tr><td>⑬ 改了数据界面没反应</td><td>框架<b>不监听</b>数据对象内容：原地改（<code>Data.Count++</code>）后要手动 <code>RefreshView()</code>；换新对象走 <code>SetData(...)</code> 才会自动刷 → 详见 4.3 的场景对照表</td></tr>
         </tbody>
       </table>
     </div>

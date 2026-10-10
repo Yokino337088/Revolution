@@ -171,7 +171,7 @@ OnInit → OnBindView → OnOpen → OnReuse（复用打开时） → OnRefreshV
 | `OnBindView()` **（必须实现）** | 紧随 OnInit，一次 | 绑定 UI 元素、挂必要的内部结构 |
 | `OnOpen()` | **每次**打开 | 刷新数据、播开场动画（最常用） |
 | `OnReuse()` | 从池里**复用**打开时 | 想区分"全新"与"复用"时用（一般不需要） |
-| `OnRefreshView()` | 你调 `RefreshView()` 时 | 只重刷显示内容（不动结构） |
+| `OnRefreshView()` | **每次打开时**自动调 · 面板**开着时** `SetData(...)` 自动调 · 你手动调 `RefreshView()` 时 | 只重刷显示内容（不动结构）。详见第四节"它到底什么时候被调用" |
 | `OnCovered(bool)` | 上面盖了别人 / 别人关了 | 被盖住时停特效、暂停刷新（省性能） |
 | `OnClose()` | 关闭时（对象还在池里） | 停协程/计时器、退订事件、**释放资源** |
 | `OnRelease()` | 对象真正销毁时 | 清理非托管/静态引用（少见） |
@@ -230,36 +230,150 @@ PlayCloseTransition(Action onDone) { onDone?.Invoke(); }
 
 ## 四、带数据的面板（一个面板多处复用）
 
-*同一个界面既要显示"英雄详情"又要显示"道具详情"时，用泛型面板传数据。*
+*同一个界面既要显示"英雄详情"又要显示"道具详情"时，用泛型面板传数据。这一节专门讲清楚新手最容易混淆的一件事：**数据变化和界面刷新到底是什么关系**。*
 
+### 4.1 基本写法（先照抄跑通）
 
 ```csharp
-// ① 数据类随便定义（class / struct 都行）
-public class DetailData { public int Id; public string Title; }
+// ① 数据类：推荐用 class（纯 C#，别在里面碰 UnityEngine，方便单测）
+public class DetailData
+{
+    public int Id;
+    public string Title;
+}
 
-// ② 面板继承 RevUIPanel<TData>：重写 OnDataChanged 收数据
+// ② 面板继承 RevUIPanel<TData>：三个钩子各管一件事
 [RevUIPanel("UI/Common", RevUILayer.Normal, "DetailPanel")]
 public class DetailPanel : RevUIPanel<DetailData>
 {
-    protected override void OnBindView() { }                 // 仍需实现（做绑定）
-    protected override void OnRefreshView() { }               // 用 _data 刷新显示
+    protected override void OnBindView() { }        // 装配：拿控件、挂交互（只做一次）
+
+    protected override void OnRefreshView()          // 落屏：把 Data 画到界面上（★ 必须实现）
+    {
+        // ★ 这里直接用 Data 属性 —— 它一定已经是最新一次 SetData 进来的数据
+        if (Data == null) { /* 面板复用回池后 Data 会被清掉，记得判空 */ return; }
+        // _title.text = Data.Title; ...
+    }
+
     protected override void OnDataChanged(DetailData oldData, DetailData newData)
     {
-        // 数据换了：刷新界面（最常写的地方）
+        // 增量刷新（可选）：数据被"换成"新对象时触发。
+        // 想省性能就只更新变化的那几个控件，不整屏重画。
     }
 }
 
-// ③ 打开时传进去
+// ③ 打开时传数据（面板还没开 → 先存着，打开时统一画）
 RevUI.Open<DetailPanel, DetailData>(new DetailData { Id = 1001, Title = "亚瑟" });
 
-// ④ 已经开着时再传一份新数据（不会重开面板）
+// ④ 面板已经开着 → 换一份数据，界面自动重画（不用再调 RefreshView）
 RevUI.Get<DetailPanel>()?.SetData(new DetailData { Id = 1002, Title = "妲己" });
 ```
 
+### 4.2 核心概念：`Data` 是什么、什么时候有值
+
+`RevUIPanel<TData>` 的 `Data` 属性 = **最新一次 `SetData(...)` 设置进来的强类型数据**。
+
+调用 `SetData` 时框架内部按这个顺序走：
+
+```
+SetData(新数据)
+  ├─ ① Data / DataObject 同步成新值          ← 先赋值
+  ├─ ② OnDataChanged(旧数据, 新数据)          ← 此时 Data 已是新值
+  └─ ③ 面板正开着？→ RefreshView() → OnRefreshView()   ← 此时 Data 已是新值
+       （没开着就不画，等打开那次统一画，省一次重复刷新）
+```
+
+所以在 `OnRefreshView` / `OnDataChanged` 里读 `Data`，拿到的**永远是新数据**，不用担心拿到旧的。
+
+> [!WARNING]
+> **两个数据相关的坑**
+> · **`SetData(null)` 会把 `Data` 清成 null** —— `OnRefreshView` 里用 `Data` 前要判空。
+> · **面板回池再取出时 `Data` 也被清掉**（防"上次的数据还在"）—— 所以打开面板**没传数据**时 `OnRefreshView` 里 `Data` 是 null，必须判空兜底。
+
+### 4.3 重点：`OnRefreshView()` 到底什么时候被调用
+
+这是新手最容易混淆的地方，一张表说清：
+
+| 场景 | 界面会自动刷新吗 | 你该做什么 |
+|---|---|---|
+| 打开面板（无论首次还是复用） | ✅ 会 | `OnRefreshView` 里写好"怎么画 Data"即可 |
+| 面板开着时 `SetData(新对象)` | ✅ 会 | 什么都不用做，框架自动重画 |
+| 对已开面板再 `RevUI.Open<T>(新数据)` | ✅ 会（内部走 `SetData`，顺带置顶） | 同上 |
+| 面板还没开就 `SetData(...)`，之后才 `Open` | ✅ 会（打开时统一画一次） | 同上 |
+| **原地改数据内容**：`Data.Id = 5;` / `Data.Items.Add(...)` | ❌ **不会** | **改完手动调 `RefreshView()`** |
+| 面板关着，业务在别处改了数据 | ❌ 不会 | 下次打开时自然会画；急用就先 `SetData` 再开 |
+
+一句话记忆：**框架不监听你的数据对象**（不是双向绑定）。"自动刷新"只发生在三个时机——**打开、SetData（可见时）、手动 RefreshView()**。数据对象内部字段变了，框架是不知道的。
+
+```csharp
+// 场景对比：同一个面板，两种"改数据"
+
+// 写法 A：原地改内容 → 界面不会动，要手动刷
+Data.Count++;
+RefreshView();                    // ← 这行不能省
+
+// 写法 B：换个新对象 → 自动刷，还能吃到 OnDataChanged 增量回调
+SetData(new DetailData { Id = Data.Id, Count = Data.Count + 1 });
+```
+
 > [!TIP]
-> **为什么要泛型面板**
-> object
-> 数据从特性/框架外进来，界面只管显示。
+> **两种刷法怎么选**
+> · 数据是一次性整体换掉（打开详情、切角色）→ 走 **SetData 换新对象**，自动刷、还能增量更新。
+> · 数据是频繁的小改动（倒计时每秒 -1、金币 +1）→ 原地改 + **手动 RefreshView()**，或者干脆只刷新那一两个控件（不整屏重画，别在 `OnRefreshView` 里重建整个列表）。
+>
+> **为什么框架不做自动绑定**：双向绑定需要每个字段都包一层可观察对象（ObservableProperty），写起来啰嗦、性能开销也大。这里的取舍是"数据落屏"单向契约——`OnRefreshView` 只负责把 `Data` 画上去，改数据是你自己的事，改完说一声（`RefreshView()`）就行。逻辑一目了然，没有魔法。
+
+### 4.4 `OnRefreshView` 与 `OnDataChanged` 的分工
+
+| 钩子 | 触发时机 | 适合做什么 |
+|---|---|---|
+| `OnRefreshView()` | 打开时 + SetData（可见时）+ 手动 `RefreshView()` | **全量落屏**：按当前 `Data` 把界面画一遍（必写） |
+| `OnDataChanged(old, new)` | 仅 `SetData` 换数据时 | **增量刷新**：只更新变化的那几个控件；`old`/`new` 由参数区分（若传的是同一个对象引用，两者相等） |
+
+> [!NOTE]
+> **新手最省心的起步方式**
+> 一开始只实现 `OnRefreshView`（全量重画）就够了，功能完全正确；等界面复杂了、Profiler 显示整屏重刷太贵，再把变化频繁的那部分挪到 `OnDataChanged` 做增量。两条路不冲突。
+>
+> 另外注意纪律：`OnRefreshView` 里**只画界面**——不发请求、不改数据（发请求/改数据放 `OnOpen` 和按钮回调里）。在落屏回调里改数据再触发刷新，就是"刷新死循环"的来源。
+
+### 4.5 `SetData` 在哪里调用？（调用权归属）
+
+新手常见疑问："`SetData` 应该写在面板里吗？"——**不**。`SetData` 是给**业务侧**用的接口，永远写在"**数据产生 / 变化的地方**"：点按钮的地方、收到服务器数据的地方、算出新值的地方。面板从头到尾只做一件事——在 `OnRefreshView` 里把 `Data` 画出来（它是数据的**消费方**，不生产数据）。
+
+| 谁在调 | 调什么 | 典型位置 |
+|---|---|---|
+| 业务代码：打开面板的那次交互 | `RevUI.Open<T, TData>(data)` | 点列表项打开详情（已开/没开不用区分，Open 一条路全包） |
+| 业务代码：面板已开、想换内容 | `RevUI.Get<T>()?.SetData(新数据)` | 详情面板上点"下一个 / 上一个"切换目标，不重开面板 |
+| 业务代码：数据异步到达 | 回调里 `panel.SetData(...)` | 网络回包、协程加载完成、定时器算出新值 |
+| 面板内部 | 一般**不调** `SetData`；改了 class 数据内容后手动 `RefreshView()` | 面板只负责画，不负责"喂"数据 |
+| 框架内部 | Open 流程自动 `SetData`、可见时自动 `RefreshView` | 你不用管 |
+
+```csharp
+// 场景 1：点列表项 → 打开详情（最常见，写"发起打开"的回调里）
+private void OnItemClick(ItemConfig item)
+{
+    RevUI.Open<ItemDetailPanel, ItemData>(new ItemData { Id = item.Id, Title = item.Name });
+}
+
+// 场景 2：详情面板已开 → 点"下一个"换内容（不重开）
+private void OnNextClick()
+{
+    RevUI.Get<ItemDetailPanel>()?.SetData(BuildData(_nextIndex));
+}
+
+// 场景 3：数据是异步来的 → 在回调里喂（面板没开就先 Open 顺手打开）
+private void OnPlayerInfoReceived(PlayerInfo info)
+{
+    var data = new PlayerData { Name = info.name, Level = info.level };
+    var panel = RevUI.Get<PlayerPanel>();
+    if (panel != null) panel.SetData(data);          // 已开 → 换数据，自动重画
+    else RevUI.Open<PlayerPanel, PlayerData>(data);  // 没开 → 存着等打开时画
+}
+```
+
+> [!TIP]
+> **一句话记忆**
+> **`SetData` 永远写在"数据出生的地方"**（业务侧），**`RefreshView()` 只在面板内部、原地改了 class 数据内容之后才需要**；走 `SetData` 换数据的路，刷新是框架的事。
 
 ---
 
@@ -434,7 +548,7 @@ RevUIAnim.StopAllOf(this);                                     // 停掉这个�
 | ⑤ 用 `CloseAll()` 当"关一个"用 | 要关单个用 `Close<T>()`；切场景才用 `ShutdownAll()` |
 | ⑥ 打不开却没有任何提示 | 检查三处：预制体是否在资源根目录的对应路径下 · 特性里目录/名字是否写对 · 「打包」页签是否已生成映射 |
 
-### 进阶：另外 6 条（多数和"复用 / 生命周期"有关）
+### 进阶：另外 7 条（多数和"复用 / 生命周期"有关）
 
 | 坑 | 正确做法 |
 |---|---|
@@ -444,6 +558,7 @@ RevUIAnim.StopAllOf(this);                                     // 停掉这个�
 | ⑩ 把飘字放在参与返回栈的层 | `Toast` 层不参与 `Back()`；自定义面板若不想被返回键关掉，设 `InBackStack = false` |
 | ⑪ 遮罩把不该挡的挡住了 | 想"看一眼但不打断操作"的浮层，显式写 `Mask = RevUIMaskMode.None`（`Popup` / `Guide` / `Top` 层默认是挡的） |
 | ⑫ 池里实例占内存 | `KeepAlive` 的界面会一直留着一份实例（连同它端的预制体引用）→ 大界面用 `CacheMode = DestroyOnClose`，或把 `MaxCachedPanels` 调小 |
+| ⑬ 改了数据界面没反应 | 框架**不监听**数据对象内容：原地改（`Data.Count++`）后要手动 `RefreshView()`；换新对象走 `SetData(...)` 才会自动刷 → 详见 4.3 的场景对照表 |
 
 > [!NOTE]
 > **最贵的一课：面板会复用**

@@ -148,11 +148,17 @@ namespace Revolution.Demo.UI
 
         /// <summary>打开：从屏幕上方滑入（0.25 秒），播完才算"打开完成"。</summary>
         protected override void PlayOpenTransition(System.Action onDone)
-            => RevUIAnim.SlideIn(this, RevUISlideDirection.Top, 0.25f, onDone, owner: this);
+        {
+            RevUIAnim.SlideIn(this, RevUISlideDirection.Top, 0.25f, onDone, owner: this);
+        }
+
 
         /// <summary>关闭：往上滑出（0.2 秒），播完才真正回收。</summary>
         protected override void PlayCloseTransition(System.Action onDone)
-            => RevUIAnim.SlideOut(this, RevUISlideDirection.Top, 0.2f, onDone, owner: this);
+        {
+            RevUIAnim.SlideOut(this, RevUISlideDirection.Top, 0.2f, onDone, owner: this);
+        }
+
 
         protected override void OnBindView()
         {
