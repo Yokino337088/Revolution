@@ -22,9 +22,8 @@
 //   下次 Get 会重新走资源系统加载并 Rebind（旧实例清掉重建），而不是一直报错。
 //
 // 【和分组卸载配对】
-//   prefab 是带分组的（RevResGroup.Battle 等），业务调 RevResBootstrap.Shutdown(group) 时，
-//   一定要顺手调 RevPool.ClearGroup(group)：资源那边清完账，池这边还攥着实例不放
-//   就会出现"实例还在、贴图没了"。这一条写进了使用文档。
+//   prefab 是带分组的（RevResGroup.Battle 等），退出该域时先调 RevPool.DestroyGroup(group)，
+//   销毁空闲 / 延迟 / 借出实例并归还池的 prefab 租约，再调 RevResBootstrap.Shutdown(group)。
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -117,46 +116,53 @@ namespace Revolution
             if (!RevResPathUtil.IsValidResName(resName))
             {
                 RevPoolLog.Error("异步取对象时资源名为空。");
-                onFinished?.Invoke(null);
+                InvokeGetCallback(onFinished, null);
                 return RevResHandle.Empty;
             }
 
             ulong key = RevResPathUtil.ComputeKey(rootPath, resName);
 
-            // ① 池已就绪 → 立即回调（与资源系统"缓存命中直接回调"的行为保持一致，且不拼字符串）
+            // ① 池已就绪 → 立即回调；Get 返回的是本次调用的资源租约。
             if (_byKey.TryGetValue(key, out RevGameObjectPool ready) && ready.HasPrefab)
             {
-                onFinished?.Invoke(ready.Get(parent));
-                return RevResManager.Get(rootPath, resName);
+                RevResHandle callerLease = RevResManager.Get(rootPath, resName);
+                GameObject item = ready.Get(parent);
+                InvokeGetCallback(onFinished, item);
+                return callerLease;
             }
 
-            // ② 走资源系统异步加载（同一资源的并发请求由它自动合并）
-            return RevResManager.LoadAsync<GameObject>(rootPath, resName, prefab =>
+            // ② 走资源系统异步加载。LoadAsync 本次 +1 归调用方；新建池时再单独 +1 作为池的长期租约。
+            return RevResManager.LoadAsync(rootPath, resName, typeof(GameObject), handle =>
             {
+                GameObject prefab = handle != null ? handle.Get<GameObject>() : null;
                 if (prefab == null)
                 {
                     RevPoolLog.Error($"异步取对象失败：「{RevResPathUtil.Join(rootPath, resName)}」加载不到 prefab" +
-                                     $"（原因：{RevResManager.Get(rootPath, resName).ErrorReason}）。");
-                    onFinished?.Invoke(null);
+                                     $"（原因：{(handle != null ? handle.ErrorReason : RevResLoadErrorReason.None)}）。");
+                    InvokeGetCallback(onFinished, null);
                     return;
                 }
 
-                // 加载期间可能已经有别的请求把池建好了 → 直接复用那条池
+                // 加载期间可能已经有别的请求把池建好了；当前 LoadAsync 租约只交给调用方。
                 if (_byKey.TryGetValue(key, out RevGameObjectPool existing) && existing.Prefab == prefab)
                 {
-                    onFinished?.Invoke(existing.Get(parent));
+                    InvokeGetCallback(onFinished, existing.Get(parent));
                     return;
                 }
 
-                RevResHandle handle = RevResManager.Get(rootPath, resName);
-                if (handle == null || handle.Key == 0 || handle.Content != prefab)
+                RevResHandle poolLease = handle;
+                if (!RevResManager.IsCurrent(poolLease) || poolLease.Content != prefab)
                 {
-                    // 罕见：刚加载完，缓存就被别处清账了。此时池不该端这份引用，如实说清楚。
-                    RevPoolLog.Warning($"「{RevResPathUtil.Join(rootPath, resName)}」加载完成后资源缓存里已经不是同一个句柄，池将不持有它的引用。");
-                    handle = null;
+                    // 资源缓存已被清账：禁止让池接管旧句柄，也不额外增加无主引用。
+                    RevPoolLog.Warning($"「{RevResPathUtil.Join(rootPath, resName)}」加载完成后资源缓存已不再持有同一句柄，池将不持有它的引用。");
+                    poolLease = null;
+                }
+                else
+                {
+                    RevResManager.AddRef(poolLease.Key);
                 }
 
-                onFinished?.Invoke(BindPool(key, rootPath, resName, group, prefab, handle).Get(parent));
+                InvokeGetCallback(onFinished, BindPool(key, rootPath, resName, group, prefab, poolLease).Get(parent));
             }, group);
         }
 
@@ -236,10 +242,7 @@ namespace Revolution
             return removed;
         }
 
-        /// <summary>
-        /// 清空某个资源分组下所有池的空闲实例。
-        /// ★ 和 <c>RevResBootstrap.Instance.Shutdown(group)</c> 配对使用。
-        /// </summary>
+        /// <summary>清空某资源分组下各池的空闲实例，池和 prefab 租约仍保留。</summary>
         internal static int ClearGroup(RevResGroup group)
         {
             int removed = 0;
@@ -251,6 +254,22 @@ namespace Revolution
             }
 
             return removed;
+        }
+
+        /// <summary>销毁某资源组全部池（包括当前借出的实例），并归还各池持有的 prefab 句柄。</summary>
+        internal static int DestroyGroup(RevResGroup group)
+        {
+            int destroyed = 0;
+            List<RevGameObjectPool> pools = Snapshot();
+            for (int i = 0; i < pools.Count; i++)
+            {
+                RevGameObjectPool pool = pools[i];
+                if (pool.Group != group) continue;
+                destroyed += pool.ActiveCount + pool.IdleCount + pool.RecyclingCount;
+                Unindex(pool);
+                pool.Dispose();
+            }
+            return destroyed;
         }
 
         /// <summary>按"根目录 + 资源名"销毁整条池（空闲实例销毁 + 还掉 prefab 引用）。</summary>
@@ -270,10 +289,14 @@ namespace Revolution
         /// <summary>按 prefab 引用销毁整条池。</summary>
         internal static bool DestroyPool(GameObject prefab)
         {
-            if (prefab == null) return false;
+            // Unity 的 fake null 仍保留托管包装器与 InstanceID；允许用已销毁 prefab 引用清掉对应池。
+            if (ReferenceEquals(prefab, null)) return false;
 
-            int prefabId = prefab.GetInstanceID();
-            if (!_byPrefabId.TryGetValue(prefabId, out RevGameObjectPool pool) || pool.Prefab != prefab) return false;
+            int prefabId;
+            try { prefabId = prefab.GetInstanceID(); }
+            catch (MissingReferenceException) { return false; }
+            if (!_byPrefabId.TryGetValue(prefabId, out RevGameObjectPool pool)) return false;
+            if (pool.Prefab != prefab && !(pool.Prefab == null && prefab == null)) return false;
 
             Unindex(pool);
             pool.Dispose();
@@ -398,13 +421,25 @@ namespace Revolution
 
         // ==================== 内部 ====================
 
+        private static void InvokeGetCallback(Action<GameObject> callback, GameObject item)
+        {
+            if (callback == null) return;
+            try { callback(item); }
+            catch (Exception e) { RevPoolLog.Error($"RevPool.GetAsync 回调异常（已隔离）：{e}"); }
+        }
+
         private static RevGameObjectPool BindPool(ulong key, string rootPath, string resName,
             RevResGroup group, GameObject prefab, RevResHandle handle)
         {
             if (_byKey.TryGetValue(key, out RevGameObjectPool old))
             {
-                // 已有这条池（多半是 prefab 被外部卸载过）→ 换 prefab 与句柄，旧实例清掉重建
+                // 已有这条池（多半是 prefab 被外部卸载过）→ 换 prefab 与句柄，旧实例清掉重建。
+                // 同时摘掉旧 prefab ID，否则之后按旧引用销毁池会命中残留索引。
+                int oldPrefabId = old.PrefabInstanceId;
                 old.Rebind(prefab, handle, rootPath, resName);
+                if (oldPrefabId != 0 && oldPrefabId != old.PrefabInstanceId &&
+                    _byPrefabId.TryGetValue(oldPrefabId, out RevGameObjectPool indexed) && ReferenceEquals(indexed, old))
+                    _byPrefabId.Remove(oldPrefabId);
                 _byPrefabId[prefab.GetInstanceID()] = old;
                 return old;
             }

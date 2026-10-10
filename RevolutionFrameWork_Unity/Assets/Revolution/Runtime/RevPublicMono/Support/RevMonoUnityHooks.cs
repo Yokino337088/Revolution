@@ -29,6 +29,7 @@ namespace Revolution
         private static void InstallInPlayer()
         {
             RevMono.ResetForNewSession();       // 清掉上一局残留的监听者（鬼故事防线）
+            RevMonoDriver.ResetForNewSession();  // Domain Reload 关闭时复用宿主但停止上一局协程，并恢复 IsRunning
             Install();
         }
 

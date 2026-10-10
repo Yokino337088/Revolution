@@ -45,6 +45,11 @@ namespace Revolution
             CachePoolables();
         }
 
+        internal void Unbind(int poolId)
+        {
+            if (_poolId == poolId) _poolId = 0;
+        }
+
         /// <summary>取出时回调（由池调用）。</summary>
         internal void NotifyPoolGet()
         {

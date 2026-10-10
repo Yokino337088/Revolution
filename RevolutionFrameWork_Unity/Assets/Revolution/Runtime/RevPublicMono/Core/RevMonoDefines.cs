@@ -50,6 +50,9 @@ namespace Revolution
 
         /// <summary>非运行状态（编辑器里没 Play）访问：不会偷偷创建宿主，返回失败。</summary>
         NotPlaying = 2,
+
+        /// <summary>传入了未定义的 Update/LateUpdate/FixedUpdate 相位。</summary>
+        InvalidPhase = 3,
     }
 
     /// <summary>容量上限（集中在这里，便于阅读与调优）。</summary>

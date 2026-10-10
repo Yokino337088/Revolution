@@ -41,6 +41,7 @@ namespace Revolution
         internal bool BundleAcquired { get; set; }
         internal RevABLoader BundleLoader { get; set; }
         internal string BundleName { get; set; }
+        internal string[] BundleDependencies { get; set; }
 
         /// <summary>失败原因（不打日志的前提下，这是唯一的错误线索）</summary>
         public RevResLoadErrorReason ErrorReason { get; internal set; }

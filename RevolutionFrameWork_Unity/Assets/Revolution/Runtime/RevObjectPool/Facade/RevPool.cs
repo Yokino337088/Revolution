@@ -120,7 +120,8 @@ namespace Revolution
         /// <summary>
         /// 异步取一个 GameObject（真机首次加载 / WebGL 必须走这条）。
         /// 加载失败时回调收到 <c>null</c>（失败原因看 <c>RevResManager.Get(rootPath, resName).ErrorReason</c>）。
-        /// 返回 prefab 的资源句柄，用法与资源系统的 <c>LoadAsync</c> 一致。
+        /// 返回本次请求的资源句柄，用法与资源系统的 <c>LoadAsync</c> 一致；调用方应在不再需要后调用 <c>RevResManager.DecRef(handle)</c>。
+        /// 池若因此新建，会另持有独立的一份 prefab 租约直到池销毁。
         /// </summary>
         public static RevResHandle GetAsync(string rootPath, string resName, Action<GameObject> onFinished,
             Transform parent = null, RevResGroup group = RevResGroup.Unknown)
@@ -215,12 +216,14 @@ namespace Revolution
         /// <summary>清空所有池的空闲实例（池保留）。返回销毁总数。</summary>
         public static int ClearAll() => RevGameObjectPools.ClearAll();
 
-        /// <summary>
-        /// 清空某个资源分组下所有池的空闲实例。
-        /// ★ 和 <c>RevResBootstrap.Instance.Shutdown(group)</c> 配对调用：资源那边清账，
-        ///   池这边也要把实例放掉，否则会留下"实例还在、贴图没了"的怪状态。
-        /// </summary>
+        /// <summary>清空某资源分组下各池的空闲实例，但保留池本身和 prefab 引用。</summary>
         public static int ClearGroup(RevResGroup group) => RevGameObjectPools.ClearGroup(group);
+
+        /// <summary>
+        /// 销毁某资源分组下的所有池，包括空闲、延迟回收和借出中的实例，并归还池持有的 prefab 引用。
+        /// 调用顺序：先调用此方法，再调用 <c>RevResBootstrap.Instance.Shutdown(group)</c>。
+        /// </summary>
+        public static int DestroyGroup(RevResGroup group) => RevGameObjectPools.DestroyGroup(group);
 
         /// <summary>销毁整条池（空闲实例销毁 + 还掉 prefab 引用）。按"根目录 + 资源名"找。</summary>
         public static bool DestroyPool(string rootPath, string resName) => RevGameObjectPools.DestroyPool(rootPath, resName);

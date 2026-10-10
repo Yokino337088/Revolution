@@ -44,8 +44,8 @@ namespace Revolution
         public string Name;
 
         /// <summary>
-        /// 资源分组（默认 Unknown）：决定 prefab 归属哪个业务域，切场景时可整组清账
-        /// （见 <c>RevPool.ClearGroup</c>）。例：子弹写 <c>Group = RevResGroup.Battle</c>。
+        /// 资源分组（默认 Unknown）：决定 prefab 归属哪个业务域，退出该域前调用 <c>RevPool.DestroyGroup</c>。
+        /// 例：子弹写 <c>Group = RevResGroup.Battle</c>。
         /// </summary>
         public RevResGroup Group = RevResGroup.Unknown;
 

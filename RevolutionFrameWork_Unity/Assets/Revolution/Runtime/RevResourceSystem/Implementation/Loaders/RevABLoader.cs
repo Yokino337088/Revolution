@@ -213,8 +213,9 @@ namespace Revolution
         }
 
         /// <summary>加载包（含依赖），并给每个包 +1 引用</summary>
-        private AssetBundle AcquireBundle(string abName)
+        private AssetBundle AcquireBundle(string abName, out string[] acquiredDependencySnapshot)
         {
+            acquiredDependencySnapshot = Array.Empty<string>();
             if (!EnsureManifest()) return null;
 
             // 依赖加载是一个事务：任何依赖或目标包失败，都归还本次已经取得的依赖引用。
@@ -231,7 +232,12 @@ namespace Revolution
 
             AssetBundle target = AcquireSingle(abName);
             if (target == null)
+            {
                 for (int i = acquiredDependencies.Count - 1; i >= 0; i--) ReleaseSingle(acquiredDependencies[i]);
+                return null;
+            }
+
+            acquiredDependencySnapshot = acquiredDependencies.ToArray();
             return target;
         }
 
@@ -269,10 +275,14 @@ namespace Revolution
         {
             if (_bundles.Count == 0) return;              // ReleaseAll 已清账时，不能为一次迟到 Release 重载主包
             if (!EnsureManifest()) return;
-            //先去释放这个包的依赖包（与 Acquire 走同一个依赖来源，+1/-1 才能配对）
-            foreach (string dep in ResolveDependencies(abName))
-                ReleaseSingle(dep);
+            ReleaseBundle(abName, ResolveDependencies(abName));
+        }
 
+        internal void ReleaseBundle(string abName, string[] acquiredDependencies)
+        {
+            if (_bundles.Count == 0) return;
+            if (acquiredDependencies != null)
+                for (int i = acquiredDependencies.Length - 1; i >= 0; i--) ReleaseSingle(acquiredDependencies[i]);
             ReleaseSingle(abName);
         }
 
@@ -346,7 +356,7 @@ namespace Revolution
                 return null; 
             }
             //加载ab包
-            AssetBundle bundle = AcquireBundle(parts[0]);
+            AssetBundle bundle = AcquireBundle(parts[0], out string[] acquiredDependencies);
             if (bundle == null)
             {
                 err = RevResLoadErrorReason.BundleLoadFail;
@@ -355,6 +365,7 @@ namespace Revolution
             handle.BundleAcquired = true;
             handle.BundleLoader = this;
             handle.BundleName = parts[0];
+            handle.BundleDependencies = acquiredDependencies;
             //加载ab包中的资源
             UnityEngine.Object asset = bundle.LoadAsset(parts[1], handle.ContentType);
             err = asset != null ? RevResLoadErrorReason.None : RevResLoadErrorReason.AssetLoadFail;
@@ -438,6 +449,8 @@ namespace Revolution
                 handle.BundleAcquired = true;
                 handle.BundleLoader = this;
                 handle.BundleName = parts[0];
+                handle.BundleDependencies = acquiredDependencies.ToArray();
+                acquiredDependencies.Clear();       // 所有权转交给句柄，清理端统一只归还一次
                 token?.ThrowIfCancelled();
 
                 AssetBundleRequest req = bundle.LoadAssetAsync(parts[1], handle.ContentType);

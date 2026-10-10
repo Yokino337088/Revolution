@@ -10,6 +10,7 @@
 //   ② **派发期间改列表是安全的**：派发用"快照数组 + 脏标记"（脏了才重建，稳态零分配）。
 //      语义很明确、可依赖：**本帧看到的是本帧开始时的名单** ——
 //      回调里新增的监听者下一帧才跑；回调里移除的监听者本帧仍会被调到（下一帧起不再跑）。
+//      错误上报处理器同样隔离异常，不能让一个 Failed / OnException 订阅者中断剩余派发。
 //   ③ **去重 + 上限**：同一个委托加两次只生效一次（返回 false 告诉你没加进去）；
 //      每个相位最多 256 个，超了报 Overflow 而不是静默超载。
 //
@@ -51,6 +52,11 @@ namespace Revolution
         /// <summary>加一个监听者。返回 false = 已经加过（去重）或已到上限（报 Overflow）。</summary>
         internal bool Add(RevMonoPhase phase, Action action, object owner)
         {
+            if (!IsValidPhase(phase))
+            {
+                ReportFailure(RevMonoErrorReason.InvalidPhase, "Add 收到未定义相位值 " + (int)phase);
+                return false;
+            }
             if (action == null) return false;
 
             List<RevMonoListener> list = _lists[(int)phase];
@@ -64,7 +70,7 @@ namespace Revolution
             {
                 string detail = $"相位 {phase} 的监听者已达上限 {RevMonoLimits.MaxListenersPerPhase}：本次新增被拒绝。" +
                                 "常见原因：随对象销毁的监听者没用 owner / RemoveAllOf 清理。";
-                Failed?.Invoke(RevMonoErrorReason.Overflow, detail);
+                ReportFailure(RevMonoErrorReason.Overflow, detail);
                 RevLog.Warn("[RevMono] " + detail, "Mono");   // 也进统一日志（业务没订阅 Failed 时也能看见）
                 return false;
             }
@@ -80,6 +86,7 @@ namespace Revolution
         /// <summary>移除一个监听者（没加过也没事，返回 false）。</summary>
         internal bool Remove(RevMonoPhase phase, Action action)
         {
+            if (!IsValidPhase(phase)) return false;
             if (action == null) return false;
 
             List<RevMonoListener> list = _lists[(int)phase];
@@ -144,12 +151,16 @@ namespace Revolution
             return removed;
         }
 
-        internal int CountOf(RevMonoPhase phase) => _lists[(int)phase].Count;
+        internal int CountOf(RevMonoPhase phase) => IsValidPhase(phase) ? _lists[(int)phase].Count : 0;
+
+        private static bool IsValidPhase(RevMonoPhase phase)
+            => phase == RevMonoPhase.Update || phase == RevMonoPhase.LateUpdate || phase == RevMonoPhase.FixedUpdate;
 
         // ==================== 派发（宿主每帧调）====================
 
         internal void Tick(RevMonoPhase phase)
         {
+            if (!IsValidPhase(phase)) return;
             int index = (int)phase;
             Action[] snapshot = Snapshot(index);
             if (snapshot.Length == 0) return;
@@ -166,11 +177,33 @@ namespace Revolution
                 catch (Exception e)
                 {
                     // ★ 隔离：后面的监听者照常执行（旧实现是"一个抛异常，后面全不跑"）
-                    Failed?.Invoke(RevMonoErrorReason.CallbackThrew, action.Method.DeclaringType?.Name + "." + action.Method.Name);
-                    OnException?.Invoke(e,
-                        $"[RevMono] {phase} 监听者 {action.Method.DeclaringType?.Name}.{action.Method.Name} 抛异常（已隔离，其余监听者照常）。" +
-                        "要停止它请自己 Remove —— 框架不会因为一次异常就把它摘掉。");
+                    string message = $"[RevMono] {phase} 监听者 {action.Method.DeclaringType?.Name}.{action.Method.Name} 抛异常（已隔离，其余监听者照常）。" +
+                                     "要停止它请自己 Remove —— 框架不会因为一次异常就把它摘掉。";
+                    ReportFailure(RevMonoErrorReason.CallbackThrew, action.Method.DeclaringType?.Name + "." + action.Method.Name);
+                    ReportException(e, message);
                 }
+            }
+        }
+
+        internal void ReportFailure(RevMonoErrorReason reason, string message)
+        {
+            Action<RevMonoErrorReason, string> handlers = Failed;
+            if (handlers == null) return;
+            foreach (Action<RevMonoErrorReason, string> handler in handlers.GetInvocationList())
+            {
+                try { handler(reason, message); }
+                catch (Exception e) { RevLog.Exception(e, "RevMono.Failed 处理器异常", "Mono"); }
+            }
+        }
+
+        internal void ReportException(Exception exception, string message)
+        {
+            Action<Exception, string> handlers = OnException;
+            if (handlers == null) return;
+            foreach (Action<Exception, string> handler in handlers.GetInvocationList())
+            {
+                try { handler(exception, message); }
+                catch (Exception e) { RevLog.Exception(e, "RevMono.OnException 处理器异常", "Mono"); }
             }
         }
 

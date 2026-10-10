@@ -58,9 +58,11 @@ namespace Revolution
         // 延迟回收队列 + 对应的引用相等集合：延迟期间重复归还也要拦（否则同一实例会同时躺在延迟队列和空闲列表）
         private readonly List<DelayEntry> _delaying = new List<DelayEntry>();
         private readonly HashSet<T> _delayingSet = new HashSet<T>(ReferenceComparer.Instance);
+        private readonly HashSet<T> _activeSet = new HashSet<T>(ReferenceComparer.Instance);
+        private readonly HashSet<T> _returningSet = new HashSet<T>(ReferenceComparer.Instance);
 
         // ===== 统计 =====
-        // 账目类（不清零：ActiveCount 靠它们推导）
+        // 生命周期统计（不清零；在用数量由 _activeSet 精确跟踪）
         private int _created;
         private int _destroyed;
         private int _lost;
@@ -95,15 +97,8 @@ namespace Revolution
 
         public int IdleCount => _idle.Count;
 
-        /// <summary>在用数量 = 创建 - 销毁 - 丢失 - 空闲（推导出来的，见 RevPoolDefines 文件头）。</summary>
-        public int ActiveCount
-        {
-            get
-            {
-                int active = _created - _destroyed - _lost - _idle.Count;
-                return active > 0 ? active : 0;
-            }
-        }
+        /// <summary>当前已取出且未归还的对象数（不包含延迟回收队列）。</summary>
+        public int ActiveCount => _activeSet.Count;
 
         public int RecyclingCount => _delaying.Count;
 
@@ -127,6 +122,7 @@ namespace Revolution
                 // 空壳（被外部销毁 / 场景卸载带走的）→ 丢掉它继续找下一个
                 if (!_isAlive(item)) { _lost++; continue; }
 
+                _activeSet.Add(item);
                 _hit++;
                 _onTake?.Invoke(item);
                 return item;
@@ -143,6 +139,7 @@ namespace Revolution
             }
 
             _created++;
+            _activeSet.Add(created);
             _onTake?.Invoke(created);
             return created;
         }
@@ -155,7 +152,7 @@ namespace Revolution
         /// </summary>
         public bool Return(T item, int delayFrames = 0)
         {
-            if (item == null)
+            if (ReferenceEquals(item, null))
             {
                 RevPoolLog.Warning($"池 \"{Name}\"：归还了 null，已忽略。");
                 return false;
@@ -166,6 +163,7 @@ namespace Revolution
             // ★ 先判活：已销毁的对象不能再交给回调去碰（会直接抛异常）
             if (!_isAlive(item))
             {
+                _activeSet.Remove(item);
                 _lost++;
                 RevPoolLog.Warning($"池 \"{Name}\"：归还的对象已经被销毁（多半是场景切换或被人 Destroy 了），已丢弃。");
                 return false;
@@ -175,22 +173,31 @@ namespace Revolution
             //   延迟归还后又立即归还，会让同一实例同时躺在延迟队列和空闲列表 ——
             //   两次 Get 拿到同一个对象（双重所有权）；判重放在 _onPut 之前，
             //   也不会把一个正在被使用的对象失活 / 挪回池节点。
-            if (_idleSet.Contains(item) || _delayingSet.Contains(item))
+            if (_idleSet.Contains(item) || _delayingSet.Contains(item) || _returningSet.Contains(item))
             {
-                RevPoolLog.Error($"池 \"{Name}\"：这个对象已经在池里 / 延迟回收中，重复归还已忽略。" +
+                RevPoolLog.Error($"池 \"{Name}\"：这个对象已经在池里 / 延迟回收中或正在归还，重复归还已忽略。" +
                                  $"检查一下是不是取一次还了两次。");
                 return false;
             }
+            if (!_activeSet.Contains(item))
+            {
+                RevPoolLog.Warning($"池 \"{Name}\"：对象不属于当前在用实例，已拒绝归还。");
+                return false;
+            }
 
-            _onPut?.Invoke(item);              // 业务清理 / 失活 / 挂回池节点
+            _returningSet.Add(item);
+            try { _onPut?.Invoke(item); }        // 业务清理 / 失活 / 挂回池节点
+            finally { _returningSet.Remove(item); }
 
             // 回调里可能把它销毁了（比如 OnPoolReturn 里 Destroy）→ 不能再入池
             if (!_isAlive(item))
             {
+                _activeSet.Remove(item);
                 _lost++;
                 return false;
             }
 
+            _activeSet.Remove(item);
             if (delayFrames > 0)
             {
                 _delayingSet.Add(item);
@@ -255,6 +262,27 @@ namespace Revolution
         }
 
         void IRevPool.Clear() => ClearIdle();
+
+        /// <summary>强制销毁所有当前借出的实例（池重绑 / 销毁时使用）。</summary>
+        public int DestroyActive()
+        {
+            if (_activeSet.Count == 0) return 0;
+
+            var active = new List<T>(_activeSet);
+            _activeSet.Clear();
+            int removed = 0;
+            for (int i = 0; i < active.Count; i++)
+            {
+                T item = active[i];
+                if (_isAlive(item))
+                {
+                    DestroyItem(item, "DestroyActive");
+                    removed++;
+                }
+                else _lost++;
+            }
+            return removed;
+        }
 
         /// <summary>
         /// 只保留 keepCount 个空闲对象，其余销毁。返回销毁数量。

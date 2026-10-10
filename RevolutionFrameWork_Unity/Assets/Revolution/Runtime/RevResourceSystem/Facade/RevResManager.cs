@@ -124,27 +124,67 @@ namespace Revolution
 
             // ① 缓存命中（零字符串分配）
             ulong key = RevResPathUtil.ComputeKey(rootPath, resName);
-            if (TryHitCache(key, group, out RevResHandle hit)) return hit;
+            if (_cache.TryGetValue(key, out RevResHandle existing) && !existing.IsLoaded && !existing.IsLoading && existing.RefCount <= 0)
+                DiscardFailedHandle(key, existing);
+            if (TryHitCache(key, contentType, group, out RevResHandle hit)) return hit;
 
             // ② 未命中：这时才拼出完整逻辑路径（映射表 / 句柄 / 日志都要它，一次分配可接受）
             return LoadByPath(RevResPathUtil.Join(rootPath, resName), contentType, group);
         }
 
-        /// <summary>缓存命中处理：引用 +1、清未使用标记、刷新 LRU、补分组。命中返回 true。</summary>
-        private static bool TryHitCache(ulong key, RevResGroup group, out RevResHandle handle)
+        /// <summary>缓存命中处理：校验内容类型后引用 +1、刷新 LRU 并补分组。</summary>
+        private static bool TryHitCache(ulong key, Type contentType, RevResGroup group, out RevResHandle handle)
         {
-            if (_cache.TryGetValue(key, out handle))
+            if (_cache.TryGetValue(key, out RevResHandle cached))
             {
-                handle.RefCount++;
-                handle.RemoveFlag(RevResInstanceFlag.MarkedUnused);
-                _unused.Remove(key);                  // 命中后必须同时退出未使用表
-                handle.Touch();                      // ★ 刷新 LRU 时间戳（自动卸载排序用）
-                AssignGroup(handle, group);          // ★ 只补 Unknown，不覆盖已有归属（详见方法注释）
+                if (!CanSatisfyType(cached, contentType))
+                {
+                    handle = CreateTypeMismatchHandle(cached.StandardPath, contentType, cached.ContentType);
+                    return true;
+                }
+
+                cached.RefCount++;
+                cached.RemoveFlag(RevResInstanceFlag.MarkedUnused);
+                _unused.Remove(key);
+                cached.Touch();
+                AssignGroup(cached, group);
+                handle = cached;
                 return true;
             }
 
             handle = null;
             return false;
+        }
+
+        private static bool CanSatisfyType(RevResHandle cached, Type requestedType)
+        {
+            if (cached == null || requestedType == null) return false;
+            if (cached.IsLoaded && cached.Content != null) return requestedType.IsInstanceOfType(cached.Content);
+            return cached.ContentType != null && requestedType.IsAssignableFrom(cached.ContentType);
+        }
+
+        private static RevResHandle CreateTypeMismatchHandle(string path, Type requestedType, Type cachedType)
+        {
+            var failed = new RevResHandle
+            {
+                Key = 0,
+                StandardPath = path,
+                ContentType = requestedType,
+                RefCount = 0,
+                ErrorReason = RevResLoadErrorReason.TypeMismatch
+            };
+            failed.MarkError();
+            RevLog.Warn($"资源 {path} 已按 {cachedType?.Name ?? "未知类型"} 缓存，不能以 {requestedType?.Name ?? "未知类型"} 复用同一缓存键。", "Res");
+            return failed;
+        }
+
+        private static void DiscardFailedHandle(ulong key, RevResHandle handle)
+        {
+            if (!_cache.TryGetValue(key, out RevResHandle current) || !ReferenceEquals(current, handle)) return;
+            ReleaseBundleOf(handle);
+            _cache.Remove(key);
+            _unused.Remove(key);
+            handle.RemoveFlag(RevResInstanceFlag.MarkedUnused);
         }
 
         /// <summary>按完整逻辑路径加载（框架内部：两条对外入口最终都汇到这里）。</summary>
@@ -155,7 +195,9 @@ namespace Revolution
             ulong key = ComputeKey(standardPath);
 
             // ① 缓存命中：计数 +1，直接返回
-            if (TryHitCache(key, group, out RevResHandle cached)) return cached;
+            if (_cache.TryGetValue(key, out RevResHandle existing) && !existing.IsLoaded && !existing.IsLoading && existing.RefCount <= 0)
+                DiscardFailedHandle(key, existing);
+            if (TryHitCache(key, contentType, group, out RevResHandle cached)) return cached;
 
             // ② 按优先级依次尝试策略（责任链 + 兜底）
             RevResHandle handle = null;
@@ -204,9 +246,17 @@ namespace Revolution
             if (string.IsNullOrEmpty(realPath)) { err = RevResLoadErrorReason.PathNotMapped; return false; }
             handle.RealPath = realPath;
 
-            // 2) 交给该策略的加载器真正加载
+            // 2) 交给该策略的加载器真正加载；自定义 / AB loader 抛异常时隔离为加载失败，
+            //    让句柄继续进入统一缓存和引用释放路径，避免同步 API 把异常漏到业务层并遗失已取得的资源租约。
             handle.MarkLoading();
-            object content = policy.CreateLoader().Load(handle, out err);
+            object content;
+            try { content = policy.CreateLoader().Load(handle, out err); }
+            catch (Exception e)
+            {
+                err = RevResLoadErrorReason.BundleLoadFail;
+                RevLog.Exception(e, $"同步资源加载器异常：{handle.StandardPath}", "Res");
+                return false;
+            }
             if (content == null) return false;
 
             // 3) 成功
@@ -236,14 +286,21 @@ namespace Revolution
 
             ulong key = RevResPathUtil.ComputeKey(rootPath, resName);
 
-            // ① 缓存已就绪：立即回调（零字符串分配）
+            // ① 缓存已就绪：类型安全后立即回调（零字符串分配）
             if (_cache.TryGetValue(key, out RevResHandle ready) && ready.IsLoaded)
             {
+                if (!CanSatisfyType(ready, contentType))
+                {
+                    RevResHandle mismatch = CreateTypeMismatchHandle(ready.StandardPath, contentType, ready.ContentType);
+                    InvokeFinished(onFinished, mismatch);
+                    return mismatch;
+                }
+
                 ready.RefCount++;
                 ready.RemoveFlag(RevResInstanceFlag.MarkedUnused);
                 _unused.Remove(key);
-                ready.Touch();                       // 刷新 LRU 时间戳
-                AssignGroup(ready, group);           // ★ 与同步 Load 保持一致：只补 Unknown
+                ready.Touch();
+                AssignGroup(ready, group);
                 InvokeFinished(onFinished, ready);
                 return ready;
             }
@@ -271,10 +328,13 @@ namespace Revolution
             {
                 if (!cached.IsLoaded && !cached.IsLoading && cached.RefCount <= 0)
                 {
-                    // 失败回调已完成且无人持有；没有在途请求可被打断，可以安全替换这一代句柄。
-                    ReleaseBundleOf(cached);
-                    _cache.Remove(key);
-                    _unused.Remove(key);
+                    DiscardFailedHandle(key, cached);
+                }
+                else if (!CanSatisfyType(cached, contentType))
+                {
+                    RevResHandle mismatch = CreateTypeMismatchHandle(cached.StandardPath, contentType, cached.ContentType);
+                    InvokeFinished(onFinished, mismatch);
+                    return mismatch;
                 }
                 else
                 {
@@ -523,6 +583,8 @@ namespace Revolution
         /// </summary>
         public static void UnloadGroup(RevResGroup group, bool force = false)
         {
+            // 即使调用方绕过 RevResBootstrap.Shutdown，也不能留下加载完成后继续写回该组缓存的在途任务。
+            RevAsyncLoadPump.CancelGroup(group);
             var toRemove = new List<ulong>();
 
             foreach (var kv in _cache)
@@ -685,10 +747,12 @@ namespace Revolution
             handle.BundleAcquired = false;
             RevABLoader loader = handle.BundleLoader;
             string bundleName = handle.BundleName;
+            string[] dependencies = handle.BundleDependencies;
             handle.BundleLoader = null;
             handle.BundleName = null;
+            handle.BundleDependencies = null;
             if (loader != null && !handle.HasFlag(RevResInstanceFlag.LoadFromEditor) && !string.IsNullOrEmpty(bundleName))
-                loader.ReleaseBundle(bundleName);
+                loader.ReleaseBundle(bundleName, dependencies);
         }
 
         /// <summary>异步加载完成时由异步泵回调。</summary>

@@ -30,6 +30,16 @@ namespace Revolution
         /// <summary>把"首次用到就建宿主"接到内核上（内核是纯 C#，不认 GameObject）。</summary>
         internal static void Install() => RevMonoCore.EnsureDriver = EnsureDefault;
 
+        internal static void ResetForNewSession()
+        {
+            if (_instance != null)
+            {
+                _instance.StopAllCoroutines();
+                RevMonoCore.DriverReady = true;
+            }
+            else RevMonoCore.DriverReady = false;
+        }
+
         internal static void EnsureDefault()
         {
             if (!Application.isPlaying) return;                     // 编辑模式不偷偷建 GameObject
@@ -51,7 +61,7 @@ namespace Revolution
             if (!Application.isPlaying)
             {
                 RevLog.Warn("[RevMono] 非运行状态不能启动协程（编辑器里没 Play）：本次调用已忽略。", "Mono");
-                RevMono.Core.Failed?.Invoke(RevMonoErrorReason.NotPlaying, "非运行状态启动协程");
+                RevMono.Core.ReportFailure(RevMonoErrorReason.NotPlaying, "非运行状态启动协程");
                 return null;
             }
 
@@ -89,13 +99,15 @@ namespace Revolution
                 }
                 catch (Exception e)
                 {
-                    RevMono.Core.Failed?.Invoke(RevMonoErrorReason.CallbackThrew, "协程 " + Describe(routine));
-                    RevMono.OnException?.Invoke(e,
+                    RevMono.Core.ReportFailure(RevMonoErrorReason.CallbackThrew, "协程 " + Describe(routine));
+                    RevMono.Core.ReportException(e,
                         $"[RevMono] 协程 {Describe(routine)} 抛异常（已隔离，这条协程结束；其余协程与监听者照常）。");
                     yield break;
                 }
 
-                yield return yielded;                              // ★ yield 必须在 try 之外（C# 语法限制）
+                // 把嵌套 IEnumerator 也过同一层守卫，否则异常发生在 Unity 执行子协程时会绕过本驱动。
+                if (yielded is IEnumerator nested) yield return Guarded(nested);
+                else yield return yielded;                         // ★ yield 必须在 try 之外（C# 语法限制）
             }
         }
 

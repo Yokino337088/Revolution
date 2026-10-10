@@ -174,7 +174,7 @@ footer{max-width:1000px;margin:0 auto;padding:0 24px 60px;color:var(--text-sub);
 <span class="c">// …用一段时间（飞出屏幕 / 打中目标）…</span>
 RevPool.Return(bullet);                          <span class="c">// ② 还回去</span></pre>
       <p style="margin-bottom:0">
-        <code>Get</code> 会自动带上<b>资源引用</b>（池端着，不会被卸载掉），还会把对象复位（位置/旋转/激活状态按池的规则处理）。<br>
+        池会持有独立的 prefab 资源租约。路径版 <code>GetAsync</code> 返回的 <code>RevResHandle</code> 属于调用方，用完请调 <code>RevResManager.DecRef(handle)</code>；池另持自己的租约。取出时 <code>OnPoolGet</code> 先于 <code>OnEnable</code> 执行。<br>
         想"延迟还"（比如让死亡动画播完）：<code>RevPool.Return(go, delayFrames: 30)</code>。
       </p>
     </div>
@@ -193,7 +193,8 @@ RevPool.Return(bullet);                          <span class="c">// ② 还回�
           <tr><td>池里的对象导致资源卸不掉</td><td>池端着资源引用：销毁池时才放（不用你手动 Release）</td></tr>
           <tr><td>用完忘记复位，出现"幽灵对象"</td><td>取出来时框架给你一份"干净"的对象（位置/旋转/激活按规则复位）</td></tr>
           <tr><td>池越攒越大吃内存</td><td>空闲上限 + <code>TrimAll(keepCount)</code> 主动瘦身 + <code>ApplyCapacityToAll(capacity)</code> 统一改上限</td></tr>
-          <tr><td>切场景后旧池还在</td><td><code>ClearAll()</code> / <code>ClearGroup(group)</code> / <code>DestroyAll()</code></td></tr>
+          <tr><td>清理空闲实例、保留池</td><td><code>ClearAll()</code> / <code>ClearGroup(group)</code></td></tr>
+          <tr><td>卸载整个资源组</td><td><code>DestroyGroup(group)</code> 后再 <code>RevResBootstrap.Shutdown(group)</code></td></tr>
         </tbody>
       </table>
     </div>
@@ -261,8 +262,9 @@ RevPool.GetAsync(<span class="s">"Battle/Bullet"</span>, <span class="s">"Bullet
           <tr><td>还一个</td><td><code>RevPool.Return(item)</code> / <code>RevPool.Return(component)</code></td></tr>
           <tr><td>延迟还（等动画/特效）</td><td><code>RevPool.Return(item, delayFrames: 30)</code></td></tr>
           <tr><td>清掉某个池的<b>空闲</b>对象</td><td><code>RevPool.Clear(rootPath, resName)</code>（返回清掉几个）</td></tr>
-          <tr><td>清掉整组池的空闲对象</td><td><code>RevPool.ClearGroup(RevResGroup.UI)</code></td></tr>
-          <tr><td>清掉全部池的空闲对象</td><td><code>RevPool.ClearAll()</code>（切场景常用）</td></tr>
+          <tr><td>清掉整组池的空闲对象但保留池与资源引用</td><td><code>RevPool.ClearGroup(RevResGroup.UI)</code></td></tr>
+          <tr><td>彻底销毁某资源组的池（应早于资源组 Shutdown）</td><td><code>RevPool.DestroyGroup(group)</code></td></tr>
+          <tr><td>清掉全部池的空闲对象</td><td><code>RevPool.ClearAll()</code>（池与引用保留）</td></tr>
           <tr><td>彻底销毁某个池（连资源引用一起放）</td><td><code>RevPool.DestroyPool(rootPath, resName)</code> / <code>DestroyPool(prefab)</code></td></tr>
           <tr><td>彻底销毁所有池</td><td><code>RevPool.DestroyAll()</code>（回登录/大版本切换）</td></tr>
           <tr><td>统一改空闲上限</td><td><code>RevPool.ApplyCapacityToAll(64)</code></td></tr>
@@ -287,7 +289,7 @@ RevPool.GetAsync(<span class="s">"Battle/Bullet"</span>, <span class="s">"Bullet
       <div><b>回收的时机</b>对象"逻辑结束"就还：子弹撞了、飘字播完、列表项被移除、怪物死亡</div>
       <div><b>不要手动 Destroy</b>池里的对象 —— 会把池的状态搞乱；要销毁就 <code>DestroyPool</code></div>
       <div><b>还回去别再引用</b>已 Return 的对象随时可能被下一个人取走（想延迟还就用 <code>delayFrames</code>）</div>
-      <div><b>切场景</b>调 <code>RevPool.ClearAll()</code>（或按组 <code>ClearGroup</code>）收掉空闲对象</div>
+      <div><b>卸载资源组</b>先调 <code>RevPool.DestroyGroup(group)</code>，再调 <code>RevResBootstrap.Instance.Shutdown(group)</code>；单纯清理空闲对象用 <code>ClearGroup</code></div>
       <div><b>觉得内存高</b><code>TrimAll(32)</code> 主动瘦身；长期偏高就调小 <code>ApplyCapacityToAll</code> 的上限</div>
       <div><b>排查</b><code>RevRefPool.GetPoolNames()</code> 看有哪些池；配合 <code>GetGlobalStats()</code> 看总量</div>
     </div>

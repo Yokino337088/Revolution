@@ -322,8 +322,9 @@ GameObject prefab = handle.Content <span class="k">as</span> GameObject;</pre>
         <thead><tr><th style="width:44%">方法</th><th>做什么</th></tr></thead>
         <tbody>
           <tr><td><code>RevPool.Clear(rootPath, resName)</code> / <code>ClearAll()</code></td><td>销毁<b>空闲</b>实例，池保留（之后还能继续取）</td></tr>
-          <tr><td><code>RevPool.ClearGroup(group)</code></td><td>清某个资源分组下的所有池（和 <code>RevResBootstrap.Shutdown(group)</code> 配对）</td></tr>
-          <tr><td><code>RevPool.DestroyPool(rootPath, resName)</code> / <code>DestroyAll()</code></td><td>销毁整条池：空闲实例 + 池节点 + <b>还掉 prefab 的引用</b></td></tr>
+          <tr><td><code>RevPool.ClearGroup(group)</code></td><td>只清该资源分组下的空闲实例，池与 prefab 引用保留</td></tr>
+          <tr><td><code>RevPool.DestroyGroup(group)</code></td><td>销毁该组全部池与借出对象、归还 prefab 租约；应先于资源组 Shutdown</td></tr>
+          <tr><td><code>RevPool.DestroyPool(rootPath, resName)</code> / <code>DestroyAll()</code></td><td>销毁池：空闲 / 借出实例 + 池节点 + <b>还掉 prefab 的引用</b></td></tr>
         </tbody>
       </table>
     </div>
@@ -341,7 +342,7 @@ GameObject prefab = handle.Content <span class="k">as</span> GameObject;</pre>
         <tbody>
           <tr><td>① 用原型（Prefab）作 Key</td><td>prefab 实例 ID（+ 引用身份校验），三种入口（路径 / prefab 引用 / 实例上的 <code>PoolId</code>）汇到同一批池</td></tr>
           <tr><td>② 后进先出（LIFO）提高命中</td><td><code>List</code> 当栈，从尾部取；"最后归还的最新鲜（缓存还热）"</td></tr>
-          <tr><td>③ 双层追踪（池里 + 在用）</td><td><b>改成推导</b>：<code>ActiveCount = Created - Destroyed - Lost - IdleCount</code>（见 3.3）</td></tr>
+          <tr><td>③ 双层追踪（池里 + 在用）</td><td>引用身份 HashSet 跟踪当前借出对象；延迟回收单独计数，并在池重绑/销毁时清理旧代实例</td></tr>
           <tr><td>④ 延迟回收避免抖动</td><td><code>Return(item, delayFrames)</code>；延迟期间对象<b>不会</b>被取到，由 <code>RevPoolDriver</code> 每帧推进</td></tr>
           <tr><td>⑤ 容量限制防止内存黑洞</td><td><code>RevPool.MaxIdlePerPool</code>（默认 64，0 = 不限）；超出上限的归还对象直接销毁</td></tr>
           <tr><td>⑥ 统计上报</td><td><code>RevPoolStats</code> + <b>命中率</b>；<code>RevPool.DumpStats()</code> 一次打全（参考实现上报灯塔，这里给一个可打印快照）</td></tr>
@@ -358,16 +359,8 @@ GameObject prefab = handle.Content <span class="k">as</span> GameObject;</pre>
     <p>实现上 <code>_idle</code> 用 <code>List</code> 当栈（归还 <code>Add</code>、取出 <code>RemoveAt(Count-1)</code>），
       两边都是 O(1)，都不分配。</p>
 
-    <h3>3.3 "双层追踪"改成推导（比参考实现更省）</h3>
-    <p>参考实现维护了三张表互相校验：池里、在用、全部。好处是随时能查到"谁被谁拿着"，代价是
-      <b>每次取出/归还都要在"在用表"里做一次 O(n) 增删</b>（<code>List.Remove</code>），实例一多就是热点。</p>
-    <p>新版用推导：</p>
-    <pre>ActiveCount = Created - Destroyed - Lost - IdleCount</pre>
-    <ul>
-      <li><code>Created</code> 累计创建数；<code>Destroyed</code> 被池销毁数；<code>Lost</code> 被外部销毁数；<code>IdleCount</code> 当前空闲数；</li>
-      <li>每次操作都是 O(1)，也不用担心"三张表不同步"；</li>
-      <li>精度一样：断言里验过"取两个没还 → 在用数 = 2"。</li>
-    </ul>
+    <h3>3.3 活动实例与延迟回收分开跟踪</h3>
+    <p>当前借出的实例由引用身份 HashSet 精确跟踪，归还时立即移出 <code>ActiveCount</code>；延迟回收中的对象单独计入 <code>Recycling</code>。池 Rebind / Dispose 会销毁旧代借出实例，避免它们以后被误归还到新 prefab 池。统计查询不会把延迟回收对象误报为仍在使用。</p>
 
     <h3>3.4 延迟回收</h3>
     <pre>RevPool.Return(bullet, delayFrames: <span class="n">5</span>);      <span class="c">// 特效还要播 5 帧</span></pre>
@@ -552,10 +545,9 @@ RevRefPool.Return(msg);</pre>
     <p>池端着 prefab 的引用，所以<b>池在，prefab 就不会被卸载</b>（这正是池里实例的贴图/材质安全的原因）。
       反过来说：<b>资源那边清账时，池这边也要放掉实例</b>，否则会留下"实例还在、贴图没了"的怪状态。</p>
     <pre><span class="c">// 退出战斗</span>
-RevResBootstrap.Instance.Shutdown(RevResGroup.Battle);   <span class="c">// 资源系统：卸掉这个分组的资源</span>
-RevPool.ClearGroup(RevResGroup.Battle);               <span class="c">// ★ 对象池：清掉这个分组下池里的空闲实例</span>
-<span class="c">// 想更彻底（连池记录一起销毁）：</span>
-<span class="c">// RevPool.DestroyAll();</span></pre>
+RevPool.DestroyGroup(RevResGroup.Battle);               <span class="c">// 先销毁该组池、空闲/借出实例并归还池端 prefab 租约</span>
+RevResBootstrap.Instance.Shutdown(RevResGroup.Battle);   <span class="c">// 再卸载资源组</span>
+<span class="c">// 只清空闲对象并保留池：RevPool.ClearGroup(RevResGroup.Battle);</span></pre>
     <p>几个边界行为（都已实现并有断言覆盖）：</p>
     <ul>
       <li>prefab 被外部卸载/销毁 → 池<b>自愈</b>：下次 <code>Get</code> 重新走资源系统加载并 <code>Rebind</code>（旧实例清掉重建），而不是一直报错；</li>
@@ -576,8 +568,8 @@ RevPool.DumpStats();                       <span class="c">// 一坨文本，直
 RevPool.ResetStats(rootPath, resName); / ResetStatsAll();   <span class="c">// 清请求计数（想看某一段时间的命中率）</span>
 RevRefPool.GetPoolNames();                 <span class="c">// 引用池名清单（排序，便于对比两次快照找泄漏）</span></pre>
     <div class="callout">
-      <code>ResetStats</code> 只清"请求类"计数（请求/命中/未命中/归还）；<b>创建/销毁/丢失是账目，不清</b>
-      —— 在用数靠它们推导。
+      <code>ResetStats</code> 只清"请求类"计数（请求/命中/未命中/归还）；<b>创建/销毁/丢失是账目，不清</b>。
+      在用数由池记录的活动实例集合给出，延迟回收单独计入 Recycling。
     </div>
     <p><b>找泄漏的姿势</b>：跑一段前后各打一次 <code>DumpStats()</code>，看哪条池的 <code>在用</code> 数只涨不落（那就是有地方取出来没还）。</p>
   </section>
@@ -597,9 +589,8 @@ RevRefPool.GetPoolNames();                 <span class="c">// 引用池名清单
     <h3>5.3 WebGL / 小游戏不能用同步 <code>Get</code></h3>
     <p>同步加载在 WebGL 上不可用（单线程、不能阻塞、路径是 URL）。这类平台（以及真机首次加载）一律用 <code>RevPool.GetAsync</code>。</p>
 
-    <h3>5.4 分组卸载没配 <code>ClearGroup</code></h3>
-    <p><code>RevResBootstrap.Shutdown(group)</code> 之后不调 <code>RevPool.ClearGroup(group)</code>，池里会留着指向已卸载资源的实例。
-      切场景的读条阶段把两句写在一起就行。</p>
+    <h3>5.4 分组卸载顺序</h3>
+    <p>卸载整个资源域时，先调用 <code>RevPool.DestroyGroup(group)</code> 销毁组内池和借出实例、归还池端 prefab 租约，再调用 <code>RevResBootstrap.Shutdown(group)</code>。<code>ClearGroup</code> 只清空闲对象并保留池与引用，不是卸载配对 API。</p>
 
     <h3>5.5 用 prefab 引用建的池不持有资源引用</h3>
     <p><code>RevPool.Get(prefab, parent)</code> 适合"调用方本来就持有 prefab"的场景（省路径哈希）。但这类池没有 <code>RevResHandle</code>，

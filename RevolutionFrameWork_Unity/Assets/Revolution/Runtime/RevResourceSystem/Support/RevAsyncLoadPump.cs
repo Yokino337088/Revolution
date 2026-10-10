@@ -28,6 +28,7 @@ namespace Revolution
             public IRevResLoader loader;
             public int priority;
             public bool cancelRequested;
+            public bool finished;
             public readonly RevCancellationTokenSource cancellation = new RevCancellationTokenSource();
             public readonly List<Action<RevResHandle>> callbacks = new List<Action<RevResHandle>>();
         }
@@ -45,6 +46,24 @@ namespace Revolution
         }
 
         private static bool _pumping;
+        private static int _pumpGeneration;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void OnSubsystemRegistration() => ResetForNewSession();
+
+        /// <summary>Domain Reload 关闭时结束上一会话任务，避免旧 pump 状态阻塞新一局。</summary>
+        internal static void ResetForNewSession()
+        {
+            _pumpGeneration++;
+            _pumping = false;
+            var jobs = new List<RevLoadJob>(_waiting.Count + _loading.Count);
+            jobs.AddRange(_waiting);
+            jobs.AddRange(_loading);
+            _waiting.Clear();
+            _loading.Clear();
+            _jobByKey.Clear();
+            for (int i = 0; i < jobs.Count; i++) CancelJob(jobs[i], notifyNow: true);
+        }
 
         public static int WaitingCount => _waiting.Count;
         public static int LoadingCount => _loading.Count;
@@ -86,16 +105,16 @@ namespace Revolution
         {
             if (_pumping) return;
             _pumping = true;
-            PumpLoop().Forget();
+            PumpLoop(_pumpGeneration).Forget();
         }
 
-        private static async RevTask PumpLoop()
+        private static async RevTask PumpLoop(int generation)
         {
             try
             {
-                while (_waiting.Count > 0 || _loading.Count > 0)
+                while (generation == _pumpGeneration && (_waiting.Count > 0 || _loading.Count > 0))
                 {
-                    while (_waiting.Count > 0 && _loading.Count < MaxConcurrent)
+                    while (generation == _pumpGeneration && _waiting.Count > 0 && _loading.Count < MaxConcurrent)
                     {
                         RevLoadJob job = _waiting[0];
                         _waiting.RemoveAt(0);
@@ -108,18 +127,22 @@ namespace Revolution
             }
             finally
             {
-                _pumping = false;
-                if (_waiting.Count > 0 || _loading.Count > 0) EnsurePumping();
+                if (generation == _pumpGeneration)
+                {
+                    _pumping = false;
+                    if (_waiting.Count > 0 || _loading.Count > 0) EnsurePumping();
+                }
             }
         }
 
         private static async RevTask RunJob(RevLoadJob job)
         {
+            if (job.finished) return;
             bool done = false;
             try
             {
                 job.loader.LoadAsync(job.handle, h => done = true, job.cancellation.Token);
-                while (!done) await RevTaskScheduler.NextFrame();
+                while (!done && !job.finished) await RevTaskScheduler.NextFrame();
             }
             catch (Exception e)
             {
@@ -130,22 +153,14 @@ namespace Revolution
                 if (!job.cancelRequested) RevLog.Exception(e, "异步资源加载器异常", "Res");
             }
 
+            if (job.finished) return;
             if (job.cancelRequested)
             {
                 job.handle.ErrorReason = RevResLoadErrorReason.Cancelled;
                 job.handle.MarkError();
             }
 
-            // 先摘掉自己；fallback 回调会立刻为同 key 提交下一条策略。
-            _loading.Remove(job);
-            if (_jobByKey.TryGetValue(job.handle.Key, out RevLoadJob registered) && ReferenceEquals(registered, job))
-                _jobByKey.Remove(job.handle.Key);
-
-            for (int i = 0; i < job.callbacks.Count; i++)
-            {
-                try { job.callbacks[i]?.Invoke(job.handle); }
-                catch (Exception e) { RevLog.Exception(e, "异步资源加载回调异常", "Res"); }
-            }
+            CompleteJob(job, "异步资源加载回调异常");
         }
 
         // ==================== 清理 ====================
@@ -159,37 +174,51 @@ namespace Revolution
 
         private static void CancelWhere(Predicate<RevLoadJob> predicate)
         {
-            for (int i = _waiting.Count - 1; i >= 0; i--)
+            var jobs = new List<RevLoadJob>(_waiting.Count + _loading.Count);
+            jobs.AddRange(_waiting);
+            jobs.AddRange(_loading);
+            for (int i = 0; i < jobs.Count; i++)
             {
-                RevLoadJob job = _waiting[i];
+                RevLoadJob job = jobs[i];
                 if (!predicate(job)) continue;
-                _waiting.RemoveAt(i);
-                CancelJob(job, notifyNow: true);
+                bool waiting = _waiting.Remove(job);
+                CancelJob(job, notifyNow: waiting);
             }
+        }
 
-            for (int i = 0; i < _loading.Count; i++)
+        private static void CompleteJob(RevLoadJob job, string callbackContext)
+        {
+            if (job.finished) return;
+            job.finished = true;
+            _waiting.Remove(job);
+            _loading.Remove(job);
+            if (_jobByKey.TryGetValue(job.handle.Key, out RevLoadJob registered) && ReferenceEquals(registered, job))
+                _jobByKey.Remove(job.handle.Key);
+
+            for (int i = 0; i < job.callbacks.Count; i++)
             {
-                RevLoadJob job = _loading[i];
-                if (predicate(job)) CancelJob(job, notifyNow: false);
+                try { job.callbacks[i]?.Invoke(job.handle); }
+                catch (Exception e) { RevLog.Exception(e, callbackContext, "Res"); }
             }
+            job.callbacks.Clear();
         }
 
         private static void CancelJob(RevLoadJob job, bool notifyNow)
         {
+            if (job.finished || job.cancelRequested) return;
             job.cancelRequested = true;
             job.handle.ErrorReason = RevResLoadErrorReason.Cancelled;
             job.handle.MarkError();
             job.cancellation.Cancel();
 
-            if (_jobByKey.TryGetValue(job.handle.Key, out RevLoadJob registered) && ReferenceEquals(registered, job))
-                _jobByKey.Remove(job.handle.Key);
-
-            if (!notifyNow) return;
-            for (int i = 0; i < job.callbacks.Count; i++)
+            if (!notifyNow)
             {
-                try { job.callbacks[i]?.Invoke(job.handle); }
-                catch (Exception e) { RevLog.Exception(e, "已取消资源加载回调异常", "Res"); }
+                if (_jobByKey.TryGetValue(job.handle.Key, out RevLoadJob registered) && ReferenceEquals(registered, job))
+                    _jobByKey.Remove(job.handle.Key);
+                return;
             }
+
+            CompleteJob(job, "已取消资源加载回调异常");
         }
 
         /// <summary>兼容清队列入口：按取消语义安全终止任务，不遗失句柄/回调。</summary>

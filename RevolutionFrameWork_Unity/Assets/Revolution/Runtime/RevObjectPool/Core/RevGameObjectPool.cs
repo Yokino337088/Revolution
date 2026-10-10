@@ -59,7 +59,7 @@ namespace Revolution
                 isAlive: item => item != null,          // Unity 的 == 重载会把"已销毁"判成 null
                 onTake: OnTake,
                 onPut: OnPut,
-                onDestroy: item => Object.Destroy(item));
+                onDestroy: DestroyPooledItem);
         }
 
         // ==================== 身份与资源 ====================
@@ -83,7 +83,7 @@ namespace Revolution
         /// <summary>prefab 的实例 ID（即使 prefab 被销毁也保留，用于从注册表里摘掉这条池）。</summary>
         internal int PrefabInstanceId { get; private set; }
 
-        /// <summary>池端着的那份 prefab 引用（销毁池时还回去）。</summary>
+        /// <summary>池端着的独立 prefab 租约（销毁池时还回去）。</summary>
         internal RevResHandle PrefabHandle { get; private set; }
 
         internal bool HasPrefab => Prefab != null;
@@ -146,12 +146,13 @@ namespace Revolution
         internal void ResetStats() => _core.ResetStats();
 
         /// <summary>
-        /// prefab 换了（原来的被外部卸载 / 销毁）：清掉旧实例、换成新的 prefab 与句柄。
+        /// prefab 换了（原来的被外部卸载 / 销毁）：销毁旧代的空闲、延迟和借出实例，再更换 prefab 与句柄。
         /// 旧实例跟新 prefab 可能已经对不上（比如资源被重新导入过），所以宁可重建也不复用。
         /// </summary>
         internal void Rebind(GameObject prefab, RevResHandle handle, string rootPath, string resName)
         {
             _core.ClearIdle();
+            _core.DestroyActive();                 // 外借实例属于旧 prefab，不能在新池身份下复用
             ReleasePrefabHandle();                 // 旧句柄若还在资源缓存里，先还掉这份引用再换新
 
             Prefab = prefab;
@@ -168,6 +169,7 @@ namespace Revolution
             _disposed = true;
 
             _core.ClearIdle();
+            _core.DestroyActive();
 
             if (_root != null)
             {
@@ -190,7 +192,7 @@ namespace Revolution
             if (Prefab == null)
             {
                 RevPoolLog.Error($"池 \"{Name}\" 的 prefab 已经不在了（资源被卸载 / 被销毁）。" +
-                                 $"如果这是切场景后的正常现象，请在该分组 Shutdown 时调 RevPool.ClearGroup(group) 或 RevPool.DestroyAll()。");
+                                 $"如果这是切场景后的正常现象，请在资源 Shutdown 前调 RevPool.DestroyGroup(group) 或 RevPool.DestroyAll()。");
                 return null;
             }
 
@@ -207,7 +209,7 @@ namespace Revolution
 
         private void OnTake(GameObject item)
         {
-            // ★ 先挂好父节点再激活：OnEnable / OnPoolGet 看到的层级才是对的。
+            // ★ OnPoolGet 先重置业务状态，再激活触发 OnEnable。
             Transform t = item.transform;
             if (_takeParent != null)
             {
@@ -222,10 +224,17 @@ namespace Revolution
                 if (active.IsValid() && item.scene != active) SceneManager.MoveGameObjectToScene(item, active);
             }
 
-            item.SetActive(true);
-
             RevPooledMember member = item.GetComponent<RevPooledMember>();
             if (member != null) member.NotifyPoolGet();
+            item.SetActive(true);
+        }
+
+        private void DestroyPooledItem(GameObject item)
+        {
+            if (item == null) return;
+            RevPooledMember member = item.GetComponent<RevPooledMember>();
+            if (member != null) member.Unbind(PoolId);
+            Object.Destroy(item);
         }
 
         private void OnPut(GameObject item)

@@ -74,7 +74,12 @@ namespace Revolution
         /// 移除某个 owner 的全部监听者（随对象销毁一行清干净）。
         /// <code>void OnDestroy() =&gt; RevMono.RemoveAllOf(this);</code>
         /// </summary>
-        public static int RemoveAllOf(object owner) => Core.RemoveAllOf(owner);
+        public static int RemoveAllOf(object owner)
+        {
+            int removed = Core.RemoveAllOf(owner);
+            if (owner is RevMonoScope scope) removed += scope.StopRoutines();
+            return removed;
+        }
 
         /// <summary>清空全部监听者（切场景 / 重开一局用）。返回清掉的数量。</summary>
         public static int Clear() => Core.Clear();

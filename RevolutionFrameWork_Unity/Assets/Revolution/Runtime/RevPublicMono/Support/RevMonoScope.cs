@@ -18,7 +18,7 @@
 //
 // 【和 RemoveAllOf 的关系】作用域内部就是用自己当 owner：
 //   scope.AddUpdate(f) ≡ RevMono.AddUpdate(f, owner: scope)，
-//   所以 RevMono.RemoveAllOf(scope) 与 scope.Dispose() 效果一致（想手动停也行）。
+//   scope.StartCoroutine(r) 的协程也登记到作用域；RemoveAllOf(scope) 会同时停止这批协程。
 // ============================================================
 using System;
 using System.Collections;
@@ -32,37 +32,88 @@ namespace Revolution
     {
         private readonly List<Coroutine> _routines = new List<Coroutine>(4);
         private bool _disposed;
+        private int _version;
+
+        private sealed class RoutineTicket
+        {
+            internal Coroutine Handle;
+            internal bool Completed;
+        }
 
         internal RevMonoScope()
         {
         }
 
         /// <summary>这块里加一个每帧回调。</summary>
-        public bool AddUpdate(Action action) => RevMono.AddUpdate(action, this);
+        public bool AddUpdate(Action action) => !_disposed && RevMono.AddUpdate(action, this);
 
         /// <summary>这块里加一个每帧最后的回调。</summary>
-        public bool AddLateUpdate(Action action) => RevMono.AddLateUpdate(action, this);
+        public bool AddLateUpdate(Action action) => !_disposed && RevMono.AddLateUpdate(action, this);
 
         /// <summary>这块里加一个物理帧回调。</summary>
-        public bool AddFixedUpdate(Action action) => RevMono.AddFixedUpdate(action, this);
+        public bool AddFixedUpdate(Action action) => !_disposed && RevMono.AddFixedUpdate(action, this);
 
         /// <summary>这块里起一条协程（退出作用域时会自动停掉它）。</summary>
         public Coroutine StartCoroutine(IEnumerator routine)
         {
-            Coroutine routineHandle = RevMono.StartCoroutine(routine);
-            if (routineHandle != null) _routines.Add(routineHandle);
-            return routineHandle;
+            if (_disposed || routine == null) return null;
+
+            int version = _version;
+            var ticket = new RoutineTicket();
+            Coroutine handle = RevMono.StartCoroutine(TrackRoutine(routine, ticket, version));
+            ticket.Handle = handle;
+            if (handle == null || ticket.Completed) return handle;
+
+            // Unity 会在 StartCoroutine 返回前运行到第一个 yield；首段中可能重入 Close/Dispose。
+            if (_disposed || version != _version)
+            {
+                RevMono.StopCoroutine(handle);
+                return null;
+            }
+
+            _routines.Add(handle);
+            return handle;
+        }
+
+        private IEnumerator TrackRoutine(IEnumerator routine, RoutineTicket ticket, int version)
+        {
+            var stack = new Stack<IEnumerator>();
+            stack.Push(routine);
+            try
+            {
+                while (!_disposed && version == _version && stack.Count > 0)
+                {
+                    IEnumerator current = stack.Peek();
+                    if (!current.MoveNext())
+                    {
+                        stack.Pop();
+                        (current as IDisposable)?.Dispose();
+                        continue;
+                    }
+
+                    object yielded = current.Current;
+                    if (yielded is IEnumerator nested) stack.Push(nested);
+                    else yield return yielded;
+                }
+            }
+            finally
+            {
+                while (stack.Count > 0) (stack.Pop() as IDisposable)?.Dispose();
+                ticket.Completed = true;
+                if (ticket.Handle != null) _routines.Remove(ticket.Handle);
+            }
         }
 
         /// <summary>手动摘掉这块的全部监听者并停掉协程（不 Dispose 也能用；重复调用安全）。</summary>
-        public int Close()
+        public int Close() => RevMono.RemoveAllOf(this);
+
+        internal int StopRoutines()
         {
-            int removed = RevMono.RemoveAllOf(this);
-
-            for (int i = 0; i < _routines.Count; i++) RevMono.StopCoroutine(_routines[i]);
+            _version++;
+            Coroutine[] routines = _routines.ToArray();
             _routines.Clear();
-
-            return removed;
+            for (int i = 0; i < routines.Length; i++) RevMono.StopCoroutine(routines[i]);
+            return routines.Length;
         }
 
         /// <summary>退出作用域（重复 Dispose 安全）。</summary>
