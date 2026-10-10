@@ -52,6 +52,7 @@ namespace Revolution
         /// <summary>加一个监听者。返回 false = 已经加过（去重）或已到上限（报 Overflow）。</summary>
         internal bool Add(RevMonoPhase phase, Action action, object owner)
         {
+            // 枚举可被强转成任意整数；不先校验就索引相位数组会越界并把坏输入变成运行时异常。
             if (!IsValidPhase(phase))
             {
                 ReportFailure(RevMonoErrorReason.InvalidPhase, "Add 收到未定义相位值 " + (int)phase);
@@ -86,6 +87,7 @@ namespace Revolution
         /// <summary>移除一个监听者（没加过也没事，返回 false）。</summary>
         internal bool Remove(RevMonoPhase phase, Action action)
         {
+            // 与 Add 对称地拒绝非法 enum 值，避免 Remove 对外部输入直接做越界索引。
             if (!IsValidPhase(phase)) return false;
             if (action == null) return false;
 
@@ -187,6 +189,7 @@ namespace Revolution
 
         internal void ReportFailure(RevMonoErrorReason reason, string message)
         {
+            // 多播委托直接 Invoke 时单个订阅者抛错会跳过后续订阅者；逐个隔离，避免错误观察器中断派发。
             Action<RevMonoErrorReason, string> handlers = Failed;
             if (handlers == null) return;
             foreach (Action<RevMonoErrorReason, string> handler in handlers.GetInvocationList())

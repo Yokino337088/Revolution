@@ -434,7 +434,8 @@ namespace Revolution
             if (_byKey.TryGetValue(key, out RevGameObjectPool old))
             {
                 // 已有这条池（多半是 prefab 被外部卸载过）→ 换 prefab 与句柄，旧实例清掉重建。
-                // 同时摘掉旧 prefab ID，否则之后按旧引用销毁池会命中残留索引。
+                // Rebind 会改变池绑定的 prefab ID；若不摘旧索引，旧引用仍会解析到这条新池，
+                // 导致按 prefab 查找/销毁时池身份与 prefab 映射不一致。
                 int oldPrefabId = old.PrefabInstanceId;
                 old.Rebind(prefab, handle, rootPath, resName);
                 if (oldPrefabId != 0 && oldPrefabId != old.PrefabInstanceId &&

@@ -32,6 +32,8 @@ namespace Revolution
 
         internal static void ResetForNewSession()
         {
+            // 关闭 Domain Reload 时宿主可能跨 Play 会话存活：停掉其上一局协程，但保留有效宿主，
+            // 并同步 DriverReady；否则新会话会误判无宿主，或让上一局协程继续执行。
             if (_instance != null)
             {
                 _instance.StopAllCoroutines();

@@ -65,6 +65,8 @@ namespace Revolution
             if (handle == null || ticket.Completed) return handle;
 
             // Unity 会在 StartCoroutine 返回前运行到第一个 yield；首段中可能重入 Close/Dispose。
+            // 此时 Coroutine 句柄还没返回、也未登记进 _routines，Close 无法停掉它；返回后再比版本，
+            // 若作用域已关闭就立刻 Stop，避免协程逃出作用域继续运行。
             if (_disposed || version != _version)
             {
                 RevMono.StopCoroutine(handle);
@@ -109,6 +111,8 @@ namespace Revolution
 
         internal int StopRoutines()
         {
+            // 先推进版本，使正在 StartCoroutine 首帧重入的调用也能发现作用域已关闭；
+            // 先快照再 Stop，避免协程 finally 回调移除自身句柄时破坏正在遍历的列表。
             _version++;
             Coroutine[] routines = _routines.ToArray();
             _routines.Clear();

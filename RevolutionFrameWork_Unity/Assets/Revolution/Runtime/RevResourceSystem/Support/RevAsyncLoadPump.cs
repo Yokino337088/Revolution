@@ -54,6 +54,8 @@ namespace Revolution
         /// <summary>Domain Reload 关闭时结束上一会话任务，避免旧 pump 状态阻塞新一局。</summary>
         internal static void ResetForNewSession()
         {
+            // 上一局 PumpLoop 可能还挂在 Scheduler 的下一帧队列；代际递增令旧循环退出，
+            // 并防止它晚到的 finally 清掉新会话的 _pumping、把旧队列再次启动。
             _pumpGeneration++;
             _pumping = false;
             var jobs = new List<RevLoadJob>(_waiting.Count + _loading.Count);
@@ -192,6 +194,8 @@ namespace Revolution
             job.finished = true;
             _waiting.Remove(job);
             _loading.Remove(job);
+            // 取消的旧任务允许同 key 立即提交新任务；旧任务迟到完成时只能摘掉自己的索引，
+            // 否则会误删新任务，让后续请求重复加载并破坏回调合并。
             if (_jobByKey.TryGetValue(job.handle.Key, out RevLoadJob registered) && ReferenceEquals(registered, job))
                 _jobByKey.Remove(job.handle.Key);
 
@@ -213,6 +217,8 @@ namespace Revolution
 
             if (!notifyNow)
             {
+                // 在途 loader 仍可能异步完成，故先从 key 索引摘除让新请求能独立重试；
+                // 但当前 RunJob 仍持有 job 与 callbacks，等 loader 回调后由 CompleteJob 统一通知，避免过早重入资源缓存清理。
                 if (_jobByKey.TryGetValue(job.handle.Key, out RevLoadJob registered) && ReferenceEquals(registered, job))
                     _jobByKey.Remove(job.handle.Key);
                 return;

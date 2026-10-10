@@ -185,6 +185,8 @@ namespace Revolution
                 return false;
             }
 
+            // _onPut 可能调用业务 OnPoolReturn；若其中重入 Return，此时对象尚未移出 active，
+            // 只检查 idle/delaying 会漏掉这次递归并重复清理/入池，所以回调前先标记 returning。
             _returningSet.Add(item);
             try { _onPut?.Invoke(item); }        // 业务清理 / 失活 / 挂回池节点
             finally { _returningSet.Remove(item); }

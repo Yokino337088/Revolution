@@ -124,6 +124,7 @@ namespace Revolution
 
             // ① 缓存命中（零字符串分配）
             ulong key = RevResPathUtil.ComputeKey(rootPath, resName);
+            // 已释放到零的失败句柄不能永久挡住后续重试；先摘除旧失败项，避免重复 Load 永远返回旧错误。
             if (_cache.TryGetValue(key, out RevResHandle existing) && !existing.IsLoaded && !existing.IsLoading && existing.RefCount <= 0)
                 DiscardFailedHandle(key, existing);
             if (TryHitCache(key, contentType, group, out RevResHandle hit)) return hit;
@@ -137,6 +138,8 @@ namespace Revolution
         {
             if (_cache.TryGetValue(key, out RevResHandle cached))
             {
+                // 缓存键只有路径、不含 T；若不校验类型，错误的缓存命中会静默把 Content as T 变成 null。
+                // 返回独立失败句柄而不增加原句柄引用，避免类型冲突污染正常资源的租约计数。
                 if (!CanSatisfyType(cached, contentType))
                 {
                     handle = CreateTypeMismatchHandle(cached.StandardPath, contentType, cached.ContentType);
@@ -496,6 +499,8 @@ namespace Revolution
             }
         }
 
+        // 句柄按路径 key 复用，但卸载后同 key 可以创建新一代句柄；旧句柄若只按 key DecRef，
+        // 会误减新资源的引用计数。因此涉及“句柄实例”的释放必须同时确认它仍是缓存当前对象。
         internal static bool IsCurrent(RevResHandle handle)
             => handle != null && handle.Key != 0
                && _cache.TryGetValue(handle.Key, out RevResHandle current)
@@ -744,6 +749,8 @@ namespace Revolution
         private static void ReleaseBundleOf(RevResHandle handle)
         {
             if (handle == null || !handle.BundleAcquired) return;
+            // 先清除句柄上的租约状态与快照，再执行释放：重复清理路径会被短路，
+            // 且之后不会依据已变化的 Manifest 依赖关系错误地释放另一组依赖。
             handle.BundleAcquired = false;
             RevABLoader loader = handle.BundleLoader;
             string bundleName = handle.BundleName;
