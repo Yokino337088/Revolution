@@ -1,4 +1,0 @@
-文档与 Demo：讲清带数据面板的数据流转与 SetData 调用位置
-
-- UI系统使用说明（md + html）：第四节重写为新手向教程（4.1 基本写法 / 4.2 Data 何时有值 / 4.3 OnRefreshView 触发时机对照表 / 4.4 OnRefreshView 与 OnDataChanged 分工 / 4.5 SetData 调用权归属），修正生命周期表里 OnRefreshView 的时机描述，新手坑表补第13条"改了数据界面没反应"
-- RevUIDemoDataPanel.cs：文件头补数据流转总览图、SetData 调用位置说明与 struct/class 值语义教学，各钩子注释展开三个触发时机与落屏纪律；修正 OnDataChanged 中多余的手动 RefreshView（此前每次换数据会画两遍）
