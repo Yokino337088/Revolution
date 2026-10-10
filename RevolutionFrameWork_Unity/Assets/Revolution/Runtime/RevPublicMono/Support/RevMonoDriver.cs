@@ -32,8 +32,9 @@ namespace Revolution
 
         internal static void ResetForNewSession()
         {
-            // 关闭 Domain Reload 时宿主可能跨 Play 会话存活：停掉其上一局协程，但保留有效宿主，
-            // 并同步 DriverReady；否则新会话会误判无宿主，或让上一局协程继续执行。
+            // 关闭 Domain Reload 时，Unity 不会重建静态字段；隐藏的 RevMono GameObject 因此可能从上一局 Play 留到下一局。
+            // 旧协程必须停止，避免继续操作上一局对象；但有效的宿主仍然存在，所以不能把 DriverReady 错设为 false，
+            // 否则新一局会误以为没有驱动，或重复创建第二个宿主。
             if (_instance != null)
             {
                 _instance.StopAllCoroutines();

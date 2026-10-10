@@ -65,8 +65,24 @@ namespace Revolution
         /// <summary>全局暂停（切场景/打开设置面板时冻结整个模块；不是 timeScale）。</summary>
         internal bool Paused { get; set; }
 
-        /// <summary>是否已被手动驱动接管（业务自己调 Tick 之后，宿主适配层自动让位）。</summary>
-        internal bool ManualDriven { get; private set; }
+        /// <summary>
+        /// 渲染帧（Update）是否已被业务手动驱动。
+        /// 以前只有一个 ManualDriven：业务只在自己的 FixedUpdate 里调 TickFixed，也会让宿主的 Update 让位，
+        /// 结果 Scaled / Unscaled / Server 三个域全部停摆且没有任何提示。现在渲染帧与逻辑帧各用一个标记，互不牵连。
+        /// </summary>
+        internal bool ManualRenderDriven { get; private set; }
+
+        /// <summary>逻辑帧（FixedUpdate）是否已被业务手动驱动（只影响 Fixed 域）。</summary>
+        internal bool ManualFixedDriven { get; private set; }
+
+        /// <summary>是否有任何一路被手动驱动接管（兼容旧属性；宿主驱动请分别看上面两个）。</summary>
+        internal bool ManualDriven => ManualRenderDriven || ManualFixedDriven;
+
+        /// <summary>
+        /// 读取"此刻真实时间"的出口（由 Support 层接到 Time.realtimeSinceStartupAsDouble；纯 C# 单测时为 null）。
+        /// 用途：游戏刚启动、还没 Tick 过时就校准服务器时间，锚点不能用初值 0，否则 Server 域会整体偏快。
+        /// </summary>
+        internal Func<double> RealtimeProvider;
 
         /// <summary>游戏时间/真实时间的累计读数（秒）—— 业务做节流/统计时可直接读。</summary>
         internal double GameTime { get; private set; }
@@ -105,9 +121,41 @@ namespace Revolution
 
         // ==================== 创建 ====================
 
+        /// <summary>
+        /// 取校准服务器时间用的"此刻 realtime"：优先问真实时钟，没有就退回最近一次 Tick 见到的值。
+        /// 原因：LatestRealtime 只在 Tick 里更新，而第一个 Tick 要等到创建过计时器、宿主挂好之后才会发生；
+        /// 登录时先收到服务器时间就校准，锚点会变成 (服务器时间, 0)，之后外推 = 服务器时间 + 当前 realtime，
+        /// 等于凭空多算了"游戏启动到校准那一刻"的秒数，At 计时器会提前触发。
+        /// </summary>
+        internal double CurrentRealtime()
+        {
+            Func<double> provider = RealtimeProvider;
+            if (provider != null)
+            {
+                double value = provider();
+                if (!double.IsNaN(value) && !double.IsInfinity(value)) return value;
+            }
+
+            return LatestRealtime;
+        }
+
+        /// <summary>校准服务器时间（门面入口；锚点取真实 realtime，并顺手确保驱动已就位）。</summary>
+        internal void SyncServerTime(DateTime serverUtc)
+        {
+            EnsureDriver?.Invoke();
+            Clock.Sync(serverUtc, CurrentRealtime());
+        }
+
         internal RevTimerHandle Add(RevTimeDomain domain, double duration, double interval, long repeats,
             bool absolute, DateTime targetUtc, Action callback, Action<int> repeatCallback, object owner)
         {
+            // 先确保驱动存在，再占用槽位：如果创建宿主 GameObject 时抛异常，不会留下一个调用方拿不到句柄、
+            // 却会照常运行的"幽灵计时器"（以前是占完槽位、写完字段才调用 EnsureDriver）。
+            EnsureDriver?.Invoke();
+
+            // 统一成 UTC：调用方传 DateTime.Now（Local）时，直接比较 Ticks 会差出整个时区偏移。
+            if (targetUtc.Kind == DateTimeKind.Local) targetUtc = targetUtc.ToUniversalTime();
+
             if (callback == null && repeatCallback == null)
             {
                 RaiseFailed(RevTimerErrorReason.InvalidDuration, "回调是空的（既没有普通回调也没有带次数回调）");
@@ -154,6 +202,13 @@ namespace Revolution
                     RaiseFailed(RevTimerErrorReason.InvalidDuration, "次数是 0（要无限次请传 -1，要一次请用 After）");
                     return RevTimerHandle.Empty;
                 }
+
+                // 文档只约定 -1 表示无限；-5 这类其他负数多半是计算出错，悄悄当成"无限循环"会造成永久泄漏，所以拒绝。
+                if (repeats < -1)
+                {
+                    RaiseFailed(RevTimerErrorReason.InvalidDuration, $"次数非法：{repeats}（只有 -1 表示无限）");
+                    return RevTimerHandle.Empty;
+                }
             }
 
             if (_table.AliveCount >= RevTimerLimits.MaxTimers)
@@ -192,9 +247,6 @@ namespace Revolution
             entry.RepeatCallback = repeatCallback;
             entry.Owner = owner;
 
-            // ★ 零配置：第一次用到就喊一声，让宿主适配层把隐藏驱动挂起来（业务不摆物体、不挂脚本）
-            EnsureDriver?.Invoke();
-
             return new RevTimerHandle(this, slot, generation);
         }
 
@@ -209,45 +261,81 @@ namespace Revolution
             // ★ Bug 修复（2026-09-30）：realtime 读数必须在暂停判断**之前**记录 ——
             //   LatestRealtime 永远保持最新（暂停期间 SyncServerTime 的锚点靠它才不会陈旧）；
             //   LastRealtime 只在未暂停时更新（保持"暂停冻结剩余时间读数"的原有语义不变）。
-            LatestRealtime = realtimeSinceStartup;
+            // NaN / Infinity 不是正常时间：一旦混进累计值，GameTime 和所有 Elapsed 会永久变成 NaN，
+            // 而 NaN >= Duration 恒为 false，所有计时器就再也不会触发。所以非有限的 realtime 不记录。
+            if (!double.IsNaN(realtimeSinceStartup) && !double.IsInfinity(realtimeSinceStartup))
+                LatestRealtime = realtimeSinceStartup;
+            else
+                realtimeSinceStartup = LatestRealtime;
 
             if (Paused) return;                                  // 全局暂停：整块冻结（含 Server，见 README"暂停语义"）
 
-            if (scaledDelta < 0f) scaledDelta = 0f;               // 防御：负 delta（时间被拨回/首帧）一律当 0
-            if (unscaledDelta < 0f) unscaledDelta = 0f;
+            // 回调里再调用 Tick（重入）会清掉外层正在遍历的待触发清单，外层剩下的到期项就丢了，
+            // 还会提前把 _inTick 改回 false。重入的这一次直接忽略，外层本来就在推进这一帧。
+            if (_inTick) return;
+
+            // "!(x >= 0)" 同时挡住负数和 NaN；Infinity 单独判断。
+            if (!(scaledDelta >= 0f) || float.IsInfinity(scaledDelta)) scaledDelta = 0f;
+            if (!(unscaledDelta >= 0f) || float.IsInfinity(unscaledDelta)) unscaledDelta = 0f;
 
             GameTime += scaledDelta;
             RealTime += unscaledDelta;
             LastRealtime = realtimeSinceStartup;
 
             _inTick = true;
-            AdvanceAccumulated(scaledDelta, RevTimeDomain.Scaled);
-            AdvanceAccumulated(unscaledDelta, RevTimeDomain.Unscaled);
-            AdvanceAbsolute(realtimeSinceStartup);
-            _inTick = false;
+            try
+            {
+                // 每个域各自保护：前一个域派发时若有异常冒出来，后面的域仍会被推进，
+                // 否则这一帧的时间会永久少算，且 _inTick 会卡在 true。
+                try { AdvanceAccumulated(scaledDelta, RevTimeDomain.Scaled); }
+                catch (Exception e) { ReportInternalError(e, "Scaled"); }
+
+                try { AdvanceAccumulated(unscaledDelta, RevTimeDomain.Unscaled); }
+                catch (Exception e) { ReportInternalError(e, "Unscaled"); }
+
+                try { AdvanceAbsolute(realtimeSinceStartup); }
+                catch (Exception e) { ReportInternalError(e, "Server"); }
+            }
+            finally
+            {
+                _inTick = false;
+            }
         }
 
         /// <summary>逻辑帧驱动：只推进 Fixed 域（对齐王者的 UpdateLogic —— 60fps 与 30fps 手机的 CD 推进一致）。</summary>
         internal void TickFixed(float fixedDelta)
         {
             if (Paused) return;
-            if (fixedDelta < 0f) fixedDelta = 0f;
+            if (_inTick) return;                                  // 同 Tick：回调里重入会破坏外层派发，忽略
+
+            if (!(fixedDelta >= 0f) || float.IsInfinity(fixedDelta)) fixedDelta = 0f;   // 负数 / NaN / Infinity 都当 0
 
             _inTick = true;
-            AdvanceAccumulated(fixedDelta, RevTimeDomain.Fixed);
-            _inTick = false;
+            try
+            {
+                AdvanceAccumulated(fixedDelta, RevTimeDomain.Fixed);
+            }
+            catch (Exception e)
+            {
+                ReportInternalError(e, "Fixed");
+            }
+            finally
+            {
+                _inTick = false;
+            }
         }
 
-        /// <summary>手动驱动入口（门面转发）：接管后宿主不再自动 Tick，避免"同一帧推进两次"。</summary>
+        /// <summary>手动驱动渲染帧（门面转发）：接管后宿主的 Update 让位，避免"同一帧推进两次"。只影响渲染帧三个域。</summary>
         internal void TickManual(float scaledDelta, float unscaledDelta, double realtimeSinceStartup)
         {
-            ManualDriven = true;
+            ManualRenderDriven = true;
             Tick(scaledDelta, unscaledDelta, realtimeSinceStartup);
         }
 
+        /// <summary>手动驱动逻辑帧：只让宿主的 FixedUpdate 让位，Update 仍由宿主负责（不再牵连其他域）。</summary>
         internal void TickFixedManual(float fixedDelta)
         {
-            ManualDriven = true;
+            ManualFixedDriven = true;
             TickFixed(fixedDelta);
         }
 
@@ -352,11 +440,33 @@ namespace Revolution
             }
             catch (Exception e)
             {
-                string what = Describe(entry);
-                RaiseFailed(RevTimerErrorReason.CallbackThrew, what);
-                OnException?.Invoke(e,
-                    $"[RevTimer] 回调抛异常（{what}）。已隔离：其余计时器照常推进；" +
-                    "该计时器不会被自动终止（循环计时器下一轮仍会触发，但每次都会报到 OnException）。");
+                // 上报环节本身也可能出错（订阅者或日志出口抛异常）。如果不再包一层，
+                // 异常会冒出派发循环：本帧后面的到期计时器不会执行，而一次性计时器已被标记待回收，会被悄悄丢掉。
+                try
+                {
+                    string what = Describe(entry);
+                    RaiseFailed(RevTimerErrorReason.CallbackThrew, what);
+                    OnException?.Invoke(e,
+                        $"[RevTimer] 回调抛异常（{what}）。已隔离：其余计时器照常推进；" +
+                        "该计时器不会被自动终止（循环计时器下一轮仍会触发，但每次都会报到 OnException）。");
+                }
+                catch
+                {
+                    // 上报失败就放弃上报，不能让它影响其他计时器。
+                }
+            }
+        }
+
+        /// <summary>内核自身的意外（例如服务器时间外推溢出）：只记录，不让它打断后续域的推进。</summary>
+        private void ReportInternalError(Exception e, string where)
+        {
+            try
+            {
+                OnException?.Invoke(e, $"[RevTimer] 推进 {where} 域时发生内部异常，已隔离（其他域继续推进）。");
+            }
+            catch
+            {
+                // 出口自己出错也只能忽略。
             }
         }
 
@@ -472,12 +582,16 @@ namespace Revolution
             _inTick = false;
             ClearAll();
             Clock.Reset();
+            // 关闭 Domain Reload 时静态内核会跨 Play 保留：上一局订阅 Failed 的处理器（常捕获了已销毁的 UI）
+            // 在新一局仍会收到事件。业务在本局初始化时可以重新订阅，所以这里清空是安全的。
+            Failed = null;
             GameTime = 0d;
             RealTime = 0d;
             LastRealtime = 0d;
             LatestRealtime = 0d;                                 // ★ 与 LastRealtime 一同归零（2026-09-30 随 Bug 修复新增）
             Paused = false;
-            ManualDriven = false;
+            ManualRenderDriven = false;
+            ManualFixedDriven = false;
         }
 
         // ==================== 内部小工具 ====================
@@ -506,11 +620,28 @@ namespace Revolution
 
         private void RaiseFailed(RevTimerErrorReason reason, string detail)
         {
-            Failed?.Invoke(reason, detail);
+            // Failed 可能有多个订阅者：逐个调用并各自捕获异常，一个写错的订阅者不能让别人收不到通知，
+            // 更不能把异常抛回创建计时器的调用方或派发循环。
+            Action<RevTimerErrorReason, string> handlers = Failed;
+            if (handlers != null)
+            {
+                foreach (Action<RevTimerErrorReason, string> handler in handlers.GetInvocationList())
+                {
+                    try { handler(reason, detail); }
+                    catch (Exception e) { RevLog.Exception(e, "RevTimer.Failed 订阅者异常", "Timer"); }
+                }
+            }
 
             string text = $"[RevTimer] {reason}：{detail}";
-            if (Log != null) Log(text);
-            else RevLog.Warn(text, "Timer");       // 没被接管时也绝不静默（以前这里是"什么都不发生"）
+            try
+            {
+                if (Log != null) Log(text);
+                else RevLog.Warn(text, "Timer");       // 没被接管时也绝不静默（以前这里是"什么都不发生"）
+            }
+            catch (Exception e)
+            {
+                RevLog.Exception(e, "RevTimer 日志出口异常", "Timer");
+            }
         }
     }
 }

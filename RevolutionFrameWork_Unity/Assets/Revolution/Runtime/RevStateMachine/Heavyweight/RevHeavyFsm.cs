@@ -284,9 +284,11 @@ namespace Revolution
             if (!IsEnabled) return false;
             if (RejectIfInCallback(target)) return false;
             if (!TryGetState(target, out RevHeavyFsmState<TStateEnum, TOwner> targetState)) return false;
-            if (ReferenceEquals(targetState, _current)) return false;
 
-            AbortPendingAsync();        // 同步请求优先，作废在途的异步切换
+            // 同步请求的规则是“现在就决定，不等异步准备”。所以即使目标就是当前状态，也要先取消正在准备去其他状态的旧请求，
+            // 否则旧请求稍后完成仍会把状态机带走。取消后当前状态已经正确，无需再对同一实例重复执行 OnExit/OnEnter。
+            AbortPendingAsync();
+            if (ReferenceEquals(targetState, _current)) return false;
             Commit(targetState, reason);
             return true;
         }
@@ -305,7 +307,13 @@ namespace Revolution
             if (!IsEnabled) return RevTask.Completed;
             if (RejectIfInCallback(target)) return RevTask.Completed;
             if (!TryGetState(target, out RevHeavyFsmState<TStateEnum, TOwner> targetState)) return RevTask.Completed;
-            if (ReferenceEquals(targetState, _current) && !IsTransitioning) return RevTask.Completed;
+            if (ReferenceEquals(targetState, _current))
+            {
+                // 当前枚举对应的状态对象已经激活。若先前异步请求正在准备切走，新请求等于撤销那次离开；取消旧请求后就应留在原地。
+                // 不要再启动一次“从当前状态切到它自己”的事务，否则会重复调用准备、退出和进入回调，可能重复创建资源或重置 AI。
+                if (IsTransitioning) AbortPendingAsync();
+                return RevTask.Completed;
+            }
 
             AbortPendingAsync();        // 更新的请求胜出，旧的在途切换作废
 

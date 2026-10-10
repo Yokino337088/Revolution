@@ -178,6 +178,9 @@ namespace Revolution
         /// </summary>
         internal void Tick(float deltaTime, float unscaledDeltaTime, double realtime, int frame)
         {
+            // 一次 Tick 会依次写入本帧输入、更新按键状态、识别手势并派发事件；这些步骤共用同一份数据。
+            // 如果采集或业务回调里又调用 Tick（重入），内层调用会把外层尚未处理完的帧数据覆盖，造成丢按键、重复事件或手势错乱。
+            // 因此明确拒绝第二次进入；下面的 finally 保证即使处理过程抛异常，也会解除“正在 Tick”标记，不会让后续帧永久被挡住。
             if (_isTicking) throw new InvalidOperationException("RevInput.Tick 不能从采集或事件回调中重入。");
             _isTicking = true;
             try
@@ -240,6 +243,8 @@ namespace Revolution
 
             // ③ 手势识别（全部屏蔽时连识别都不做：指针位置也读不到）
             Gestures.BeginFrame();
+            // Pointer 屏蔽不会从原始快照中删除手指，因为其他 API 仍可能需要查看原始采样；因此识别器也必须单独收到屏蔽规则。
+            // 如果漏传，业务查询虽然看不到被屏蔽的手指，手势识别器却仍会读到它并发出 Tap/Swipe，或把它加入 Pinch/Rotate。
             Gestures.Update(Snapshot, realtime, worldBlocked || allBlocked, _pointerBlockPredicate);
 
             // ④ 派发动作事件
@@ -293,6 +298,9 @@ namespace Revolution
 
         private void SnapshotDispatchSubscriptions()
         {
+            // 事件回调可以当场添加或移除订阅。如果一边遍历原列表一边执行回调，列表长度和位置会立刻变化，
+            // 可能跳过还没收到事件的订阅者，甚至访问越界；刚添加的订阅也可能在本帧中途意外收到事件。
+            // 先复制本帧开始时的订阅名单：本帧按这份名单派发，回调里的增删从下一帧开始生效。
             _pressedDispatch.Clear();
             _pressedDispatch.AddRange(_pressed);
             _releasedDispatch.Clear();
@@ -319,6 +327,8 @@ namespace Revolution
 
         private void DispatchActionEvents(List<ActionEntry> list, bool pressed)
         {
+            // 本帧开始时已复制了待派发的动作名单；某个回调可能在派发途中删除另一个动作，但它仍留在这份副本里。
+            // 每次调用前再查动作是否存在，已删除就跳过，避免之后继续触发旧的按下/抬起回调。
             if (list.Count == 0) return;
             for (int i = list.Count - 1; i >= 0; i--)
             {
@@ -456,6 +466,7 @@ namespace Revolution
                 if (Actions.Find(action.Action) == null) continue;
                 float value = action.State.Axis;
 
+                // 每个 handler 用自己的 HasValue 基线；新订阅即使当前值为 0 也必须先收到一次初始化值。
                 for (int h = _axisDispatch.Count - 1; h >= 0; h--)
                 {
                     AxisEntry entry = _axisDispatch[h];
@@ -477,6 +488,7 @@ namespace Revolution
                 }
 
                 if (Actions.Find(action.Action) == null) continue;
+                // Listener 也逐个记录是否收到过轴值；不可只依赖全局值变化，新监听者首值为 0 时仍要初始化。
                 for (int l = _listenerDispatch.Count - 1; l >= 0; l--)
                 {
                     RevInputListener listener = _listenerDispatch[l].Listener;
@@ -586,6 +598,8 @@ namespace Revolution
 
         internal bool RemoveAxisHandler(string axis, Action<float> handler)
         {
+            // handler 是 null 时，公开 API 的意思是“退订这根轴上的所有处理器”，而不是只删其中一个。
+            // 倒序遍历并持续删除所有匹配项；若找到一个就提前返回，其他同轴处理器仍会继续收到输入。
             bool removed = false;
             for (int i = _axisHandlers.Count - 1; i >= 0; i--)
             {
@@ -607,6 +621,7 @@ namespace Revolution
 
         internal bool RemoveRepeatHandler(string action, Action handler)
         {
+            // handler 为 null 表示清空该动作全部连发订阅；必须移除所有匹配项，避免未退订处理器继续触发。
             bool removed = false;
             for (int i = _repeatHandlers.Count - 1; i >= 0; i--)
             {
@@ -646,12 +661,9 @@ namespace Revolution
             _repeatHandlers.Clear();
             _nextBlockId = 1;
 
-            // ★ Bug 修复（2026-09-30）：Failed 事件的订阅必须一并放掉 —— 上面清了全部六类
-            //   事件/监听订阅，唯独漏了它。关闭 Domain Reload（项目常态）时本实例跨局存活，
-            //   上一局订阅 RevInput.Failed 的处理器（常是引用已销毁 UI 的闭包）在新一局
-            //   还会被调用（键位配错等失败报到死对象上）且闭包引用泄漏 ——
-            //   与 RevMono.ResetForNewSession 补 Failed 是同一个鬼故事的同一个口子。
-            //   业务在运行期初始化（晚于 InstallInPlayer）会重新订阅，不受影响。
+            // 关闭 Domain Reload 时，Unity 不会重建这个输入内核；如果不清事件，上一局订阅 Failed 的回调会留到下一局。
+            // 这些回调常常捕获了旧 UI 或旧管理器：下一局发生键位配置错误时，会调用已经销毁的对象，还会一直占用它的内存。
+            // 因此和其他输入订阅一样，在新会话开始时清空 Failed；本局业务初始化完成后可以重新订阅，不会影响正常使用。
             Failed = null;
 
             ManualDriven = false;
@@ -804,6 +816,8 @@ namespace Revolution
         internal bool RemoveAction(string action)
         {
             if (!Actions.Remove(action)) return false;
+            // 订阅记录按动作名字保存。删除动作后如果只删绑定、不删订阅，之后重新创建同名动作时，旧的按下、抬起、连发和轴回调会突然复活。
+            // 所以一并删除该动作的订阅与轴缓存；本帧已经复制出去的派发名单也会在调用前再次确认动作仍存在。
             RemoveActionSubscriptions(action);
             for (int i = _listenerAxisLast.Count - 1; i >= 0; i--)
                 if (_listenerAxisLast[i].Axis == action) _listenerAxisLast.RemoveAt(i);

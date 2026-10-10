@@ -185,8 +185,9 @@ namespace Revolution
                 return false;
             }
 
-            // _onPut 可能调用业务 OnPoolReturn；若其中重入 Return，此时对象尚未移出 active，
-            // 只检查 idle/delaying 会漏掉这次递归并重复清理/入池，所以回调前先标记 returning。
+            // 归还时框架会调用业务的 OnPoolReturn 来清状态。这个业务回调也可能再次调用 Return（例如清理函数间接触发了回收）。
+            // 此时对象还在“借出中”集合里，也还没进入空闲或延迟队列；如果不额外标记“正在归还”，第二次 Return 就会再清一次、再入池一次，
+            // 最后同一个对象可能被 Get 两次发给不同业务方。先加入 _returningSet，直到回调结束后再移除，专门挡住这类递归归还。
             _returningSet.Add(item);
             try { _onPut?.Invoke(item); }        // 业务清理 / 失活 / 挂回池节点
             finally { _returningSet.Remove(item); }

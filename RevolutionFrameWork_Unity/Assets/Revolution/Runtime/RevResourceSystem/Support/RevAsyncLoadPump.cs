@@ -54,8 +54,9 @@ namespace Revolution
         /// <summary>Domain Reload 关闭时结束上一会话任务，避免旧 pump 状态阻塞新一局。</summary>
         internal static void ResetForNewSession()
         {
-            // 上一局 PumpLoop 可能还挂在 Scheduler 的下一帧队列；代际递增令旧循环退出，
-            // 并防止它晚到的 finally 清掉新会话的 _pumping、把旧队列再次启动。
+            // 关闭 Domain Reload 时，静态字段不会自动清空；上一局的 PumpLoop 可能还在等 Scheduler 的“下一帧”。
+            // 新一局先增加代际号，旧循环恢复时就知道自己属于上一局并停止；否则旧循环的 finally 可能把新循环标成未运行，
+            // 或重新启动旧任务队列，造成新请求卡住、重复回调或加载重复执行。
             _pumpGeneration++;
             _pumping = false;
             var jobs = new List<RevLoadJob>(_waiting.Count + _loading.Count);
@@ -76,8 +77,9 @@ namespace Revolution
         {
             if (handle == null) { onFinished?.Invoke(RevResHandle.Empty); return; }
 
-            // 同资源已有且未取消的任务：合并回调。已取消的旧任务不接收新请求，
-            // 否则 Shutdown 后立即重载会被合并进旧任务并收到 Cancelled。
+            // 同一路径正在正常加载时，新请求只需把自己的完成回调加到该任务上；这样共用一次磁盘/AB 读取，完成后各请求都会收到结果。
+            // 但已取消的任务不能再接收新请求：例如关闭界面后马上重开，旧任务即使还没完全结束也已经注定回调 Cancelled。
+            // 新请求应启动一条新任务，而不是合并到旧任务后跟着失败。
             if (_jobByKey.TryGetValue(handle.Key, out RevLoadJob exist) && !exist.cancelRequested)
             {
                 if (onFinished != null) exist.callbacks.Add(onFinished);
@@ -190,12 +192,15 @@ namespace Revolution
 
         private static void CompleteJob(RevLoadJob job, string callbackContext)
         {
+            // 等待队列取消或进入新会话时，调用方可能已经收到一次“已取消”结果；底层 loader 之后仍可能完成并再次回调。
+            // finished 是一次性完成标记：任务只通知一次、只从队列移除一次，防止同一个请求收到两次结果或重复修改资源缓存。
             if (job.finished) return;
             job.finished = true;
             _waiting.Remove(job);
             _loading.Remove(job);
-            // 取消的旧任务允许同 key 立即提交新任务；旧任务迟到完成时只能摘掉自己的索引，
-            // 否则会误删新任务，让后续请求重复加载并破坏回调合并。
+            // 任务取消后，同一资源路径可以马上开始一次新的加载；旧加载器仍可能稍后才回调。
+            // 旧任务完成时要先确认 key 表里登记的还是自己，再删除登记；否则它可能把新任务的登记误删，
+            // 后续请求就找不到正在加载的新任务，重复发起加载，也无法正确合并等待回调。
             if (_jobByKey.TryGetValue(job.handle.Key, out RevLoadJob registered) && ReferenceEquals(registered, job))
                 _jobByKey.Remove(job.handle.Key);
 
@@ -217,8 +222,9 @@ namespace Revolution
 
             if (!notifyNow)
             {
-                // 在途 loader 仍可能异步完成，故先从 key 索引摘除让新请求能独立重试；
-                // 但当前 RunJob 仍持有 job 与 callbacks，等 loader 回调后由 CompleteJob 统一通知，避免过早重入资源缓存清理。
+                // 正在加载的 loader 可能还会回调，所以先从“资源路径 → 任务”表里移除旧任务，让同一路径的新请求能马上新建任务。
+                // 这里暂时不通知业务：旧 loader 还在执行，若先通知并清理缓存，旧 loader 随后可能又把结果写回来。
+                // RunJob 仍保留这条旧任务的回调，等 loader 真正结束后再统一通知；finished 会防止重复通知。
                 if (_jobByKey.TryGetValue(job.handle.Key, out RevLoadJob registered) && ReferenceEquals(registered, job))
                     _jobByKey.Remove(job.handle.Key);
                 return;

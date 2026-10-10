@@ -52,7 +52,8 @@ namespace Revolution
         /// <summary>加一个监听者。返回 false = 已经加过（去重）或已到上限（报 Overflow）。</summary>
         internal bool Add(RevMonoPhase phase, Action action, object owner)
         {
-            // 枚举可被强转成任意整数；不先校验就索引相位数组会越界并把坏输入变成运行时异常。
+            // RevMonoPhase 虽然是 enum，调用方仍可把任意整数强制转成它。若直接拿这个值访问 Update/LateUpdate/FixedUpdate 列表，
+            // 非法值会变成数组越界异常。先检查只接受三个已定义相位；错误输入明确失败，不让异常打断游戏循环。
             if (!IsValidPhase(phase))
             {
                 ReportFailure(RevMonoErrorReason.InvalidPhase, "Add 收到未定义相位值 " + (int)phase);
@@ -153,6 +154,8 @@ namespace Revolution
             return removed;
         }
 
+        // 诊断接口也可能被传入强转出来的无效 phase。此时返回 0，表示“这个未知相位没有可统计的监听者”，
+        // 而不是拿无效数字访问数组导致整个诊断过程抛越界异常。
         internal int CountOf(RevMonoPhase phase) => IsValidPhase(phase) ? _lists[(int)phase].Count : 0;
 
         private static bool IsValidPhase(RevMonoPhase phase)
@@ -162,6 +165,8 @@ namespace Revolution
 
         internal void Tick(RevMonoPhase phase)
         {
+            // Tick 会由驱动每帧调用；若传入的不是 Update、LateUpdate 或 FixedUpdate，直接忽略这次错误调用。
+            // 这样不会用错误数字访问监听列表并抛越界异常，也不会影响后续正常帧。
             if (!IsValidPhase(phase)) return;
             int index = (int)phase;
             Action[] snapshot = Snapshot(index);
@@ -189,7 +194,8 @@ namespace Revolution
 
         internal void ReportFailure(RevMonoErrorReason reason, string message)
         {
-            // 多播委托直接 Invoke 时单个订阅者抛错会跳过后续订阅者；逐个隔离，避免错误观察器中断派发。
+            // 同一个事件可能有多个业务处理器。若直接一次性 Invoke，多播事件中前一个处理器抛异常会让后面的处理器收不到通知。
+            // 逐个调用并分别捕获异常，保证一个监控/日志处理器出错，不会阻止其他处理器或当帧其他监听逻辑运行。
             Action<RevMonoErrorReason, string> handlers = Failed;
             if (handlers == null) return;
             foreach (Action<RevMonoErrorReason, string> handler in handlers.GetInvocationList())

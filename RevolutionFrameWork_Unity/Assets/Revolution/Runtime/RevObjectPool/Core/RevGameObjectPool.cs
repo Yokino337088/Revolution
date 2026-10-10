@@ -152,7 +152,9 @@ namespace Revolution
         internal void Rebind(GameObject prefab, RevResHandle handle, string rootPath, string resName)
         {
             _core.ClearIdle();
-            // 借出的旧代实例也必须销毁：否则 PoolId 仍指向这条池，之后归还会污染新 prefab 的对象池。
+            // Rebind 表示资源路径对应的 prefab 已换成新版本。已经借给业务的对象仍由旧 prefab 创建，不能留给新版本继续复用。
+            // 每个对象上的 PoolId 仍指向这条池；若只清空闲对象而不销毁借出对象，旧对象稍后 Return 时会被当作新 prefab 对象收回，
+            // 下一次 Get 就可能拿到旧外观、旧组件或旧配置。因此换 prefab 时也销毁所有仍借出的旧代实例。
             _core.DestroyActive();
             ReleasePrefabHandle();                 // 旧句柄若还在资源缓存里，先还掉这份引用再换新
 
@@ -170,7 +172,8 @@ namespace Revolution
             _disposed = true;
 
             _core.ClearIdle();
-            // Dispose 与 Rebind 一样要销毁仍借出的对象；只清空 idle 会让外部持有的实例逃过池销毁。
+            // 销毁整条池时，业务可能还持有尚未 Return 的实例；只清池内空闲对象会让这些对象留在场景里，且仍带着旧 PoolId。
+            // 因此 Dispose 也销毁全部借出实例，避免池记录已消失、对象却永久遗留或之后被错误归还。
             _core.DestroyActive();
 
             if (_root != null)

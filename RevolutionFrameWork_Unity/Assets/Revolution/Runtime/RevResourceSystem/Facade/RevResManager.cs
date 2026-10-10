@@ -124,7 +124,8 @@ namespace Revolution
 
             // ① 缓存命中（零字符串分配）
             ulong key = RevResPathUtil.ComputeKey(rootPath, resName);
-            // 已释放到零的失败句柄不能永久挡住后续重试；先摘除旧失败项，避免重复 Load 永远返回旧错误。
+            // 失败结果也会暂存在缓存里，避免每帧都重复尝试同一个坏路径；但调用方释放失败句柄、引用数归零后，
+            // 以后再次 Load 应该允许重新尝试（例如玩家修正资源或热更已补上文件）。若保留旧失败项，后续请求只会不断拿到上次的错误。
             if (_cache.TryGetValue(key, out RevResHandle existing) && !existing.IsLoaded && !existing.IsLoading && existing.RefCount <= 0)
                 DiscardFailedHandle(key, existing);
             if (TryHitCache(key, contentType, group, out RevResHandle hit)) return hit;
@@ -138,8 +139,9 @@ namespace Revolution
         {
             if (_cache.TryGetValue(key, out RevResHandle cached))
             {
-                // 缓存键只有路径、不含 T；若不校验类型，错误的缓存命中会静默把 Content as T 变成 null。
-                // 返回独立失败句柄而不增加原句柄引用，避免类型冲突污染正常资源的租约计数。
+                // 缓存表用资源路径查找，不把请求的 C# 类型也放进 key。同一路径如果已经按 Sprite 加载，后来又按 Texture 请求，
+                // 不检查类型就会错误复用 Sprite 句柄，业务拿到的 Content as Texture 只会变成 null，看不出真正原因。
+                // 返回一个独立的 TypeMismatch 失败句柄，并且不增加原资源的引用数；这样既明确报错，也不影响正确请求的资源寿命。
                 if (!CanSatisfyType(cached, contentType))
                 {
                     handle = CreateTypeMismatchHandle(cached.StandardPath, contentType, cached.ContentType);
@@ -249,8 +251,9 @@ namespace Revolution
             if (string.IsNullOrEmpty(realPath)) { err = RevResLoadErrorReason.PathNotMapped; return false; }
             handle.RealPath = realPath;
 
-            // 2) 交给该策略的加载器真正加载；自定义 / AB loader 抛异常时隔离为加载失败，
-            //    让句柄继续进入统一缓存和引用释放路径，避免同步 API 把异常漏到业务层并遗失已取得的资源租约。
+            // 2) 交给策略对应的加载器读取文件或 AssetBundle。自定义 Loader 可能因路径、磁盘或 AB 状态异常而抛错，
+            //    若让异常直接传到游戏业务，调用方会拿不到正常的失败句柄，已经增加的资源引用也难以按统一流程归还。
+            //    因此在这里记录异常并把它转换成 BundleLoadFail；后续仍由资源系统缓存和释放这个失败句柄。
             handle.MarkLoading();
             object content;
             try { content = policy.CreateLoader().Load(handle, out err); }
@@ -333,6 +336,9 @@ namespace Revolution
                 {
                     DiscardFailedHandle(key, cached);
                 }
+                // 即使资源还在加载，也要比较请求类型：路径表只按目录和文件名区分，不同类型会共享同一个在途句柄。
+                // 如果一个请求要 Sprite、另一个要不兼容的 Texture，合并后第二个回调拿到的内容转换会变成 null，且加载成功状态会掩盖错误。
+                // 所以类型不兼容时立即回 TypeMismatch，不把新请求加入旧任务，也不增加旧资源的引用数。
                 else if (!CanSatisfyType(cached, contentType))
                 {
                     RevResHandle mismatch = CreateTypeMismatchHandle(cached.StandardPath, contentType, cached.ContentType);
@@ -499,8 +505,9 @@ namespace Revolution
             }
         }
 
-        // 句柄按路径 key 复用，但卸载后同 key 可以创建新一代句柄；旧句柄若只按 key DecRef，
-        // 会误减新资源的引用计数。因此涉及“句柄实例”的释放必须同时确认它仍是缓存当前对象。
+        // 资源路径对应的 key 会被反复使用：旧资源卸载后，同一路径重新加载会生成一张新的 RevResHandle。
+        // 旧业务代码此时可能还拿着旧 handle；若只按路径 key 减引用，就会把新资源的计数减掉，导致它被提前卸载。
+        // 所以按 handle 释放前还要确认缓存里当前对象正是这个 handle 实例；过期句柄不能动新资源的计数。
         internal static bool IsCurrent(RevResHandle handle)
             => handle != null && handle.Key != 0
                && _cache.TryGetValue(handle.Key, out RevResHandle current)
@@ -588,7 +595,8 @@ namespace Revolution
         /// </summary>
         public static void UnloadGroup(RevResGroup group, bool force = false)
         {
-            // 即使调用方绕过 RevResBootstrap.Shutdown，也不能留下加载完成后继续写回该组缓存的在途任务。
+            // 在途任务还没完成时，句柄可能仍标记为 Loading，单靠下面清缓存会跳过它；等它晚到完成又可能把资源写回已卸载的组。
+            // 所以无论调用方是经由 Bootstrap 还是直接调用 Manager，都先取消该组的等待/加载任务，再处理已完成句柄。
             RevAsyncLoadPump.CancelGroup(group);
             var toRemove = new List<ulong>();
 
@@ -749,8 +757,9 @@ namespace Revolution
         private static void ReleaseBundleOf(RevResHandle handle)
         {
             if (handle == null || !handle.BundleAcquired) return;
-            // 先清除句柄上的租约状态与快照，再执行释放：重复清理路径会被短路，
-            // 且之后不会依据已变化的 Manifest 依赖关系错误地释放另一组依赖。
+            // 先把这张句柄上的“已取得 AB 包”标记和依赖清单摘掉，再通知 AB 加载器释放。
+            // 这样如果 Shutdown、失败清理等路径重复走到这里，第二次会发现租约已归还并直接退出，不会把同一份引用减两次。
+            // 同时保存本次加载时的依赖快照；不能释放时再查当前 Manifest，因为热更新后依赖清单可能已经变了。
             handle.BundleAcquired = false;
             RevABLoader loader = handle.BundleLoader;
             string bundleName = handle.BundleName;

@@ -125,13 +125,15 @@ namespace Revolution
         private static void Guard<T>(Action<T> handler, T arg, string what)
         {
             if (handler == null) return;
-            try
+            // 同一个场景事件可能有多个界面/业务模块订阅。若整体 Invoke，前一个订阅者抛异常会跳过后面所有订阅者。
+            // 分别保护每个回调，让某个界面代码出错时，其他模块仍能收到开始、进度、成功或失败通知。
+            foreach (Action<T> subscriber in handler.GetInvocationList())
             {
-                handler(arg);
-            }
-            catch (Exception e)
-            {
-                RevSceneLog.Error("[RevScene] " + what + " 的订阅者抛异常（已隔离）：" + e);
+                try { subscriber(arg); }
+                catch (Exception e)
+                {
+                    RevSceneLog.Error("[RevScene] " + what + " 的订阅者抛异常（已隔离）：" + e);
+                }
             }
         }
     }

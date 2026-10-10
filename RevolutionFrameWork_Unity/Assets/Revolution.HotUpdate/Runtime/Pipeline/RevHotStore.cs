@@ -389,6 +389,9 @@ namespace Revolution.HotUpdate
             string path = CurrentPath();
             string tmp = path + ".tmp";
             string dir = Path.GetDirectoryName(path);
+            // 版本文件通常带目录，例如“游戏目录/current.txt”；但调用方也可能只给文件名。
+            // 只有文件名时 GetDirectoryName 会返回空，CreateDirectory(空字符串) 会抛异常，导致版本指针写入失败。
+            // 所以只有确实有父目录时才创建；没有目录段就直接在当前目录写入。
             if (string.IsNullOrEmpty(dir) == false) Directory.CreateDirectory(dir);
             File.WriteAllText(tmp, (resVersion ?? string.Empty) + "\n");
 

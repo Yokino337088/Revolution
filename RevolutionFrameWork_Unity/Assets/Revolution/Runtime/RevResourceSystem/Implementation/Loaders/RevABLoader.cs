@@ -449,8 +449,9 @@ namespace Revolution
                 handle.BundleAcquired = true;
                 handle.BundleLoader = this;
                 handle.BundleName = parts[0];
-                // 依赖在本次加载中逐个取得；交给句柄保存精确快照，并清空本地清理列表。
-                // 否则取消/异常时句柄卸载与 catch/finally 都可能 Release 同一依赖，误卸载仍被别的资源共享的 AB。
+                // 加载这个资源时，代码已经逐个给它的依赖包增加了引用计数；把这次实际取得的依赖名单交给句柄保存。
+                // 随后清空本地列表，表示“释放责任已经转交给句柄”，这样取消/异常清理就不会和句柄再次释放同一依赖。
+                // 若重复减引用，共享该依赖的其他资源还在使用时也可能被提前卸载，导致资源突然加载失败。
                 handle.BundleDependencies = acquiredDependencies.ToArray();
                 acquiredDependencies.Clear();       // 所有权转交给句柄，清理端统一只归还一次
                 token?.ThrowIfCancelled();

@@ -26,7 +26,13 @@ namespace Revolution
         private static RevTimerDriver _instance;
 
         /// <summary>把"首次用到就建宿主"这件事接到内核上（内核是纯 C#，不认 GameObject）。</summary>
-        internal static void Install() => RevTimerCore.EnsureDriver = EnsureDefault;
+        internal static void Install()
+        {
+            RevTimerCore.EnsureDriver = EnsureDefault;
+
+            // 把"此刻真实时间"接给内核：SyncServerTime 在第一帧 Tick 之前被调用时，也能拿到正确锚点。
+            RevTimer.Core.RealtimeProvider = () => Time.realtimeSinceStartupAsDouble;
+        }
 
         internal static void EnsureDefault()
         {
@@ -55,13 +61,16 @@ namespace Revolution
 
         private void Update()
         {
-            if (RevTimer.ManualDriven) return;                  // 被手动驱动接管后自动让位
-            RevTimer.Core.Tick(Time.deltaTime, Time.unscaledDeltaTime, Time.realtimeSinceStartup);
+            // 只有"渲染帧被手动驱动"时才让位。以前 Update 与 FixedUpdate 共用一个标记：
+            // 业务只在自己的 FixedUpdate 里调 TickFixed，会把这里也关掉，UI 倒计时/After/At 全部静默停摆。
+            if (RevTimer.Core.ManualRenderDriven) return;
+            RevTimer.Core.Tick(Time.deltaTime, Time.unscaledDeltaTime, Time.realtimeSinceStartupAsDouble);
         }
 
         private void FixedUpdate()
         {
-            if (RevTimer.ManualDriven) return;
+            // 同理：只有"逻辑帧被手动驱动"才让 FixedUpdate 让位，Fixed 域不受渲染帧手动驱动影响。
+            if (RevTimer.Core.ManualFixedDriven) return;
             RevTimer.Core.TickFixed(Time.fixedDeltaTime);
         }
 

@@ -47,6 +47,8 @@ namespace Revolution
 
         internal void Unbind(int poolId)
         {
+            // 池重绑或销毁时，Unity 的 Destroy 可能要等到帧末才真正删除对象；这段时间对象仍可能被业务代码传回 Return。
+            // 先把旧池编号清零，Return 就会拒绝把这个旧 prefab 对象塞进新池；poolId 校验也避免误清已绑定到别的池的编号。
             if (_poolId == poolId) _poolId = 0;
         }
 

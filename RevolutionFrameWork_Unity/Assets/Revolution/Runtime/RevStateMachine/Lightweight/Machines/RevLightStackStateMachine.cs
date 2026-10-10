@@ -177,6 +177,12 @@ namespace Revolution
         {
             if (state == null) return;
             if (ReferenceEquals(Current, state)) return;
+            // 栈可以保存“大厅 A 被战斗 B 压住”的结构，但每一层都必须是独立的状态对象。
+            // 如果 Change 把下层的 A 再压到顶上，栈里就会出现同一个 A 两次；之后 Pop 上层 A 时会对同一实例重复 OnExit/OnResume，
+            // 下层那份 A 也会变成错误的活动对象。Change 只替换栈顶，因此目标已在下层时必须拒绝。
+            if (ContainsInstance(state))
+                throw new InvalidOperationException(
+                    $"[RevLightStackStateMachine] {state.GetType().Name} 已在当前栈的下层，不能用 Change 再放到栈顶；请使用新的状态实例或工厂注册。");
             BeginTransition(nameof(Change));
 
             T old = Current;

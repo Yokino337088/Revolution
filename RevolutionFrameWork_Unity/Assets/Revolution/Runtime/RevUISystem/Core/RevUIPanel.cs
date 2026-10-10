@@ -286,6 +286,8 @@ namespace Revolution
 
             // ★ 到这里，[RevBind] 字段已经有值了 —— 所以 OnBindView 里可以放心用
             RevUILog.Guard($"{GetType().Name}.OnBindView", OnBindView);
+            // OnBindView 是业务回调，可能在里面调用 ShutdownAll。清理后这个面板已经标记为释放；
+            // 若此处继续调用 OnInit，业务会初始化一个已经退出管理流程、即将销毁的界面，因此检查后立即结束装配。
             if (_released) return;
             RevUILog.Guard($"{GetType().Name}.OnInit", OnInit);
         }
@@ -305,11 +307,9 @@ namespace Revolution
 
             RevUILog.Guard($"{GetType().Name}.打开转场", () => PlayOpenTransition(() =>
             {
-                // ★ Bug 修复（2026-09-30）：转场完成回调必须有状态守卫 ——
-                //   打开转场是异步的，途中面板可能已被 Close（管理器允许关 Opening 状态的面板：
-                //   Close 的防重入只拦 Closing/Closed）。没有守卫时，"打开完成"会在
-                //   正在关闭/已回池的面板上照常执行：State 被改回 Opened、OnOpen/OpenParts 被调、
-                //   业务的打开回调收到一个已经不在打开列表里的面板。
+                // 打开转场（例如淡入或滑入）需要经过若干帧；播放期间业务仍可能关闭面板，甚至把它放回对象池供下次复用。
+                // 如果旧转场结束后不检查状态，它会把面板重新标成 Opened、再次调用 OnOpen，并通知业务“打开成功”，
+                // 即使这个面板此时已经关闭或正被另一个界面复用。只有确认这是同一次打开、面板还处于 Opening，才继续完成流程。
                 if (this == null || version != LifetimeVersion || State != RevUIPanelState.Opening) return;
 
                 State = RevUIPanelState.Opened;
@@ -346,9 +346,9 @@ namespace Revolution
 
             RevUILog.Guard($"{GetType().Name}.关闭转场", () => PlayCloseTransition(() =>
             {
-                // ★ Bug 修复（2026-09-30）：与打开对称的状态守卫 —— 关闭转场是异步的，
-                //   途中面板可能又被打开（State 变 Opening）。没有守卫时会在
-                //   "重新打开"的面板上执行 OnClose、摘掉全部事件、置 Closed 并触发回池。
+                // 关闭转场也要经过若干帧；在动画结束前，业务可能又要求打开这个面板。
+                // 若旧的关闭回调继续执行，就会把刚重新打开的面板当成仍在关闭：调用 OnClose、移除新订阅的事件，
+                // 再将它放回对象池，造成界面消失或新一轮打开状态被破坏。只有面板仍是 Closing 才能完成旧关闭流程。
                 if (State != RevUIPanelState.Closing) return;
 
                 RevUILog.Guard($"{GetType().Name}.OnClose", OnClose);
@@ -397,6 +397,8 @@ namespace Revolution
             //   "复用的实例还挂着上一次的数据"是复用模式下最难查的一类 bug，
             //   框架直接把它清掉（业务不用记得清），业务只需要在 OnReuse 里清**界面上的残留**。
             InternalClearData();
+            // HideAnimation 会把透明度、缩放或位置留在隐藏终态；若没有 ShowAnimation，复用时不会自动复原。
+            // 先停旧动画并恢复基准值，避免池化面板再次打开时不可见、缩小或仍处于屏幕外。
             RevUIAnim.StopAllOf(this);
             RevUIAnim.RestoreAllBasesIn(this);
 
@@ -413,6 +415,9 @@ namespace Revolution
         /// <summary>销毁前：给业务释放外部资源的机会</summary>
         internal void InternalRelease()
         {
+            // 正常 Close 会等待关闭动画结束后再清理；但 ShutdownAll、场景销毁等路径可能直接销毁面板，不会经过这段正常收尾。
+            // 此时旧的动画回调或异步 Part 创建仍可能稍后执行，访问已经释放的面板、重新创建子界面或改写状态。
+            // 先标记释放、增加生命周期版本并取消 Part 创建，让迟到回调知道自己已经过期；再停止面板和 Part 的动画并恢复控件，防止残留回调继续运行。
             if (_released) return;
             _released = true;
             State = RevUIPanelState.Closed;
@@ -512,8 +517,8 @@ namespace Revolution
         // ============================================================
 
         /// <summary>
-        /// 被外部销毁时的兜底：至少把事件摘干净，别让监听表里挂着已销毁对象。
-        /// （正常路径由管理器调 InternalRelease/InternalClose 处理，这里只是保险。）
+        /// 外部 Destroy 会绕过管理器的正常关闭/回池流程；通知管理器移除打开表、互斥组与池索引并归还资源租约，
+        /// 避免再次打开命中已销毁实例或泄漏引用，同时清理动画与事件。
         /// </summary>
         protected virtual void OnDestroy()
         {

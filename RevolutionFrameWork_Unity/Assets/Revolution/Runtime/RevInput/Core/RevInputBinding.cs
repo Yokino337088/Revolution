@@ -90,6 +90,7 @@ namespace Revolution
         /// <summary>加一个键位（重复加不报错；超上限返回 false 并让调用方报原因码）。</summary>
         public bool AddKey(RevKey key)
         {
+            // enum 可被强转成越界整数；拒绝无效值，避免写入键位掩码时索引越界或产生不可采集的绑定。
             if (key == RevKey.None || !System.Enum.IsDefined(typeof(RevKey), key)) return false;
             if (_keys.Contains(key)) return true;
             if (_keys.Count >= RevInputLimits.MaxKeysPerAction) return false;
@@ -109,6 +110,7 @@ namespace Revolution
         /// <summary>加一个鼠标键。</summary>
         public bool AddMouse(RevMouseButton button)
         {
+            // 防止强转出来的非法按钮值移位生成错误掩码，或让绑定与实际鼠标采集不一致。
             if (!System.Enum.IsDefined(typeof(RevMouseButton), button)) return false;
             if (_mouse.Contains(button)) return true;
             if (_mouse.Count >= 5) return false;
@@ -171,10 +173,13 @@ namespace Revolution
             if (RepeatDelay != RevInputLimits.DefaultRepeatDelay
                 || RepeatInterval != RevInputLimits.DefaultRepeatInterval)
             {
+                // 用“往返格式”保存浮点数，确保读回后仍是原来的 delay/interval；固定保留几位小数会截掉精度，存档再读就变成不同的连发节拍。
+                // 同时固定使用英文小数点；不同地区可能用逗号作小数点，而本文件又用逗号分隔键位，容易把一个数字误拆成两个字段。
                 parts.Add("repeat:" + RepeatDelay.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
                           + "/" + RepeatInterval.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
             }
 
+            // 用 invariant round-trip 格式往返保存浮点值；固定小数位会截断 Deadzone，区域小数符号也可能导致存档读回不同。
             string text = Action + " = " + string.Join(", ", parts);
             if (Deadzone != RevInputLimits.DefaultDeadzone)
                 text += "  deadzone=" + Deadzone.ToString("R", System.Globalization.CultureInfo.InvariantCulture);

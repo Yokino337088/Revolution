@@ -65,6 +65,8 @@ namespace Revolution
         /// <summary>滑动：至少多快（像素/秒）。</summary>
         public float SwipeMinSpeed = RevInputLimits.DefaultSwipeMinSpeed;
 
+        // 游戏刚开始时 realtime 可能正好是 0 秒，玩家这时也可能完成第一次点击。
+        // 所以不能用“上次点击时间等于 0”表示“从未点击”，否则紧接着的第二次点击无法识别为双击；用独立布尔值记录是否已有上次点击。
         private double _lastTapTime;
         private bool _hasLastTap;
         private float _lastTapX, _lastTapY;
@@ -144,6 +146,7 @@ namespace Revolution
         /// <summary>推进一帧，并可独立屏蔽单指；原始快照保持不变。</summary>
         internal void Update(in RevInputSnapshot snapshot, double realtime, bool blocked, System.Func<int, bool> pointerBlocked)
         {
+            // 单指与双指事件都使用 snapshot.Frame；固定写 0 会让事件无法和产生它的输入帧对应。
             for (int i = 0; i < snapshot.PointerCount; i++)
             {
                 RevPointerSample p = snapshot.Pointer(i);
@@ -238,6 +241,8 @@ namespace Revolution
         private void FinishPointer(ref Track t, in RevPointerSample p, double realtime, bool blocked, bool canceled, int frame)
         {
             double duration = realtime - t.StartTime;
+            // 触摸抬起时的 Ended 坐标有时比最后一次 Moved 报告的位置更靠前；它才是手指真正离开的位置。
+            // 用旧 Moved 坐标算方向会出现“手指向右抬起、事件却报向上”的不一致，所以结束时用 Ended 坐标重算总距离和方向。
             t.TotalX = p.X - t.StartX;
             t.TotalY = p.Y - t.StartY;
             float distance = Farthest(t.MaxDistance, t.TotalX, t.TotalY);
@@ -254,6 +259,7 @@ namespace Revolution
                 }
                 else if (duration <= TapMaxSeconds && distance <= TapMaxDistance && !t.LongPressFired)
                 {
+                    // 所有手势事件都带当前快照帧号；写常量 0 会让事件帧号失真，无法和输入帧对齐。
                     Emit(new RevGestureEvent(RevGestureKind.Tap, t.Id, RevSwipeDirection.None,
                         p.X, p.Y, t.StartX, t.StartY, 0f, 0f, (float)duration, (float)duration, frame));
 
@@ -288,7 +294,8 @@ namespace Revolution
             float firstX = 0f, firstY = 0f, secondX = 0f, secondY = 0f;
             int found = 0;
 
-            // 以稳定 pointer id 选择最小两根有效手指；采样数组顺序改变不会翻转角度 180 度。
+            // 触摸设备每帧返回的手指顺序不一定相同。若直接取数组前两项，顺序交换时两指连线会反过来，计算结果可能突然跳 180 度。
+            // 按固定的 pointer id 顺序挑选两根手指，保证每帧都用同一顺序计算捏合距离和旋转角度。
             for (int i = 0; i < snapshot.PointerCount; i++)
             {
                 RevPointerSample p = snapshot.Pointer(i);

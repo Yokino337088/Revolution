@@ -138,29 +138,43 @@ namespace Revolution
 
             Prepare(sceneName);
 
-            // ★ Bug 修复（2026-09-30）：同步版 LoadScene 是"帧末才真正切换"——发起后立刻
-            //   查 GetActiveScene() 拿到的还是旧场景名。原实现把 CurrentName（旧名）当
-            //   "已进入的新场景"广播（OnLoaded 事件与日志都是旧名），违反 OnLoaded 的契约
-            //   （参数 = 新场景名）：业务拿名字寻址 / 比较（OnLoaded(name) 里 if (name=="Battle")）
-            //   会全部错乱。直接广播目标名 —— 场景确定会在本帧末切换完成。
+            // Unity 的同步 LoadScene 会在返回前完成场景加载，并触发 sceneLoaded；但在 LoadScene 调用刚返回的那一刻，
+            // 不能自行假设激活场景名已经更新。OnLoaded 的含义是“目标场景现在已经可用”，因此先订阅 Unity 的加载完成通知，
+            // 只有收到匹配目标场景的通知后才把状态标成 Done 并广播。这样订阅者在 OnLoaded 里读取 CurrentName/查找场景对象时，
+            // 不会误读旧场景。若 LoadScene 抛异常，下面 catch 会移除临时订阅并按统一失败流程收尾。
+            string expectedSceneName = sceneName.Replace('\\', '/');
+            int lastSeparator = expectedSceneName.LastIndexOf('/');
+            if (lastSeparator >= 0) expectedSceneName = expectedSceneName.Substring(lastSeparator + 1);
+            if (expectedSceneName.EndsWith(".unity", StringComparison.OrdinalIgnoreCase))
+                expectedSceneName = expectedSceneName.Substring(0, expectedSceneName.Length - ".unity".Length);
+
+            UnityEngine.Events.UnityAction<Scene, LoadSceneMode> onSceneLoaded = null;
+            onSceneLoaded = (scene, mode) =>
+            {
+                // API 允许传 Build Settings 场景名，也允许传 Assets 下的完整路径；scene.name 只有文件名，先把输入路径折成同一种名字再比较。
+                if (!string.Equals(scene.name, expectedSceneName, StringComparison.Ordinal)) return;
+                SceneManager.sceneLoaded -= onSceneLoaded;
+                Progress = 1f;
+                // 和异步路径一致，先在 IsLoading=true 时通知最后一次进度，避免 OnProgress 订阅者重入发起另一场切换。
+                RevScene.RaiseProgress(1f);
+                IsLoading = false;
+                State = RevSceneLoadState.Done;
+                RevSceneLog.Info("[RevScene] 已同步切换 → " + scene.name);
+                RevScene.RaiseLoaded(scene.name);
+            };
+            SceneManager.sceneLoaded += onSceneLoaded;
+
             try
             {
                 SceneManager.LoadScene(sceneName, LoadSceneMode.Single);
             }
             catch (Exception e)
             {
-                // ★ Bug 修复（2026-09-30）：与异步路同款防护 —— 发起抛异常（如越界 index 的兄弟问题、
-                //   场景被禁用等）时不留 IsLoading=true 的残局，转统一失败收尾。
+                SceneManager.sceneLoaded -= onSceneLoaded;
+                // 场景名无效等问题可能让 Unity 在加载过程中抛异常；撤掉临时监听并恢复 IsLoading，
+                // 否则状态会永远停在 Loading，后续所有切场景请求都会被并发保护拒绝。
                 Fail(sceneName, "发起同步切换抛异常：" + e.Message);
-                return;
             }
-
-            Progress = 1f;
-            IsLoading = false;
-            State = RevSceneLoadState.Done;
-            RevScene.RaiseProgress(1f);
-            RevSceneLog.Info("[RevScene] 已同步切换 → " + sceneName + "（帧末生效）");
-            RevScene.RaiseLoaded(sceneName);
         }
 
         // ==================== 公共步骤 ====================

@@ -13,7 +13,7 @@
 //   ② **切后台必须复位**：隐藏宿主已自动处理失焦（这是"按键卡住"的解药）；
 //      但你手动 `ResetAll` 也没坏处：换场景、结算、断线时调一次，代价接近零。
 //   ③ **弹窗要屏蔽**：`using (var s = RevInput.OpenScope()) { s.Block(); … }` ——
-//      别用"关掉整个模块"的方式挡输入（ESC / 返回键会一起失灵）。
+//      Block(World) 会挡住本模块全部动作与手势（包括 ESC / 返回键；当前没有系统动作例外），按需另接 UI 输入通道。
 //
 // 【零配置】
 //   第一次用到（例如 `RevInput.Pressed`）就自动创建一个隐藏宿主 `[RevInput]`（DontDestroyOnLoad），
@@ -90,6 +90,7 @@ namespace Revolution
 
         /// <summary>
         /// 局部复位（失焦 / 切后台 / 换场景 / 结算）：清按键与进行中的手势，<b>保留绑定与屏蔽</b>。
+        /// 静默复位，不合成 <c>OnReleased</c>；业务若需失焦/暂停收尾，请监听应用生命周期事件。
         /// </summary>
         public static void ResetAll(string reason = null) => Core.ResetAll(reason);
 
@@ -125,6 +126,8 @@ namespace Revolution
                 core.Fail(RevInputErrorReason.BindingTextInvalid, "Bind 键位数组不能为 null");
                 return false;
             }
+            // RevKey 虽然是 enum，调用方仍能把任意整数强制转换成它。设备采集只认识列在 RevKey 中的键，
+            // 未知数值即使保存成功也永远收不到输入，所以在建立或修改绑定前先报错拒绝。
             for (int i = 0; i < keys.Length; i++)
             {
                 if (!Enum.IsDefined(typeof(RevKey), keys[i]) || keys[i] == RevKey.None)
@@ -145,6 +148,8 @@ namespace Revolution
                 }
             }
 
+            // 先数出这次真正新增的不同按键，再判断总数是否超限，确认整批都能加后才开始写入。
+            // 若一边写一边发现超限，Bind 会失败但前几个键已经改进去，玩家得到的就是一份“只成功一半”的绑定。
             int additions = 0;
             for (int i = 0; i < keys.Length; i++)
             {
@@ -191,6 +196,7 @@ namespace Revolution
         public static bool BindAxis(string action, RevKey negative, RevKey positive)
         {
             RevInputCore core = Ensure();
+            // Enum 可被强转为未定义整数；入口先拒绝无效值，并禁止正负方向相同（否则两边相抵，轴永远为 0）。
             if ((negative != RevKey.None && !Enum.IsDefined(typeof(RevKey), negative))
                 || (positive != RevKey.None && !Enum.IsDefined(typeof(RevKey), positive))
                 || (negative != RevKey.None && negative == positive))
@@ -240,6 +246,8 @@ namespace Revolution
             RevInputCore core = Ensure();
             RevInputBinding binding = core.Actions.Find(action);
             if (binding == null) return;
+            // 死区表示“小于这个幅度的摇杆输入当作 0”；需要和轴值正常比较。NaN/Infinity 不是普通数，比较结果不可靠，存档后也无法正确还原。
+            // 拒绝这类值；普通但超出 0..1 的数则由下面的代码限制到合法范围。
             if (float.IsNaN(deadzone) || float.IsInfinity(deadzone))
             {
                 core.Fail(RevInputErrorReason.BindingTextInvalid, "死区必须是有限数值");
@@ -254,6 +262,8 @@ namespace Revolution
             RevInputCore core = Ensure();
             RevInputBinding binding = core.Actions.Find(action);
             if (binding == null) return;
+            // delay 和 interval 会直接参与每帧倒计时；NaN/Infinity 不是有效时间，可能让连发永远不触发或计时状态无法恢复。
+            // 先拒绝非有限值，再检查间隔必须为正，避免错误参数进入运行中的动作。
             if (float.IsNaN(delay) || float.IsInfinity(delay) || float.IsNaN(interval) || float.IsInfinity(interval))
             {
                 core.Fail(RevInputErrorReason.BindingTextInvalid, "SetRepeat 的时间必须是有限数值");
@@ -265,6 +275,8 @@ namespace Revolution
                 binding.RepeatInterval = 0f;
                 return;
             }
+            // delay 大于 0 表示要启动连发；每次重复之间必须留出正的等待时间。
+            // interval 为 0 可能每帧都触发，负数会让倒计时方向反过来；这两种都不是有效连发配置，因此拒绝。
             if (interval <= 0f)
             {
                 core.Fail(RevInputErrorReason.BindingTextInvalid, "连发间隔必须大于 0");

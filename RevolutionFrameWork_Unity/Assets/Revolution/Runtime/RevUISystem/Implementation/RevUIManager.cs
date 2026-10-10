@@ -47,7 +47,7 @@ namespace Revolution
         private readonly Dictionary<string, OpenRequest> _loading =
             new Dictionary<string, OpenRequest>(StringComparer.Ordinal);
 
-        // 请求对象身份覆盖“加载 + 打开动画”整个阶段，旧回调不能消费同键的新请求。
+        // 请求对象身份覆盖"加载 + 打开动画"整个阶段，旧回调不能消费同键的新请求。
         private sealed class OpenRequest
         {
             internal RevUIPanelMeta Meta;
@@ -337,7 +337,9 @@ namespace Revolution
                 current != null && current.State != RevUIPanelState.Closed)
                 Close(current);
 
-            // 还没加载完的请求尚未进入 _exclusive；不取消就会与新面板一起打开，破坏互斥语义。
+            // _exclusive 只记录已经打开的面板；正在异步加载的面板还没登记在那里，所以单纯关闭当前面板找不到它。
+            // 若此时又打开同组面板，旧加载完成后也会打开，结果同一互斥组同时出现两个界面。先取消旧请求并用 null 通知等待者，
+            // 让最新打开请求成为该组唯一有效的面板；旧资源加载即使晚到也不能再显示旧面板。
             var pending = new List<KeyValuePair<string, OpenRequest>>();
             foreach (KeyValuePair<string, OpenRequest> pair in _loading)
             {
@@ -356,7 +358,8 @@ namespace Revolution
                 InvokeAll(request.Callbacks, null);
                 request.Callbacks.Clear();
 
-                // 罕见的 OnBindView 重入：实例尚未 Register，但已经持有资源引用。
+                // OnBindView 可能在 Register（登记到打开表）之前调用 ShutdownAll 或打开同组新面板。
+                // 这时实例还不在普通打开列表里，常规清理找不到它；但创建时已经增加了 prefab 资源引用，必须单独归还并销毁。
                 if (request.Panel != null && !_openOrder.Contains(request.Panel))
                 {
                     if (_root != null) _root.AddPendingRelease(request.Panel);
@@ -545,11 +548,10 @@ namespace Revolution
         /// <summary>某层最上面那个面板（做"当前界面是哪个"的判断用）</summary>
         public RevUIPanel TopOf(RevUILayer layer)
         {
-            // ★ Bug 修复（2026-09-30）："最上面"必须与 CloseTopOf / ApplyLayerLayout 同一套规则
-            //   （先比画布：三 Canvas 下静态 < 动态 < 常用；再比打开顺序）——
-            //   原实现只按打开顺序取末尾，Split 架构下 Scene 层分三个画布：
-            //   常用画布里先开的面板视觉上仍高于静态画布里后开的面板，
-            //   TopOf 会返回一个"不在视觉最上面"的面板，"当前界面是哪个"的判断随之失准。
+            // "最上面的面板"应当指玩家眼睛看到的最前面，而不只是最近打开的那个。
+            // Split 模式会把界面放到多个 Canvas；Canvas 自身有固定前后层级，较早打开的高层 Canvas 面板，
+            // 仍可能盖住较晚打开的低层 Canvas 面板。只按打开时间排序会返回错误面板，让"当前界面是谁"的判断出错。
+            // 因此先比较 Canvas 层级；在同一个 Canvas 内，才用打开顺序判断前后。
             RevUIPanel top = null;
             int topCanvas = -1;
 

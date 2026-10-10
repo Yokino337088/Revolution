@@ -250,6 +250,9 @@ namespace Revolution
         /// <summary>内核实例（高级用法：想自己 new 一个独立内核时用；日常直接用上面的静态门面）</summary>
         public static RevSoundCore Core { get; } = new RevSoundCore();
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForNewSession() => Core.ResetForNewSession();
+
         // ============================================================
         // 作用域（切界面 / 一局战斗：退出时把这一块播的声音全停掉）
         // ============================================================

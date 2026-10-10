@@ -50,6 +50,8 @@ namespace Revolution
 
         internal void ResetForNewSession()
         {
+            // 关闭 Domain Reload 时，Unity 不会重新创建这个设备采集器；上一局记录的“哪些键还按着”、上次设备类型和鼠标位置会留在内存。
+            // 新一局若沿用这些值，可能误报按键仍按住、鼠标第一帧位移异常，或把新输入识别成上一局的设备类型，所以全部重置。
             _tracked.ClearAll();
             _lastHeld.ClearAll();
             _lastKind = RevInputDeviceKind.Unknown;
@@ -132,6 +134,8 @@ namespace Revolution
                     KeyCode code = _keyCodes[index];
                     if (code == KeyCode.None) continue;
 
+                    // JoystickButtonN 属于手柄活动，不能误计为键盘输入，否则仅按手柄按钮会被识别成键盘设备。
+                    // JoystickButtonN 是手柄按钮，必须与 keyboardActive 分开，否则只按手柄键会被识别成键盘活动。
                     bool gamepadButton = index >= (int)RevKey.JoystickButton0 && index <= (int)RevKey.JoystickButton19;
                     if (Input.GetKey(code))
                     {
@@ -176,6 +180,8 @@ namespace Revolution
             snapshot.ScrollX = scroll.x;
             snapshot.ScrollY = scroll.y;
 
+            // 用户滚动滚轮时也属于正在使用鼠标。若这里不把滚轮计入 mouseActive，后面的设备识别会以为本帧没有鼠标操作，
+            // 从而保留旧设备类型，或被手柄轴探测误判成正在使用手柄。
             bool mouseActive = Math.Abs(snapshot.MouseDeltaX) > 0.01f || Math.Abs(snapshot.MouseDeltaY) > 0.01f
                                || Math.Abs(snapshot.ScrollX) > 0.01f || Math.Abs(snapshot.ScrollY) > 0.01f;
             for (int b = 0; b <= (int)RevMouseButton.Forward; b++)
@@ -214,6 +220,7 @@ namespace Revolution
             }
 
             // ④ 手柄：按钮已经在键位表里（JoystickButtonN）；这里只看"有没有摇杆/扳机在动"
+            // 仅在本帧其他设备均无活动时探测手柄轴，避免轴读数覆盖本帧真实的键鼠/触屏分类。
             bool gamepadActive = gamepadButtonActive;
             if (!touchActive && !keyboardActive && !mouseActive && !gamepadButtonActive)
             {

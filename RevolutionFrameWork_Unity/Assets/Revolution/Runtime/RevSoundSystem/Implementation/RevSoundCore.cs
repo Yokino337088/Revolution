@@ -41,6 +41,7 @@ namespace Revolution
         private readonly AudioSource[] _sources = new AudioSource[SlotCapacity];
         private readonly Vector3[] _positions = new Vector3[SlotCapacity];    // PlayAt：挂在哪个世界坐标点
         private readonly Transform[] _targets = new Transform[SlotCapacity];  // PlayOn：挂在哪个物体下面
+        private readonly bool[] _requiresTarget = new bool[SlotCapacity];
         private readonly bool[] _is3D = new bool[SlotCapacity];
 
         private readonly float[] _kindVolumes = { 1f, 1f, 1f, 1f };
@@ -183,9 +184,13 @@ namespace Revolution
 
             _positions[slot] = position ?? Vector3.zero;
             _targets[slot] = target;
+            // PlayOn 与 PlayAt 都是 3D，但只有 PlayOn 必须跟随一个物体。单靠 target == null 无法区分“物体后来被销毁”和“本来就指定世界坐标”，
+            // 所以在创建声音槽位时记下调用方式，避免异步加载期间目标销毁后误把声音播到世界原点。
+            _requiresTarget[slot] = is3D && !position.HasValue && target != null;
             _is3D[slot] = is3D;
 
-            AudioClip clip = _assets.Find(path);
+            bool isBgm = resolvedKind == RevSoundKind.Bgm;
+            AudioClip clip = _assets.Find(path, isBgm);
             if (clip != null)
             {
                 StartVoice(slot, clip);
@@ -197,12 +202,21 @@ namespace Revolution
                 _assets.Request(path, resolvedKind == RevSoundKind.Bgm);
             }
 
-            return new RevSoundHandle(this, slot, generation);
+            // StartVoice 可能发现 AudioSource 无法创建，或 PlayOn 的目标刚好已销毁并提前回收槽位。
+            // 槽位若已释放，就不能再返回一个看起来有效、实际无法控制任何声音的句柄。
+            return _table.IsAlive(slot, generation) ? new RevSoundHandle(this, slot, generation) : RevSoundHandle.Empty;
         }
 
         private void StartVoice(int slot, AudioClip clip)
         {
             ref RevSoundSlot state = ref _table.Slot(slot);
+            if (_requiresTarget[slot] && _targets[slot] == null)
+            {
+                string name = state.Name;
+                Recycle(slot, finished: false);
+                RaiseFailed(name, RevSoundErrorReason.NoTarget);
+                return;
+            }
 
             AudioSource source = _assets.RentSource();
             if (source == null)
@@ -434,13 +448,24 @@ namespace Revolution
                 // ① 等资源：到了就开播，失败就报出去并回收
                 if (state.Pending)
                 {
-                    AudioClip clip = _assets.Find(state.Name);
+                    bool isBgm = state.Kind == RevSoundKind.Bgm;
+                    // PlayOn 在等待音频加载期间，目标物体可能被销毁。此时不要把它当成 PlayAt 使用默认坐标 (0,0,0)，
+                    // 否则声音会突然从世界原点响起；释放等待槽位并报告 NoTarget，和“目标已销毁就停止”契约一致。
+                    if (_requiresTarget[i] && _targets[i] == null)
+                    {
+                        string missingTargetName = state.Name;
+                        Recycle(i, finished: false);
+                        RaiseFailed(missingTargetName, RevSoundErrorReason.NoTarget);
+                        continue;
+                    }
+
+                    AudioClip clip = _assets.Find(state.Name, isBgm);
                     if (clip != null)
                     {
                         state.Pending = false;
                         StartVoice(i, clip);
                     }
-                    else if (_assets.IsFailed(state.Name))
+                    else if (_assets.IsFailed(state.Name, isBgm))
                     {
                         string failedName = state.Name;
                         Recycle(i, finished: false);
@@ -510,6 +535,7 @@ namespace Revolution
             }
 
             _targets[slot] = null;
+            _requiresTarget[slot] = false;
             _is3D[slot] = false;
             _positions[slot] = Vector3.zero;
             if (_bgmSlot == slot) _bgmSlot = -1;
@@ -518,8 +544,9 @@ namespace Revolution
 
             if (!finished) return;
 
-            VoiceFinished?.Invoke(new RevSoundHandle(this, slot, generation));
+            RaiseVoiceFinished(new RevSoundHandle(this, slot, generation));
 
+            // 事件属于外部观察者；某个订阅者抛异常不能阻断内核推进，否则整张歌单会停在当前曲后面。
             if (kind == RevSoundKind.Bgm && _bgmList != null) PlayNextBgmInList();
         }
 
@@ -563,9 +590,66 @@ namespace Revolution
             return Clamp01(volume * kindVolume * _master);
         }
 
-        private void RaiseFailed(string name, RevSoundErrorReason reason) => Failed?.Invoke(name, reason);
+        private void RaiseFailed(string name, RevSoundErrorReason reason)
+        {
+            // Failed 是业务订阅事件；一个页面的回调写错抛异常，不应再阻止其他订阅者收到失败原因，也不能把异常带回播放内核。
+            Action<string, RevSoundErrorReason> handlers = Failed;
+            if (handlers == null) return;
+            foreach (Action<string, RevSoundErrorReason> handler in handlers.GetInvocationList())
+            {
+                try { handler(name, reason); }
+                catch (Exception e) { RevLog.Exception(e, "RevSound.Failed 订阅者异常", "Sound"); }
+            }
+        }
+
+        private void RaiseVoiceFinished(RevSoundHandle handle)
+        {
+            // 结束事件发生在声音槽位回收后；逐个保护订阅者，避免一个异常跳过其他监听，并保证调用方返回后歌单仍能继续下一首。
+            Action<RevSoundHandle> handlers = VoiceFinished;
+            if (handlers == null) return;
+            foreach (Action<RevSoundHandle> handler in handlers.GetInvocationList())
+            {
+                try { handler(handle); }
+                catch (Exception e) { RevLog.Exception(e, "RevSound.VoiceFinished 订阅者异常", "Sound"); }
+            }
+        }
 
         private static float Clamp01(float value) => value < 0f ? 0f : (value > 1f ? 1f : value);
+
+        /// <summary>进入新的 Play 会话时清除上一局的运行状态与 Unity 对象引用。</summary>
+        internal void ResetForNewSession()
+        {
+            // Unity 关闭 Domain Reload 时不会重建这个静态 Core；上一次 Play 的槽位、AudioSource、Transform 和事件订阅会继续留在内存里。
+            // 新一局若沿用它们，可能操作已经销毁的 Unity 对象，或把上一局的播放回调发给旧 UI。因此先停掉并归还所有声音、卸载资源，
+            // 再清空目录/目标等引用和事件订阅，让下一次播放从干净状态重新初始化。
+            _bgmList = null;
+            StopAll(0f);
+            _assets.Dispose();
+            _table.Clear();
+
+            for (int i = 0; i < SlotCapacity; i++)
+            {
+                _sources[i] = null;
+                _targets[i] = null;
+                _requiresTarget[i] = false;
+                _is3D[i] = false;
+                _positions[i] = Vector3.zero;
+                _kindVolumes[i] = 1f;
+            }
+
+            _catalog.Clear();
+            _bgmSlot = -1;
+            _bgmIndex = 0;
+            _initialized = false;
+            ManualDriven = false;
+            Enabled = true;
+            _mute = false;
+            _master = 1f;
+            _minDistance = 1f;
+            _maxDistance = 50f;
+            Failed = null;
+            VoiceFinished = null;
+        }
 
         private void EnsureInitialized()
         {

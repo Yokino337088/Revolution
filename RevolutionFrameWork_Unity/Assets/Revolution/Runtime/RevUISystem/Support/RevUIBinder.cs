@@ -250,6 +250,9 @@ namespace Revolution
             });
         }
 
+        // Unity 的父面板能遍历到自己下面所有子物体，其中也包括嵌套 Part 里的按钮。
+        // 沿控件向上找到最近一个实现 IRevUIUserEvents 的面板/Part，只让它绑定这个控件：否则父面板和 Part 可能同时加监听，
+        // 按钮一次点击触发两次回调，或 Part 的点击被错误地送到父面板。
         private static bool IsOwnedBy(MonoBehaviour target, Transform root, Transform node)
         {
             for (Transform current = node; current != null; current = current.parent)

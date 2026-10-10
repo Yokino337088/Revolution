@@ -121,7 +121,7 @@ namespace Revolution.Editor
                 string prefabPath = AssetDatabase.GetAssetPath(_prefab);
                 string root = ResourceRoot(prefabPath);
                 EditorGUILayout.LabelField("资源位置", prefabPath, EditorStyles.miniLabel);
-                EditorGUILayout.LabelField("生成的 [RevUIPanel] 根路径", root.Length == 0 ? "（无法推导：需位于资源根目录的子文件夹）" : root, EditorStyles.miniLabel);
+                EditorGUILayout.LabelField("生成的[RevUIPanel]根路径", root.Length == 0 ? "（无法推导：需位于资源根目录的子文件夹）" : root, EditorStyles.miniLabel);
                 EditorGUILayout.LabelField("预制体资源名", Path.GetFileNameWithoutExtension(prefabPath), EditorStyles.miniLabel);
                 if (root.Length == 0)
                     EditorGUILayout.HelpBox("所选预制体必须位于打包工具配置的资源根目录下的子文件夹中，才能得到可用的逻辑路径。", MessageType.Error);

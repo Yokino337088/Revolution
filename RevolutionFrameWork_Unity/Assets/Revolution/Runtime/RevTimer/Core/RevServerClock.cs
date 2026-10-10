@@ -39,6 +39,10 @@ namespace Revolution
         /// </summary>
         internal void Sync(DateTime utcNow, double realtimeSeconds)
         {
+            // 传入 DateTime.Now（Local）时 Ticks 是本地钟点，直接当 UTC 用会整体差出一个时区；统一转成 UTC。
+            // Unspecified 无法判断，按"调用方已经给的是 UTC"处理（服务器协议通常如此）。
+            if (utcNow.Kind == DateTimeKind.Local) utcNow = utcNow.ToUniversalTime();
+
             _anchorUtc = utcNow;
             _anchorRealtime = realtimeSeconds;
             _synced = true;

@@ -131,6 +131,9 @@ namespace Revolution
 
         public void SetException(Exception e)
         {
+            // CompletionSource 可能被多个回调同时/重复完成。任务一旦成功唤醒 await 方，结果就已经定了；
+            // 后到的错误回调不能再把它改成失败，否则同一个 await 会先看似成功、稍后再次等待却突然抛异常。
+            if (IsCompleted) return;
             _exception = e;
             SetResult();
         }
@@ -170,6 +173,8 @@ namespace Revolution
 
         public void SetException(Exception e)
         {
+            // 带返回值的任务也遵守“第一次完成生效”：成功值一旦交给 await 方，重复到达的异常不能覆盖它，反过来也不能覆盖先到的失败。
+            if (IsCompleted) return;
             _exception = e;
             SetResult(default);
         }

@@ -37,22 +37,28 @@ namespace Revolution
         {
         }
 
+        // 作用域 Dispose 之后不能再创建计时器：Dispose 只会清理一次，之后才创建的计时器以这个已关闭的 scope 为 owner，
+        // 没有任何人会再来停它（异步流程里晚到的代码最常触发），会一直占用名额直到达到数量上限。
+        // 这里统一拒绝并返回空句柄；空句柄的所有操作都是安全空操作。
+        private bool IsClosed => _disposed;
+
         /// <summary>这块里 N 秒后一次（等价于 <c>RevTimer.After(..., owner: scope)</c>）。</summary>
         public RevTimerHandle After(float seconds, Action callback, RevTimeDomain domain = RevTimeDomain.Scaled)
-            => RevTimer.After(seconds, callback, domain, this);
+            => IsClosed ? RevTimerHandle.Empty : RevTimer.After(seconds, callback, domain, this);
 
         /// <summary>这块里下一帧一次。</summary>
-        public RevTimerHandle NextFrame(Action callback) => RevTimer.NextFrame(callback, this);
+        public RevTimerHandle NextFrame(Action callback)
+            => IsClosed ? RevTimerHandle.Empty : RevTimer.NextFrame(callback, this);
 
         /// <summary>这块里每 interval 秒一次（times = -1 无限）。</summary>
         public RevTimerHandle Every(float interval, Action callback, int times = -1,
             RevTimeDomain domain = RevTimeDomain.Scaled)
-            => RevTimer.Every(interval, callback, times, domain, this);
+            => IsClosed ? RevTimerHandle.Empty : RevTimer.Every(interval, callback, times, domain, this);
 
         /// <summary>这块里每 interval 秒一次（回调带"第几次"）。</summary>
         public RevTimerHandle Every(float interval, Action<int> callback, int times = -1,
             RevTimeDomain domain = RevTimeDomain.Scaled)
-            => RevTimer.Every(interval, callback, times, domain, this);
+            => IsClosed ? RevTimerHandle.Empty : RevTimer.Every(interval, callback, times, domain, this);
 
         /// <summary>手动停掉这块的全部计时器（不 Dispose 也能用；重复调用是安全的）。</summary>
         public int Cancel() => RevTimer.CancelAllOf(this);

@@ -160,7 +160,11 @@ namespace Revolution
         ///   旧实现用 <c>LastRealtime</c>，全局暂停期间它会停在暂停前，此刻校准会把
         ///   "暂停的时长"整个丢掉，恢复后 Server 域凭空快出暂停时长（At 计时器全错位）。
         /// </summary>
-        public static void SyncServerTime(DateTime serverUtc) => Core.Clock.Sync(serverUtc, Core.LatestRealtime);
+        /// <remarks>
+        /// 锚点取"此刻真实的 realtime"（由驱动层接到 Unity 时钟），而不是最近一次 Tick 的值：
+        /// 游戏刚启动、还没创建过计时器时 Tick 一次都没跑过，旧值是 0，会让 Server 域整体偏快 "启动到校准"那么多秒。
+        /// </remarks>
+        public static void SyncServerTime(DateTime serverUtc) => Core.SyncServerTime(serverUtc);
 
         /// <summary>校准服务器时间（显式给出本地 realtime 锚点，精度更高）。</summary>
         public static void SyncServerTime(DateTime serverUtc, double realtimeSinceStartup)

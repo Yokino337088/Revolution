@@ -133,7 +133,13 @@ namespace Revolution
         {
             GuardNotInCallback(target);
             if (target == null) return RevTask.Completed;
-            if (ReferenceEquals(target, _current) && !IsTransitioning) return RevTask.Completed;
+            if (ReferenceEquals(target, _current))
+            {
+                // 当前实例已经是目标，不需要再调用一次 OnExit/OnEnter；重复进入可能重置计时、重复注册事件或再次加载资源。
+                // 但如果之前有人正异步准备切到别处，这个新请求表示“留在当前状态”，所以先取消旧请求，再保持当前状态不变。
+                if (IsTransitioning) AbortPendingAsync();
+                return RevTask.Completed;
+            }
 
             AbortPendingAsync();                        // 更新的请求胜出，旧的在途切换作废
 

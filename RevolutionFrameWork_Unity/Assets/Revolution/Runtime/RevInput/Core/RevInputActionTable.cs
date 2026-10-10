@@ -293,7 +293,8 @@ namespace Revolution
             if (b.AxisNegative != RevKey.None && snapshot.KeyHeld.Get((int)b.AxisNegative)) value -= 1f;
             if (value != 0f) return value;
 
-            // 没有键位轴也没命名轴 → 退化成"按钮当 0/1 轴"，方便新手（按下即 1）
+            // 没有设置“正负键轴”或“命名轴”时，普通按钮仍可作为简单的 0/1 轴：按下返回 1，松开返回 0。
+            // 普通按钮既可能是键盘键，也可能是鼠标键；两种都要查。若只检查键盘状态，鼠标按住时 Axis 会一直错误地返回 0。
             if (b.HitKeys(snapshot.KeyHeld) || b.HitMouse(snapshot.MouseHeld)) return 1f;
             return 0f;
         }
@@ -346,6 +347,7 @@ namespace Revolution
                         System.String.Equals(a.NamedAxis, b.NamedAxis, System.StringComparison.OrdinalIgnoreCase))
                         report = Append(report, "命名轴 " + a.NamedAxis + " 同时绑给了 " + a.Action + " 和 " + b.Action);
 
+                    // 命名轴冲突已在上方单独比对；这里再双向检查键位轴，防止改键后轴输入与普通键位漏报。
                     if (AxisKeyConflicts(a, b, out string axisReportA)) report = Append(report, axisReportA);
                     if (AxisKeyConflicts(b, a, out string axisReportB)) report = Append(report, axisReportB);
                 }
@@ -396,12 +398,16 @@ namespace Revolution
             error = null;
             if (string.IsNullOrEmpty(text))
             {
+                // LoadText 的约定是“用这份文本整体替换现有绑定”。空文本就是一份没有任何动作的绑定表，表示用户要清空绑定，
+                // 不能当成“没有提供新配置”而保留旧表，否则清空存档后旧按键仍会继续生效。
                 Clear();
                 return true;
             }
 
             string[] lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
             var parsed = new List<RevInputBinding>(64);
+            // 每个动作会同时放进“按名字查找的字典”和“按顺序遍历的列表”。若文本里同名动作出现两次，字典会覆盖成最后一条，
+            // 但列表可能仍保留两条；之后查询、统计和派发会各自看到不同结果。因此发现重复名时拒绝整份导入。
             var actionNames = new HashSet<string>(System.StringComparer.Ordinal);
 
             for (int i = 0; i < lines.Length; i++)
@@ -432,6 +438,7 @@ namespace Revolution
                 var binding = new RevInputBinding(action);
                 bool repeatSeen = false;
                 bool namedAxisSeen = false;
+                // 键位轴需要各一个负向键和正向键；每个方向只能出现一次，否则后写的键会遮住前一个，存档读回结果不明确。
                 bool negativeAxisSeen = false;
                 bool positiveAxisSeen = false;
 
@@ -441,6 +448,8 @@ namespace Revolution
                     string number = rest.Substring(dz + 9).Trim();
                     int space = number.IndexOf(' ');
                     if (space > 0) number = number.Substring(0, space);
+                    // 死区只允许 0 到 1 之间的普通数字；它表示多小的轴输入要当作“没有推动”。
+                    // NaN、Infinity 或超范围值会使后续比较失去意义，因此遇到非法值就拒绝整份导入，保留仍可用的旧绑定。
                     if (!float.TryParse(number, System.Globalization.NumberStyles.Float,
                             System.Globalization.CultureInfo.InvariantCulture, out float d)
                         || float.IsNaN(d) || float.IsInfinity(d) || d < 0f || d > 1f)
@@ -462,6 +471,8 @@ namespace Revolution
                     {
                         if (repeatSeen)
                         {
+                            // 一行绑定只能有一组 repeat（开始连发前等待多久、之后每隔多久触发）。写两组时程序无法知道玩家想用哪组，
+                            // 如果静默取最后一组，保存文件看似保留了两组、实际却只生效一组；因此提示错误并保留旧绑定。
                             error = "第 " + (i + 1) + " 行重复声明了连发配置";
                             return false;
                         }
@@ -472,6 +483,8 @@ namespace Revolution
                         //   格式：repeat:delay/interval（与 ToText 的导出格式对应）。
                         string pair = token.Substring(7).Trim();
                         int slash = pair.IndexOf('/');
+                        // repeat:delay/interval 中的两个值都会用来倒计时，必须是普通且非负的秒数；开启连发时 interval 还必须大于 0。
+                        // 如果接受 NaN、Infinity 或零间隔，连发可能永不发生或每帧都发生；因此坏存档不能写进动作状态。
                         if (slash <= 0
                             || !float.TryParse(pair.Substring(0, slash).Trim(), System.Globalization.NumberStyles.Float,
                                 System.Globalization.CultureInfo.InvariantCulture, out float rd)
@@ -489,6 +502,8 @@ namespace Revolution
                     }
                     else if (token.StartsWith("axis:", System.StringComparison.OrdinalIgnoreCase))
                     {
+                        // 命名轴是 Input Manager 里配置的摇杆/滚轮轴。一行只能指定一根；写多根时后面的会覆盖前面的，
+                        // 容易让存档看起来有多根轴、运行时却只用一根，所以重复声明直接报错。
                         if (namedAxisSeen)
                         {
                             error = "第 " + (i + 1) + " 行重复声明了命名轴";
@@ -562,6 +577,8 @@ namespace Revolution
                     }
                 }
 
+                // 键位轴是一键向负、一键向正；若两边填同一个键，按下时正负输入会互相抵消，轴值永远是 0。
+                // 这种绑定不会按预期移动角色，所以在导入时直接报错，而不是让玩家调试一个看似成功但无效的配置。
                 if (binding.AxisNegative != RevKey.None && binding.AxisNegative == binding.AxisPositive)
                 {
                     error = "第 " + (i + 1) + " 行轴的正向与负向键不能相同";

@@ -38,8 +38,10 @@ namespace Revolution
             RevTimerDriver.Install();
 
             // 计时器的告警/异常统一走框架日志系统（tag = Timer）
-            RevTimer.Log = message => RevLog.Warn(message, "Timer");
-            RevTimer.OnException = (e, message) => RevLog.Exception(e, message, "Timer");
+            // 文件头承诺"只在自己没被设过时接管"，但以前是无条件覆盖：业务先设置了自己的日志出口，
+            // 随后 Install 再跑一次（编辑器与运行时各调一次）就把它冲掉了。这里只补默认值，不覆盖已有设置。
+            if (RevTimer.Log == null) RevTimer.Log = message => RevLog.Warn(message, "Timer");
+            if (RevTimer.OnException == null) RevTimer.OnException = (e, message) => RevLog.Exception(e, message, "Timer");
         }
     }
 }

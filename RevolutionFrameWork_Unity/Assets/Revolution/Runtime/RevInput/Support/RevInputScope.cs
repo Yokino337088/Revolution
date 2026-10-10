@@ -31,6 +31,8 @@ namespace Revolution
     /// <summary>输入作用域：出块自动解除屏蔽、退订事件（幂等，可重复 Dispose）。</summary>
     public sealed class RevInputScope : IDisposable
     {
+        // Dispose 是幂等的：第一次释放后，后续调用会直接返回，不会再做清理。
+        // 因此释放后必须拒绝新建屏蔽和事件订阅；否则新内容虽然登记成功，以后再 Dispose 也不会清掉，输入可能持续被挡或旧回调持续执行。
         private bool _disposed;
 
         internal RevInputScope()

@@ -79,18 +79,36 @@ namespace Revolution
         /// <summary>释放本容器的全部实例（逆创建序；只释放容器自己创建的）</summary>
         internal void DisposeAll()
         {
-            for (int i = _creationOrder.Count - 1; i >= 0; i--)
+            List<Exception> exceptions = null;
+            try
             {
-                object instance = _creationOrder[i];
+                for (int i = _creationOrder.Count - 1; i >= 0; i--)
+                {
+                    object instance = _creationOrder[i];
 
-                if (_ownedFlags.TryGetValue(instance, out bool owned) && !owned) continue;   // 业务自己的实例：不动
-                if (instance is IDisposable disposable) disposable.Dispose();
+                    if (_ownedFlags.TryGetValue(instance, out bool owned) && !owned) continue;   // 业务自己的实例：不动
+                    if (!(instance is IDisposable disposable)) continue;
+
+                    try { disposable.Dispose(); }
+                    catch (Exception e)
+                    {
+                        // IDisposable 是业务代码，可能因为文件已关闭、网络断开等原因抛异常。若这里直接让异常冒出循环，
+                        // 后面创建的服务就永远得不到 Dispose，持有的资源会泄漏；所以记下错误、继续倒序清理全部实例，结束后再统一报告。
+                        if (exceptions == null) exceptions = new List<Exception>();
+                        exceptions.Add(e);
+                    }
+                }
+            }
+            finally
+            {
+                // 即使有 Dispose 抛异常，也要清空容器记录，防止下一次释放时重复访问已经处理过的实例。
+                _instances.Clear();
+                _creationOrder.Clear();
+                _tickables.Clear();
+                _ownedFlags.Clear();
             }
 
-            _instances.Clear();
-            _creationOrder.Clear();
-            _tickables.Clear();
-            _ownedFlags.Clear();
+            if (exceptions != null) throw new AggregateException("释放服务时有一个或多个 IDisposable 抛出异常。", exceptions);
         }
 
         /// <summary>把已持有的服务类型列出来（写进"取不到服务"的错误信息，让排查一眼到位）</summary>

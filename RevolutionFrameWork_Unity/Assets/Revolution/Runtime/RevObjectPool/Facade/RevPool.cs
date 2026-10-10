@@ -213,6 +213,22 @@ namespace Revolution
         /// <summary>清空某条池的空闲实例（池保留，之后还能继续用）。返回销毁数量。</summary>
         public static int Clear(string rootPath, string resName) => RevGameObjectPools.Clear(rootPath, resName);
 
+        /// <summary>
+        /// 按类型清空某条池的空闲实例（推荐）：路径从 <typeparamref name="T"/> 上的 <see cref="RevPoolPrefabAttribute"/> 读取，
+        /// 和 <c>RevPool.Get&lt;T&gt;()</c> 找的是同一条池，取用时没写路径字符串，清理时也不用再写。
+        /// <code>
+        /// RevPool.Clear&lt;Bullet&gt;();      // 等价于 RevPool.Clear("Battle/Bullet", "Bullet_Normal")
+        /// </code>
+        /// 类型上没写特性 → 报错（提示怎么加特性）并返回 0，不会误清别的池。
+        /// </summary>
+        public static int Clear<T>() where T : Component
+        {
+            // 解析失败（没写特性）时 TryResolve 内部已经报过错，这里安静地返回 0 即可。
+            if (!TryResolve<T>(out string root, out string name, out _)) return 0;
+
+            return RevGameObjectPools.Clear(root, name);
+        }
+
         /// <summary>清空所有池的空闲实例（池保留）。返回销毁总数。</summary>
         public static int ClearAll() => RevGameObjectPools.ClearAll();
 
@@ -227,6 +243,21 @@ namespace Revolution
 
         /// <summary>销毁整条池（空闲实例销毁 + 还掉 prefab 引用）。按"根目录 + 资源名"找。</summary>
         public static bool DestroyPool(string rootPath, string resName) => RevGameObjectPools.DestroyPool(rootPath, resName);
+
+        /// <summary>
+        /// 按类型销毁整条池（推荐）：路径从 <typeparamref name="T"/> 上的 <see cref="RevPoolPrefabAttribute"/> 读取，
+        /// 和 <c>RevPool.Get&lt;T&gt;()</c> 找的是同一条池。
+        /// <code>
+        /// RevPool.DestroyPool&lt;Bullet&gt;();   // 等价于 RevPool.DestroyPool("Battle/Bullet", "Bullet_Normal")
+        /// </code>
+        /// 类型上没写特性 → 报错并返回 false；池本来就不存在 → 也返回 false（和字符串版本行为一致）。
+        /// </summary>
+        public static bool DestroyPool<T>() where T : Component
+        {
+            if (!TryResolve<T>(out string root, out string name, out _)) return false;
+
+            return RevGameObjectPools.DestroyPool(root, name);
+        }
 
         /// <summary>销毁整条池。按 prefab 引用找。</summary>
         public static bool DestroyPool(GameObject prefab) => RevGameObjectPools.DestroyPool(prefab);

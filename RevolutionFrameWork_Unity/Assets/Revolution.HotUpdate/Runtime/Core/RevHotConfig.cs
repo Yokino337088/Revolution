@@ -224,6 +224,8 @@ namespace Revolution.HotUpdate
                 return "TimeoutSeconds 必须 ≥ 1（0 / 负数 = 请求没有超时兜底，网络异常时热更会永远卡住）";
             }
 
+            // 退避是“失败后逐渐多等一会儿再重试”，例如先等 0.5 秒、再等 1 秒，让网络或 CDN 有时间恢复。
+            // 负数会让等待时间失去这个含义，可能变成几乎不等待、连续重复请求，所以配置阶段直接拒绝。
             if (RetryBackoffMs < 0)
             {
                 return "RetryBackoffMs 不能是负数（重试退避基数，毫秒）";

@@ -230,6 +230,8 @@ namespace Revolution
                 rt.Elapsed -= duration;
                 rt.LoopsDone++;
 
+                // Wrap = Once 的意思是“播放一遍就结束”，不应再看 Loops 配置。
+                // 若仍按 Loops 判断，-1（无限次）会让 Once 永远不结束，大于 1 则会让标记为 Once 的动画错误地重复播放。
                 bool lastLoop = rt.Spec.Wrap == RevUIAnimWrap.Once ||
                                 (rt.Spec.Loops >= 0 && rt.LoopsDone >= rt.Spec.Loops);
 

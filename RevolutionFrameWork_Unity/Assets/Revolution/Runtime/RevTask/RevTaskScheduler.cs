@@ -83,7 +83,10 @@ namespace Revolution
             return source.Task;
         }
 
-        /// <summary>等一批任务全部完成</summary>
+        /// <summary>
+        /// 等所有任务都结束后再完成；只要其中一个任务失败，await WhenAll 也会把该异常交给调用方。
+        /// 空数组或 null 按“没有任务需要等待”处理，立即成功完成。
+        /// </summary>
         public static RevTask WhenAll(params RevTask[] tasks)
         {
             var source = new RevTaskCompletionSource();
@@ -94,12 +97,22 @@ namespace Revolution
                 return source.Task;
             }
 
+            // 原实现只数“完成了几个”，最后无论子任务成功还是失败都 SetResult；调用方 await WhenAll 会误以为整批成功，
+            // 例如下载其中一个文件失败，后续流程却继续把不完整版本标记成完成。每个子任务结束时读取它的结果并保存第一个异常，
+            // 仍等整批任务都结束（让其他任务有机会清理），最后再让 WhenAll 成功或以该异常失败。
             int remain = tasks.Length;
+            Exception firstException = null;
             foreach (RevTask t in tasks)
             {
-                t.GetAwaiter().OnCompleted(() =>
+                RevTask task = t;
+                task.GetAwaiter().OnCompleted(() =>
                 {
-                    if (--remain == 0) source.SetResult();
+                    try { task.GetAwaiter().GetResult(); }
+                    catch (Exception e) { if (firstException == null) firstException = e; }
+
+                    if (--remain != 0) return;
+                    if (firstException != null) source.SetException(firstException);
+                    else source.SetResult();
                 });
             }
 

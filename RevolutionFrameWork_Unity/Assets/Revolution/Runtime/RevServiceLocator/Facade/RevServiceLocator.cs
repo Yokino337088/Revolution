@@ -166,25 +166,39 @@ namespace Revolution
         {
             if (_disposed) return;
             _disposed = true;
+            List<Exception> exceptions = null;
 
             if (_parent == null && _scopes != null)
             {
-                // ★ Bug 修复（2026-09-30）：先把列表整个摘下来再逐个释放。
-                //   子作用域的 Dispose 会把自己从本列表移除（见下面"Bug 修复"注释）——
-                //   如果边倒序遍历边 Remove，列表左移会导致每隔一个漏放一个；先夺走列表则两边都安全。
+                // 先复制并清空子作用域列表，再逐个释放。子作用域 Dispose 会从根容器登记表移除自己；
+                // 若一边遍历原列表一边让子作用域删自己，列表会移动，可能跳过其他作用域。
                 List<RevServiceLocator> scopes = new List<RevServiceLocator>(_scopes);
                 _scopes.Clear();
-                for (int i = scopes.Count - 1; i >= 0; i--) scopes[i].Dispose();
+                for (int i = scopes.Count - 1; i >= 0; i--)
+                {
+                    try { scopes[i].Dispose(); }
+                    catch (Exception e)
+                    {
+                        // 每个作用域里也可能有服务 Dispose 抛错。如果让它直接跳出循环，其他战斗/场景作用域和根 Singleton 都不会释放。
+                        // 先记下错误并继续清理所有作用域及根容器；全部尝试完后再一次性把错误交给调用方。
+                        if (exceptions == null) exceptions = new List<Exception>();
+                        exceptions.Add(e);
+                    }
+                }
             }
 
-            // ★ Bug 修复（2026-09-30）：把自己从父（根）容器的跟踪列表里摘掉。
-            //   原实现只加不减：每局 using (CreateScope()) 结束后，根的 _scopes 就永久多留一个
-            //   已释放的作用域对象（连同它的实例表空壳）—— 长跑游戏每局泄漏一份，越积越多；
-            //   根容器最后 Dispose 时还要白白遍历这一串死对象。
-            //   （根容器释放路径在上面已先把列表整个摘空，此处 Remove 找不到目标是安全的空操作。）
+            // 作用域结束后从根容器登记表移除，避免每一局的已释放作用域对象一直积累。
+            // 根容器路径在上面已先清空列表，此处 Remove 找不到对象也安全。
             _parent?._scopes?.Remove(this);
 
-            _own.DisposeAll();
+            try { _own.DisposeAll(); }
+            catch (Exception e)
+            {
+                if (exceptions == null) exceptions = new List<Exception>();
+                exceptions.Add(e);
+            }
+
+            if (exceptions != null) throw new AggregateException("释放服务容器时有一个或多个清理操作失败。", exceptions).Flatten();
         }
 
         // ============================================================

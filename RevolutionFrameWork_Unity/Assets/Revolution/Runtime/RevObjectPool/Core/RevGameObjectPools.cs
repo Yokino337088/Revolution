@@ -122,7 +122,8 @@ namespace Revolution
 
             ulong key = RevResPathUtil.ComputeKey(rootPath, resName);
 
-            // ① 池已就绪 → 立即回调；Get 返回的是本次调用的资源租约。
+            // 池已经加载好 prefab 时，不必再异步读取资源，可以马上从池里取对象并回调。
+            // 返回的 handle 是本次调用自己的资源引用：调用方以后可以 DecRef；池需要的长期引用由池自己另行持有，不能共用这一份。
             if (_byKey.TryGetValue(key, out RevGameObjectPool ready) && ready.HasPrefab)
             {
                 RevResHandle callerLease = RevResManager.Get(rootPath, resName);
@@ -131,7 +132,8 @@ namespace Revolution
                 return callerLease;
             }
 
-            // ② 走资源系统异步加载。LoadAsync 本次 +1 归调用方；新建池时再单独 +1 作为池的长期租约。
+            // 池还没有可用 prefab 时，请资源系统异步加载。LoadAsync 会把资源使用计数加 1，这一份先归发起请求的调用方。
+            // 如果这次请求负责新建池，还要额外 AddRef 一次给池长期持有；否则调用方完成后 DecRef，池会失去之后复制 prefab 所需的资源。
             return RevResManager.LoadAsync(rootPath, resName, typeof(GameObject), handle =>
             {
                 GameObject prefab = handle != null ? handle.Get<GameObject>() : null;
@@ -143,7 +145,8 @@ namespace Revolution
                     return;
                 }
 
-                // 加载期间可能已经有别的请求把池建好了；当前 LoadAsync 租约只交给调用方。
+                // 异步加载期间其他请求可能先完成并创建了同一条池。此时新请求直接从现成池取对象，
+                // 本次 LoadAsync 增加的资源引用仍属于调用方，不能转交或丢给池；调用方用完需自行归还这份引用。
                 if (_byKey.TryGetValue(key, out RevGameObjectPool existing) && existing.Prefab == prefab)
                 {
                     InvokeGetCallback(onFinished, existing.Get(parent));
@@ -153,7 +156,8 @@ namespace Revolution
                 RevResHandle poolLease = handle;
                 if (!RevResManager.IsCurrent(poolLease) || poolLease.Content != prefab)
                 {
-                    // 资源缓存已被清账：禁止让池接管旧句柄，也不额外增加无主引用。
+                    // 资源可能在加载过程中被 Shutdown/UnloadAll 移出缓存；这时 handle 已不是当前有效租约。
+                    // 若仍 AddRef 或交给池保存，就会出现没有资源系统记录对应的“孤儿引用”，之后既无法正确统计也无法配对释放，所以不让池接管它。
                     RevPoolLog.Warning($"「{RevResPathUtil.Join(rootPath, resName)}」加载完成后资源缓存已不再持有同一句柄，池将不持有它的引用。");
                     poolLease = null;
                 }
@@ -289,7 +293,8 @@ namespace Revolution
         /// <summary>按 prefab 引用销毁整条池。</summary>
         internal static bool DestroyPool(GameObject prefab)
         {
-            // Unity 的 fake null 仍保留托管包装器与 InstanceID；允许用已销毁 prefab 引用清掉对应池。
+            // Unity 对象被 Destroy 后看起来等于 null，但 C# 里的托管包装对象有时还在，且还保留原 InstanceID。
+            // 先用 ReferenceEquals 只拦真正的 C# null，才能从索引表找到并清理这个已销毁 prefab 原来对应的池；普通 prefab == null 检查会错过它。
             if (ReferenceEquals(prefab, null)) return false;
 
             int prefabId;
@@ -433,9 +438,9 @@ namespace Revolution
         {
             if (_byKey.TryGetValue(key, out RevGameObjectPool old))
             {
-                // 已有这条池（多半是 prefab 被外部卸载过）→ 换 prefab 与句柄，旧实例清掉重建。
-                // Rebind 会改变池绑定的 prefab ID；若不摘旧索引，旧引用仍会解析到这条新池，
-                // 导致按 prefab 查找/销毁时池身份与 prefab 映射不一致。
+                // 同一路径可能重新加载出新的 prefab 实例（例如旧资源卸载后又加载，或热更新替换了资源）。
+                // 这时保留旧对象会让新请求取到旧版本，所以 Rebind 会清理旧实例，再把池改绑到新 prefab。
+                // 改绑后还要从索引表删除旧 prefab 的 InstanceID；否则旧 prefab 引用以后来销毁池时，仍会误命中这条已经属于新 prefab 的池。
                 int oldPrefabId = old.PrefabInstanceId;
                 old.Rebind(prefab, handle, rootPath, resName);
                 if (oldPrefabId != 0 && oldPrefabId != old.PrefabInstanceId &&
