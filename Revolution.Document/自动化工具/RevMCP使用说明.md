@@ -41,7 +41,7 @@ RevMCP 把 Unity Editor、游戏实际注册的 GM、运行时业务能力和项
 以下命令在仓库根目录的 PowerShell 执行。`--project` 填的是含 Assets/ProjectSettings 的 Unity 工程目录。先用 Unity 打开该工程并等待编译完成。
 
 ```powershell
-$project = 'G:\RevRoot\Revolution\RevolutionFrameWork_Unity'
+$project = '<本仓库绝对路径>/RevolutionFrameWork_Unity'
 $env:PYTHONIOENCODING = 'utf-8'
 python Revolution.Automation/rev.py --project $project --mode live editor status
 python Revolution.Automation/rev.py --project $project --mode live editor coverage
@@ -65,8 +65,8 @@ Unity 菜单 `Revolution.Tools/AI/RevMCP 控制台` 可查看工程/Play/GM 数�
     "revolution": {
       "command": "python",
       "args": [
-        "G:/RevRoot/Revolution/Revolution.RevMCP/rev_mcp.py",
-        "--project", "G:/RevRoot/Revolution/RevolutionFrameWork_Unity",
+        "<本仓库绝对路径>/Revolution.RevMCP/rev_mcp.py",
+        "--project", "<本仓库绝对路径>/RevolutionFrameWork_Unity",
         "serve"
       ]
     }
@@ -76,7 +76,9 @@ Unity 菜单 `Revolution.Tools/AI/RevMCP 控制台` 可查看工程/Play/GM 数�
 
 把 command 改为本机 Python 的绝对路径可避免 PATH 差异。所有全局参数放在 serve/discover/call/run 前。stdio 由 Agent 启动并持有；命令行直接运行 serve 后等待输入属于正常状态。stdout 只输出 MCP JSON-RPC，调试信息不能混入 stdout。
 
-安装 Skill：把仓库 `Skills/revolution-ai-automation` 整个目录复制到你的 Agent skills 目录。本次在当前电脑已安装到 `C:/Users/zhuohengyu/.codex/skills/revolution-ai-automation`；客户端如尚未刷新列表，开启新会话后使用。
+上面示例里的 `<本仓库绝对路径>`、`<Python 3.10+ 安装目录>` 都是占位符，不是让你照抄的路径：MCP 客户端只接受绝对路径，请替换成你自己机器上的目录（本文档不写死任何人的机器路径）。
+
+安装 Skill：把仓库 `Skills/revolution-ai-automation` 整个目录复制到你所用 Agent 的 skills 目录（例如 Codex 的 `~/.codex/skills/`、Claude 的 `~/.claude/skills/`）。复制后若工具列表没刷新，开一个新会话即可。
 
 连接后可说：
 
@@ -159,7 +161,7 @@ Schema 支持：单一 type（object/array/string/integer/number/boolean/null）
 勾选 Development Build 出包。启动时显式指定：
 
 ```powershell
-& 'G:\你的构建目录\Player.exe' -revAutomation -revAutomationPort 18767
+& '<你的构建目录>/Player.exe' -revAutomation -revAutomationPort 18767
 ```
 
 也可在开发态启动入口调用 `RevRuntimeAutomation.Start(18767)`。默认端口 18766。Editor 控制台启用服务时凭据在工程 `Library/RevolutionAutomation/runtime.json`；Player 在 `Application.persistentDataPath/RevolutionAutomation/runtime.json`。凭据含随机 token、session、pid 和本机 URL，不提交 Git、不贴到聊天。
@@ -186,8 +188,8 @@ HTTP 是运行时内部传输，不是直接提供给 Agent 的 MCP Streamable H
   "tools": [{
     "name": "project.echo",
     "description": "教学：返回收到的文本",
-    "command": ["C:/你的Python/python.exe", "G:/RevRoot/Revolution/Revolution.RevMCP/examples/echo_tool.py"],
-    "cwd": "G:/RevRoot/Revolution",
+    "command": ["<Python 3.10+ 安装目录>/python.exe", "<本仓库绝对路径>/Revolution.RevMCP/examples/echo_tool.py"],
+    "cwd": "<本仓库绝对路径>",
     "inputSchema": {"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},
     "readOnly": true, "confirm": false, "timeoutSeconds": 10, "output": "json"
   }]
@@ -195,7 +197,7 @@ HTTP 是运行时内部传输，不是直接提供给 Agent 的 MCP Streamable H
 ```
 
 ```powershell
-python Revolution.RevMCP/rev_mcp.py --project $project --external-manifest 'G:/你的配置/tools.json' discover
+python Revolution.RevMCP/rev_mcp.py --project $project --external-manifest '<你的配置目录>/tools.json' discover
 ```
 
 Agent 用 target=cli、action=project.echo、arguments={"text":"你好"}。参数通过 UTF-8 JSON stdin 传递；stdout 返回 JSON（或 output=text），stderr 用于日志。进程非零退出或 JSON 顶层 success=false 判失败。shell=False，不直接启动 cmd/bat/ps1；原工具只接受 argv 时，为它写固定 JSON 包装脚本。输出合计限制 4 MiB。取消会终止直接子进程，工具自己派生的进程应自行管理生命周期。

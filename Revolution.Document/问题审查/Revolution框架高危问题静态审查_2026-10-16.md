@@ -4,8 +4,8 @@
 
 审查日期：2026-10-16（Asia/Shanghai）<br>
 源码基线：`d9fdc3edf75044f0b92c4abfca3056a7c8ac496e`<br>
-审查对象：`D:\AAAAAAA王者荣耀项目组工作日志\RevolutionFramework\RevolutionFrameWork_Unity\Assets\Revolution`<br>
-交付位置：`D:\AAAAAAA王者荣耀项目组工作日志\RevolutionFramework\Revolution.Document\问题审查`
+审查对象：`RevolutionFrameWork_Unity\Assets\Revolution`<br>
+交付位置：`Revolution.Document\问题审查`
 
 > 本轮只审查并生成文档，没有修改框架源码。发现 **13 项运行时缺陷或异常收口缺口**，另记录 **9 项条件风险及平台/诊断问题、2 项规范问题**。优先关注异步永久等待、资源引用误扣、动画重入越界和声音槽位耗尽。
 >

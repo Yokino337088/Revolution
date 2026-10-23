@@ -186,7 +186,7 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
 </tbody></table></div>
 </section><section id="s2"><h2>2. 最快连通</h2>
 <p>先用 Unity 打开正确工程，等待脚本编译。以下从仓库根目录执行；其他项目请替换 --project。</p>
-<pre><code class="language-powershell">$project = &#39;G:\RevRoot\Revolution\RevolutionFrameWork_Unity&#39;
+<pre><code class="language-powershell">$project = &#39;<本仓库绝对路径>/RevolutionFrameWork_Unity&#39;
 $env:PYTHONIOENCODING = &#39;utf-8&#39;
 python Revolution.Automation/rev.py --project $project doctor
 python Revolution.Automation/rev.py --project $project --mode live editor status
@@ -194,7 +194,7 @@ python Revolution.Automation/rev.py --project $project --mode live commands --li
 python Revolution.Automation/rev.py --project $project --mode live editor coverage
 </code></pre>
 <p>需要工具启动 Unity 时指定真实 Unity.exe 路径，再执行 editor launch。已有工程绝不另开 batch 争用。</p>
-<pre><code class="language-powershell">$env:UNITY_EDITOR = &#39;G:\Unity\Editor\2022.3.15f1c1\Editor\Unity.exe&#39;
+<pre><code class="language-powershell">$env:UNITY_EDITOR = &#39;<Unity 安装目录>/2022.3.15f1c1/Editor/Unity.exe&#39;
 python Revolution.Automation/rev.py --project $project --timeout 300 editor launch
 python Revolution.Automation/rev.py --project $project --mode live editor wait
 </code></pre>

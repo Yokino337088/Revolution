@@ -199,7 +199,7 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
 <p>复制到其他项目时，同时保留 Python 两个工具目录和 Unity 里的框架代码。只拷贝 Python 无法控制没有桥的工程。无需为了使用 Editor 文件桥而开启 HTTP。</p>
 </section><section id="s3"><h2>3. 新手先跑通 Demo</h2>
 <p>以下命令在仓库根目录的 PowerShell 执行。<code>--project</code> 填的是含 Assets/ProjectSettings 的 Unity 工程目录。先用 Unity 打开该工程并等待编译完成。</p>
-<pre><code class="language-powershell">$project = &#39;G:\RevRoot\Revolution\RevolutionFrameWork_Unity&#39;
+<pre><code class="language-powershell">$project = &#39;<本仓库绝对路径>/RevolutionFrameWork_Unity&#39;
 $env:PYTHONIOENCODING = &#39;utf-8&#39;
 python Revolution.Automation/rev.py --project $project --mode live editor status
 python Revolution.Automation/rev.py --project $project --mode live editor coverage
@@ -217,8 +217,8 @@ python Revolution.Automation/rev.py --project $project --mode live editor stop
     &quot;revolution&quot;: {
       &quot;command&quot;: &quot;python&quot;,
       &quot;args&quot;: [
-        &quot;G:/RevRoot/Revolution/Revolution.RevMCP/rev_mcp.py&quot;,
-        &quot;--project&quot;, &quot;G:/RevRoot/Revolution/RevolutionFrameWork_Unity&quot;,
+        &quot;<本仓库绝对路径>/Revolution.RevMCP/rev_mcp.py&quot;,
+        &quot;--project&quot;, &quot;<本仓库绝对路径>/RevolutionFrameWork_Unity&quot;,
         &quot;serve&quot;
       ]
     }
@@ -226,7 +226,8 @@ python Revolution.Automation/rev.py --project $project --mode live editor stop
 }
 </code></pre>
 <p>把 command 改为本机 Python 的绝对路径可避免 PATH 差异。所有全局参数放在 serve/discover/call/run 前。stdio 由 Agent 启动并持有；命令行直接运行 serve 后等待输入属于正常状态。stdout 只输出 MCP JSON-RPC，调试信息不能混入 stdout。</p>
-<p>安装 Skill：把仓库 <code>Skills/revolution-ai-automation</code> 整个目录复制到你的 Agent skills 目录。本次在当前电脑已安装到 <code>C:/Users/zhuohengyu/.codex/skills/revolution-ai-automation</code>；客户端如尚未刷新列表，开启新会话后使用。</p>
+<p>上面示例里的 <code>&lt;本仓库绝对路径&gt;</code>、<code>&lt;Python 3.10+ 安装目录&gt;</code> 都是占位符，不是让你照抄的路径：MCP 客户端只接受绝对路径，请替换成你自己机器上的目录（本文档不写死任何人的机器路径）。</p>
+<p>安装 Skill：把仓库 <code>Skills/revolution-ai-automation</code> 整个目录复制到你所用 Agent 的 skills 目录（例如 Codex 的 <code>~/.codex/skills/</code>、Claude 的 <code>~/.claude/skills/</code>）。复制后若工具列表没刷新，开一个新会话即可。</p>
 <p>连接后可说：</p>
 <blockquote>
 <p>使用 revolution-ai-automation，测试 RevAutomationDemo：点击增加按钮，再通过 GM 增加 2，断言计数为 3，截图并清理归零；给我结果和证据。</p>
@@ -336,7 +337,7 @@ RevRuntimeAutomation.UnregisterAllOf(this);
 <p>截图保存在 <code>Application.persistentDataPath/RevolutionAutomation/screenshots/</code>，最大 8 MiB PNG。MCP 一次响应最多附带 4 张图片；报告省略重复 base64 并保留图片路径。截图需要图形渲染环境，不应用无图形模式验视觉。</p>
 </section><section id="s8"><h2>8. 独立开发版 Player</h2>
 <p>勾选 Development Build 出包。启动时显式指定：</p>
-<pre><code class="language-powershell">&amp; &#39;G:\你的构建目录\Player.exe&#39; -revAutomation -revAutomationPort 18767
+<pre><code class="language-powershell">&amp; &#39;<你的构建目录>/Player.exe&#39; -revAutomation -revAutomationPort 18767
 </code></pre>
 <p>也可在开发态启动入口调用 <code>RevRuntimeAutomation.Start(18767)</code>。默认端口 18766。Editor 控制台启用服务时凭据在工程 <code>Library/RevolutionAutomation/runtime.json</code>；Player 在 <code>Application.persistentDataPath/RevolutionAutomation/runtime.json</code>。凭据含随机 token、session、pid 和本机 URL，不提交 Git、不贴到聊天。</p>
 <pre><code class="language-powershell">$endpoint = &quot;$env:USERPROFILE\AppData\LocalLow\DefaultCompany\RevolutionFrameWork_Unity\RevolutionAutomation\runtime.json&quot;
@@ -353,14 +354,14 @@ python Revolution.RevMCP/rev_mcp.py --runtime-endpoint $endpoint run Revolution.
   &quot;tools&quot;: [{
     &quot;name&quot;: &quot;project.echo&quot;,
     &quot;description&quot;: &quot;教学：返回收到的文本&quot;,
-    &quot;command&quot;: [&quot;C:/你的Python/python.exe&quot;, &quot;G:/RevRoot/Revolution/Revolution.RevMCP/examples/echo_tool.py&quot;],
-    &quot;cwd&quot;: &quot;G:/RevRoot/Revolution&quot;,
+    &quot;command&quot;: [&quot;<Python 3.10+ 安装目录>/python.exe&quot;, &quot;<本仓库绝对路径>/Revolution.RevMCP/examples/echo_tool.py&quot;],
+    &quot;cwd&quot;: &quot;<本仓库绝对路径>&quot;,
     &quot;inputSchema&quot;: {&quot;type&quot;:&quot;object&quot;,&quot;properties&quot;:{&quot;text&quot;:{&quot;type&quot;:&quot;string&quot;}},&quot;required&quot;:[&quot;text&quot;],&quot;additionalProperties&quot;:false},
     &quot;readOnly&quot;: true, &quot;confirm&quot;: false, &quot;timeoutSeconds&quot;: 10, &quot;output&quot;: &quot;json&quot;
   }]
 }
 </code></pre>
-<pre><code class="language-powershell">python Revolution.RevMCP/rev_mcp.py --project $project --external-manifest &#39;G:/你的配置/tools.json&#39; discover
+<pre><code class="language-powershell">python Revolution.RevMCP/rev_mcp.py --project $project --external-manifest &#39;<你的配置目录>/tools.json&#39; discover
 </code></pre>
 <p>Agent 用 target=cli、action=project.echo、arguments={&quot;text&quot;:&quot;你好&quot;}。参数通过 UTF-8 JSON stdin 传递；stdout 返回 JSON（或 output=text），stderr 用于日志。进程非零退出或 JSON 顶层 success=false 判失败。shell=False，不直接启动 cmd/bat/ps1；原工具只接受 argv 时，为它写固定 JSON 包装脚本。输出合计限制 4 MiB。取消会终止直接子进程，工具自己派生的进程应自行管理生命周期。</p>
 </section><section id="s10"><h2>10. 带断言与清理的计划</h2>

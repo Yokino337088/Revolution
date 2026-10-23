@@ -24,7 +24,7 @@
 
 ### 2. 打开工具选择目录
 
-在第 01 步选 Unity **平铺 AB 产物目录**：例如 `G:\MyGame\AssetBundles\PC`。该目录至少包括：
+在第 01 步选 Unity **平铺 AB 产物目录**：例如 `<你的工程目录>\AssetBundles\PC`。该目录至少包括：
 
 ```text
 AssetBundles/PC/

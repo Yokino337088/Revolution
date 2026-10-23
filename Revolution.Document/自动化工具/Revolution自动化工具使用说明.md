@@ -26,7 +26,7 @@ CLI 写 request → Unity 轮询 inbox → 校验参数与环境
 先用 Unity 打开正确工程，等待脚本编译。以下从仓库根目录执行；其他项目请替换 --project。
 
 ```powershell
-$project = 'G:\RevRoot\Revolution\RevolutionFrameWork_Unity'
+$project = '<本仓库绝对路径>/RevolutionFrameWork_Unity'
 $env:PYTHONIOENCODING = 'utf-8'
 python Revolution.Automation/rev.py --project $project doctor
 python Revolution.Automation/rev.py --project $project --mode live editor status
@@ -37,7 +37,7 @@ python Revolution.Automation/rev.py --project $project --mode live editor covera
 需要工具启动 Unity 时指定真实 Unity.exe 路径，再执行 editor launch。已有工程绝不另开 batch 争用。
 
 ```powershell
-$env:UNITY_EDITOR = 'G:\Unity\Editor\2022.3.15f1c1\Editor\Unity.exe'
+$env:UNITY_EDITOR = '<Unity 安装目录>/2022.3.15f1c1/Editor/Unity.exe'
 python Revolution.Automation/rev.py --project $project --timeout 300 editor launch
 python Revolution.Automation/rev.py --project $project --mode live editor wait
 ```

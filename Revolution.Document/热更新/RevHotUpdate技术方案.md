@@ -1559,14 +1559,14 @@ internal sealed class RevHotUrlSink  : IRevHotSink { ... }    // WebGL / 小游�
 
 | 环节 | 真实代码与现状 | 未兑现的旧承诺 |
 |---|---|---|
-| 框架接缝 | `g:\Revolution\RevolutionFrameWork_Unity\Assets\Revolution.HotUpdate\Runtime\Integration\RevHotResBridge.cs:31-56` 实际装 **4 个**钩子：`BundlePathResolver`、`BundleCacheKeyResolver`、`DependenciesOverride`、`ResMapOverride` | 前文第 3/4/11/14/15 章的“仅两处钩子/仅路径+映射表”是历史草案；新依赖与 WebGL 缓存也要随清单同步 |
+| 框架接缝 | `RevolutionFrameWork_Unity\Assets\Revolution.HotUpdate\Runtime\Integration\RevHotResBridge.cs:31-56` 实际装 **4 个**钩子：`BundlePathResolver`、`BundleCacheKeyResolver`、`DependenciesOverride`、`ResMapOverride` | 前文第 3/4/11/14/15 章的“仅两处钩子/仅路径+映射表”是历史草案；新依赖与 WebGL 缓存也要随清单同步 |
 | 计划与目录 | `...\Runtime\Pipeline\RevHotPlanner.cs:27-83` 同名 hash 相同直接跳过；`...\Runtime\Pipeline\RevHotStore.cs:243-273,750-803` 按当前目录→历史目录→首包找**存在**的包，旧目录按数量清理 | 当前并非“完整快照版本”：未变包可能只在被清理的旧目录；指回旧版本也可能命中更新的包，**不能承诺任意版本回滚** |
 | 下载/恢复 | `...\Runtime\Download\RevHotDownloader.cs:266-383` 用 `.part`/Range 重试，但每次开始第一个源就删除 `.part`（273-278）；不支持 Range 时改从头下载 | 不保证杀进程后跨启动续传；换源不能安全拼接不同源片段；只靠计划 hash 并不复验历史文件 |
 | 激活 | `...\Runtime\Facade\RevHotUpdate.cs:352-390` 先 stamp、切 `current`、清旧目录，**再** `ReinitResourceSystem`；其失败会返回错误 | “失败时 current 一定未变”“切版本后一定能加载旧版”“坏包绝不加载”均不是当前代码保证 |
 | 清单/自检 | `...\Runtime\Core\RevHotManifest.cs:150-256` 检查必要版本、行格式和可选 bundleCount；`...\Editor\RevHotManifestBuilder.cs:168-219` 自检存在、大小与直接依赖 | 尚不校验每包内容 hash、包名路径安全/重名/自依赖/循环依赖/完整依赖闭包；tags/首包集合未形成可用的按需策略，`HashAndCrc` 不是已完成的加载期校验 |
 | 平台 | 文件型先下载再加载；WebGL 不预下载 AB，依靠 `RevABLoader` 按 URL/可选 hash+CRC 拉取，参考 `...\Runtime\Pipeline\RevHotStore.cs:247-251,315-349` | 文件下载器的备用源、附加 Header、Range、SHA 文件校验**不会自动套到 WebGL AB 请求**；小游戏容器的缓存/CORS/域名限制仍需实测 |
 
-> 上表中 `...` 均以 `g:\Revolution\RevolutionFrameWork_Unity\Assets\Revolution.HotUpdate` 为前缀；引用的行号基于本次静态审阅，后续改代码以实际版本复核。`Hash`/`CRC` 是完整性和缓存材料，不等于**清单来源可信**；若要抵御被篡改的清单需另行设计签名与公钥分发。
+> 上表中 `...` 均以 `RevolutionFrameWork_Unity\Assets\Revolution.HotUpdate` 为前缀；引用的行号基于本次静态审阅，后续改代码以实际版本复核。`Hash`/`CRC` 是完整性和缓存材料，不等于**清单来源可信**；若要抵御被篡改的清单需另行设计签名与公钥分发。
 
 ### 19.3 优化目标：轻量“候选版本门禁”，按失败代价分期
 
@@ -1601,4 +1601,4 @@ internal sealed class RevHotUrlSink  : IRevHotSink { ... }    // WebGL / 小游�
 
 ---
 
-*对应代码：`g:\Revolution\RevolutionFrameWork_Unity\Assets\Revolution.HotUpdate\` 与 `g:\Revolution\RevolutionFrameWork_Unity\Assets\Revolution\Runtime\RevResourceSystem\`；参考源码：`F:\system\Program\GameScripts\`。P0/P1 已开始编码，故障注入及 Unity/真机验收仍待执行。*
+*对应代码：`RevolutionFrameWork_Unity\Assets\Revolution.HotUpdate\` 与 `RevolutionFrameWork_Unity\Assets\Revolution\Runtime\RevResourceSystem\`；参考源码：`F:\system\Program\GameScripts\`。P0/P1 已开始编码，故障注入及 Unity/真机验收仍待执行。*

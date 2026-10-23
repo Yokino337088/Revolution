@@ -39,8 +39,8 @@
 </blockquote>
 <p>审查日期：2026-10-16（Asia/Shanghai）<br>
 源码基线：<code>d9fdc3edf75044f0b92c4abfca3056a7c8ac496e</code><br>
-审查对象：<code>D:\AAAAAAA王者荣耀项目组工作日志\RevolutionFramework\RevolutionFrameWork_Unity\Assets\Revolution</code><br>
-交付位置：<code>D:\AAAAAAA王者荣耀项目组工作日志\RevolutionFramework\Revolution.Document\问题审查</code></p>
+审查对象：<code>RevolutionFrameWork_Unity\Assets\Revolution</code><br>
+交付位置：<code>Revolution.Document\问题审查</code></p>
 <blockquote>
 <p>本轮只审查并生成文档，没有修改框架源码。发现 <strong>13 项运行时缺陷或异常收口缺口</strong>，另记录 <strong>9 项条件风险及平台/诊断问题、2 项规范问题</strong>。优先关注异步永久等待、资源引用误扣、动画重入越界和声音槽位耗尽。</p>
 <p>结论来自静态代码路径审查，<strong>没有执行 Unity 编译、PlayMode、真机、WebGL 构建或运行时复现</strong>。下文“静态确认”表示触发条件成立时，现有代码能推导出该后果；不代表已在本项目游戏流程中复现，也不代表已确认原生进程崩溃。F13 可形成主线程死循环，但需要异常数值输入。</p>

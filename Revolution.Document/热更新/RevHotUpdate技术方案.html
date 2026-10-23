@@ -1730,7 +1730,7 @@ RevResBootstrap.Instance.Init();          // ② 重装策略 → 新文件生�
       <tr><td>发布校验</td><td><code>Runtime/Core/RevHotManifest.cs:150-256</code> 仅校验基础字段/可选包数；<code>Editor/RevHotManifestBuilder.cs:168-219</code> 检查包存在/大小/直接依赖</td><td>不重算内容 hash，未完整拦截重名、危险路径、自依赖、循环与依赖闭包；tags/首包集合尚非可用按需能力</td></tr>
       <tr><td>WebGL</td><td><code>Runtime/Pipeline/RevHotStore.cs:247-251,315-349</code> AB 按 URL/可选缓存键加载</td><td>文件下载器的多源、Header、Range 和 SHA 文件校验不自动覆盖 AB 请求；小游戏真机仍须验收</td></tr>
     </tbody></table></div>
-    <p>表中相对路径以前缀 <code>g:\Revolution\RevolutionFrameWork_Unity\Assets\Revolution.HotUpdate\</code> 为准。Hash/CRC 是内容完整性或缓存标识，不证明<b>清单来源可信</b>；抵御篡改需另设计清单签名与公钥分发。</p>
+    <p>表中相对路径以前缀 <code>RevolutionFrameWork_Unity\Assets\Revolution.HotUpdate\</code> 为准。Hash/CRC 是内容完整性或缓存标识，不证明<b>清单来源可信</b>；抵御篡改需另设计清单签名与公钥分发。</p>
 
     <h3>19.3 优化目标：轻量候选版本门禁</h3>
     <div class="table-wrap"><table><thead><tr><th>优先级</th><th>目标（尚未实现）</th><th>验收与原因</th></tr></thead><tbody>
