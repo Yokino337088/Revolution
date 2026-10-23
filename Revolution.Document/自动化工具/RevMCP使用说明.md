@@ -11,7 +11,7 @@
 | | `Revolution.Automation` | `Revolution.RevMCP`（本文档） |
 |---|---|---|
 | 是什么 | **命令行工具**，真正执行动作的那一层 | **MCP 服务**，把 AI 的话翻译成动作 |
-| 谁来用 | 人（命令行）、CI 脚本 | AI 客户端：CodeBuddy、Codex、Claude 等 |
+| 谁来用 | AI 客户端、CI 脚本、排障的你 | AI 客户端：CodeBuddy、Codex、Claude 等 |
 | 入口 | `rev.py` / `rev.cmd` | `rev_mcp.py … serve`（stdio 协议） |
 | 能做的事 | 125 个编辑器/打包/导表/GM 动作 | 上面这些 **＋** 游戏运行时（UI、状态、截图、业务接口） |
 | 依赖关系 | 不依赖 RevMCP | **内部调用 Automation** 去执行 Editor 动作 |
@@ -30,16 +30,17 @@
      Unity 编辑器 / 开发版 Player
 ```
 
-### 新手该先用哪个？
+### 该用哪个？——默认就用 RevMCP，别手敲命令
 
 | 你的目的 | 建议 |
 |---|---|
-| 只是想看看 Unity 现在什么状态、跑一次打包/导表 | **用 Automation**，一条命令，不用配任何东西 |
-| 想让 AI 帮你测功能、自动截图、写测试报告 | **用 RevMCP** |
-| 接 CI（Jenkins / GitHub Actions）跑固定流程 | **用 Automation**（CI 里不需要 AI） |
-| 完全不熟悉命令行，只想像聊天一样操作 | **用 RevMCP**（但建议先让工具跑通一次 `doctor`） |
+| 日常：测功能、跑流程、看截图、要测试结论 | **用 RevMCP**（让 AI 来） |
+| 接 CI（Jenkins / GitHub Actions）跑固定脚本 | 用 Automation 的 CLI（CI 里没有 AI） |
+| 底层排障：AI 说连不上，你想确认哪一层坏了 | 用 Automation 的 `doctor` / `editor.status` 单独试 |
 
-**推荐路径**：先按 `Revolution自动化工具使用说明` 跑通 `doctor` 和 `editor status`，确认“命令能驱动 Unity”这件事成立；再回来配 MCP。这样出问题时你能分清是“底层不通”还是“AI 那边配错”。
+**推荐路径**：**直接配 RevMCP**。不需要“先学会手敲命令”再上 AI——`doctor` 这类自检，让 AI 跑一遍就行，它跑不通会告诉你卡在哪。
+
+手敲命令只留给两种情况：**CI 流水线**，以及 **AI 连不上时的底层排障**。
 
 ## 1. 3 分钟接线（以 CodeBuddy / Codex 为例）
 

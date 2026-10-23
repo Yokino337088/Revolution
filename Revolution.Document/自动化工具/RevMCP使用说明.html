@@ -160,7 +160,7 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
 </thead>
 <tbody>
 <tr><td>是什么</td><td><strong>命令行工具</strong>，真正执行动作的那一层</td><td><strong>MCP 服务</strong>，把 AI 的话翻译成动作</td></tr>
-<tr><td>谁来用</td><td>人（命令行）、CI 脚本</td><td>AI 客户端：CodeBuddy、Codex、Claude 等</td></tr>
+<tr><td>谁来用</td><td>AI 客户端、CI 脚本、排障的你</td><td>AI 客户端：CodeBuddy、Codex、Claude 等</td></tr>
 <tr><td>入口</td><td><code>rev.py</code> / <code>rev.cmd</code></td><td><code>rev_mcp.py … serve</code>（stdio 协议）</td></tr>
 <tr><td>能做的事</td><td>125 个编辑器/打包/导表/GM 动作</td><td>上面这些 <strong>＋</strong> 游戏运行时（UI、状态、截图、业务接口）</td></tr>
 <tr><td>依赖关系</td><td>不依赖 RevMCP</td><td><strong>内部调用 Automation</strong> 去执行 Editor 动作</td></tr>
@@ -176,7 +176,7 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
    Revolution.Automation（真正干活的命令行）
         ↓
      Unity 编辑器 / 开发版 Player</code></pre>
-<h3>新手该先用哪个？</h3>
+<h3>该用哪个？——默认就用 RevMCP，别手敲命令</h3>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -185,19 +185,19 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
 </tr>
 </thead>
 <tbody>
-<tr><td>只是想看看 Unity 现在什么状态、跑一次打包/导表</td><td><strong>用 Automation</strong>，一条命令，不用配任何东西</td></tr>
-<tr><td>想让 AI 帮你测功能、自动截图、写测试报告</td><td><strong>用 RevMCP</strong></td></tr>
-<tr><td>接 CI（Jenkins / GitHub Actions）跑固定流程</td><td><strong>用 Automation</strong>（CI 里不需要 AI）</td></tr>
-<tr><td>完全不熟悉命令行，只想像聊天一样操作</td><td><strong>用 RevMCP</strong>（但建议先让工具跑通一次 <code>doctor</code>）</td></tr>
+<tr><td>日常：测功能、跑流程、看截图、要测试结论</td><td><strong>用 RevMCP</strong>（让 AI 来）</td></tr>
+<tr><td>接 CI（Jenkins / GitHub Actions）跑固定脚本</td><td>用 Automation 的 CLI（CI 里没有 AI）</td></tr>
+<tr><td>底层排障：AI 说连不上，你想确认哪一层坏了</td><td>用 Automation 的 <code>doctor</code> / <code>editor.status</code> 单独试</td></tr>
 </tbody></table></div>
-<p><strong>推荐路径</strong>：先按 <code>Revolution自动化工具使用说明</code> 跑通 <code>doctor</code> 和 <code>editor status</code>，确认“命令能驱动 Unity”这件事成立；再回来配 MCP。这样出问题时你能分清是“底层不通”还是“AI 那边配错”。</p>
+<p><strong>推荐路径</strong>：<strong>直接配 RevMCP</strong>。不需要“先学会手敲命令”再上 AI——<code>doctor</code> 这类自检，让 AI 跑一遍就行，它跑不通会告诉你卡在哪。</p>
+<p>手敲命令只留给两种情况：<strong>CI 流水线</strong>，以及 <strong>AI 连不上时的底层排障</strong>。</p>
 </section>
 <section id="s2"><h2>1. 3 分钟接线（以 CodeBuddy / Codex 为例）</h2>
 <p>MCP 服务就一条命令，本质是让客户端在后台启动它：</p>
 <pre><code class="language-text">python &lt;本仓库绝对路径&gt;/Revolution.RevMCP/rev_mcp.py --project &lt;Unity 工程绝对路径&gt; serve</code></pre>
 <div class="callout good"><p>⚠️ 两个 <code>&amp;lt;…&amp;gt;</code> 是占位符，<strong>必须换成你自己机器上的绝对路径</strong>。MCP 客户端只接受绝对路径，这是客户端的硬要求，不是文档偷懒。文档不会写死任何人的机器目录。</p></div>
 <p><strong>CodeBuddy</strong>（<code>~/.codebuddy/mcp.json</code>）：</p>
-<pre><code class="language-json">{
+<pre><code class="language-text">{
   "mcpServers": {
     "revolution": {
       "type": "stdio",
@@ -211,7 +211,7 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
 }</code></pre>
 <p>填完在 MCP 面板点 <strong>Try to Run</strong>，绿灯即成功。<strong>不需要重启 IDE。</strong></p>
 <p><strong>Codex</strong>（<code>~/.codex/config.toml</code>）：</p>
-<pre><code class="language-toml">[mcp_servers.revolution]
+<pre><code class="language-text">[mcp_servers.revolution]
 command = '&lt;Python 3.10+ 安装目录&gt;/python.exe'
 args = ['&lt;本仓库绝对路径&gt;/Revolution.RevMCP/rev_mcp.py', '--project', '&lt;Unity 工程绝对路径&gt;', 'serve']
 startup_timeout_sec = 60
@@ -252,7 +252,7 @@ PYTHONIOENCODING = 'utf-8'</code></pre>
 </section>
 <section id="s5"><h2>4. 让 AI 测你自己的游戏功能（关键一步）</h2>
 <p>AI 不可能凭空知道你的“背包加道具”怎么查。你得给游戏<strong>注册能力</strong>，AI 才有东西可调：</p>
-<pre><code class="language-csharp">// 在游戏侧登记一个可被自动化的业务能力（名称由你定）
+<pre><code class="language-text">// 在游戏侧登记一个可被自动化的业务能力（名称由你定）
 RevRuntimeAutomation.Register("inventory.count", () =&gt; bag.Count);
 RevRuntimeAutomation.Register("inventory.add", args =&gt; bag.Add(args.GetInt("id"), 1));
 RevRuntimeAutomation.Register("inventory.reset", () =&gt; bag.Clear());</code></pre>

@@ -1,36 +1,51 @@
 # Revolution 自动化工具 · 新手使用说明
 
-> 一句话：**让电脑替你操作 Unity**。你敲一条命令，它替你去点菜单、跑导表、打包、开 Play、查 Console，然后把结果写成报告。
+> 一句话：**让 AI 替你操作 Unity**。你说“帮我跑一次打包，结果告诉我”，AI 去执行命令、读输出、给你结论。
 >
-> 你不需要会写 Unity 编辑器插件，会开命令行就行。
+> 你不需要背命令，也不需要会写 Unity 编辑器插件。本页的命令是**给 AI 和 CI 看的执行契约**，不是让你手抄的。
 
-## 0. 先回答一个问题：我该用「Automation」还是「RevMCP」？
+## 0. 先说结论：命令不该由你敲
 
-这两个东西**不是二选一的两套系统**，而是「发动机」和「遥控器」的关系。
+**别手敲命令。** 正确姿势是：你提需求 → AI 通过 MCP 或 CLI 执行 → 你只看结论和证据。
+
+这两个目录**不是二选一的两套系统**，而是「发动机」和「遥控器」的关系。
 
 | | `Revolution.Automation`（本文档） | `Revolution.RevMCP`（另一份文档） |
 |---|---|---|
 | 本质 | 一个 **命令行工具**（`rev.py` / `rev.cmd`） | 一个 **MCP 服务**，给 AI 客户端（CodeBuddy、Codex 等）用 |
-| 谁在按键 | **你自己**，在命令行里敲 | **AI**，你说话它去调 |
+| 谁发起 | 排障/CI 时是你；日常是 AI | **AI**（日常默认） |
 | 怎么用 | `rev.py editor play` 这种命令 | 在 AI 里说“帮我点一下增加按钮，再断言计数是 3” |
-| 适合 | 手动排查、跑一次导表/打包、CI 流水线、写测试脚本 | 让 AI 自己发现接口、自己组织测试步骤、自己看截图判断 |
+| 适合 | CI 流水线、底层排障、需要精确复现的一次性操作 | 日常所有事：测功能、跑流程、看截图要结论 |
 | 需要配置 | **不需要**（Python 3.10+ 就行） | 需要把 MCP 配到 AI 客户端里（一次性） |
 | 底层关系 | 它是**执行层**：真正干活的 125 个动作都在这里 | 它是**包装层**：把你的话翻译成 Automation 的动作，再额外打通游戏运行时 |
 
-### 给新手的建议（按顺序来）
+### 三种用法，按推荐程度排序
 
-1. **先只用 Automation**。先把 `doctor`、`editor status` 跑通——这一步不涉及 AI，出问题好排查；
-2. 觉得“每次都要背命令好麻烦”，再上 **RevMCP**，让 AI 替你想命令；
-3. 不要一上来就配 MCP。MCP 出问题时，你分不清是 AI 的问题、配置的问题，还是 Unity 的问题。
+| 档次 | 怎么做 | 你要做的事 | 什么时候用 |
+|---|---|---|---|
+| **① 首选** | 配 **RevMCP**，直接跟 AI 说需求 | 配一次 MCP（3 分钟） | 日常全部：测功能、跑流程、要截图和结论 |
+| **② 次选** | 让 **AI 直接执行 CLI**（把命令丢给 AI 跑） | 说一句话 | 暂时没配 MCP，但已经有 AI 助手 |
+| **③ 兜底** | **自己敲命令** | 查本文档 | 底层排障、CI 脚本、没有 AI 的环境 |
 
-> 一句话记忆：**Automation 是手，RevMCP 是会说话的主人。** 手不会自己动，主人也得靠手才能干活。
+> 一句话：**Automation 是手，RevMCP 是会说话的主人。** 手不该由你去掰——让主人（AI）指挥它。
+>
+> 所以：**日常一律让 AI 来**；只有“AI 说连不上、你想确认到底哪一层坏了”时，才需要你自己敲一条 `doctor`。
 
-## 1. 30 秒跑通
+## 1. 30 秒跑通（让 AI 跑，不是让你敲）
 
-前提：Unity 工程已经打开，并等它编译完（右下角不再转圈）。
+前提：Unity 工程已打开并编译完（右下角不再转圈）。
+
+**第 1 步**：配好 RevMCP（见 `RevMCP使用说明` 的「3 分钟接线」，只需一次）。
+
+**第 2 步**：把下面这句话丢给 AI——
+
+> 用 revolution 的 rev_call 依次执行 doctor 和 editor.status，把 Python 版本、工程路径、playing / compiling 三个值报给我；哪一步失败就告诉我失败原因。
+
+**第 3 步**：它把结论给你。失败时它必须说清卡在哪一层（Python 版本 / 工程路径 / Unity 没开 / 还在编译），而不是丢一句“失败了”。
+
+下面这三条是 AI 实际会执行的底层命令，**只在你排障时用来对照**：
 
 ```powershell
-# 在仓库根目录执行
 python Revolution.Automation/rev.py --project .\RevolutionFrameWork_Unity doctor
 python Revolution.Automation/rev.py --project .\RevolutionFrameWork_Unity commands
 python Revolution.Automation/rev.py --project .\RevolutionFrameWork_Unity --mode live editor status
@@ -44,12 +59,12 @@ python Revolution.Automation/rev.py --project .\RevolutionFrameWork_Unity --mode
 | `commands` | 它到底能干什么？（列出全部动作） | 一大段 JSON 动作清单 |
 | `editor status` | Unity 现在什么状态？（在不在 Play、有没有在编译） | `playing` / `compiling` 等字段 |
 
-> `--project` 后面填的是**含 `Assets` 和 `ProjectSettings` 的那个目录**。第一次建议先跑 `doctor`，它会把路径问题直接指出来。
+> `--project` 后面填的是**含 `Assets` 和 `ProjectSettings` 的那个目录**。路径写错时 `doctor` 会直接指出来——**让 AI 跑这一条就行**，不用你自己试。
 
-## 2. 它是怎么工作的（30 秒版）
+## 2. 它到底怎么工作的（30 秒版）
 
 ```
-你敲命令
+你（或 AI）发起一次调用
    ↓
 rev.py（Python，在仓库里）
    ↓  写一个"工单"文件
@@ -60,7 +75,7 @@ Unity 里的编辑器桥（Assets/Revolution/Editor/RevAutomation）
 
 为什么要绕文件？因为 Unity 的编辑器 API **只能在主线程调用**，而命令行是另一个进程。用文件传递，不需要开端口、不需要装额外东西，断线也好恢复。
 
-## 3. 常用命令速查（够用 90% 的场景）
+## 3. 命令速查（AI 参考用 / 你排障用）
 
 ```powershell
 # 进出 Play
@@ -92,7 +107,7 @@ Unity 里的编辑器桥（Assets/Revolution/Editor/RevAutomation）
 | `ui.` / `asset.` / `platform.` | UI 生成、资产、平台切换与首包 | 按需 |
 | `scenario.` | 多步编排（准备→执行→断言→清理） | 见下一节 |
 
-> 完整清单永远以 `commands` 的输出为准，本文档不复制它——清单会随版本变，抄在文档里很快过期。
+> 这些命令**不需要你背**：AI 会自己 `rev_discover` 查清单。完整清单永远以 `commands` 的输出为准——清单会随版本变，抄进文档很快过期。
 
 ## 4. 失败时怎么看（新手最容易卡住的地方）
 
@@ -106,9 +121,13 @@ Unity 里的编辑器桥（Assets/Revolution/Editor/RevAutomation）
 | 找不到工程 | `--project` 指错了 | 跑 `doctor` |
 | 结果文件里有 error 但命令成功 | Unity 只是“执行了”，不代表“业务正确” | 看报告里的断言/错误计数 |
 
-## 5. 写一个最小场景（多步编排）
+## 5. 多步流程：也交给 AI
 
-一个动作一条命令当然可以，但“准备 → 点 → 断言 → 清理”这种四步走，用场景文件更省事：
+“准备 → 点 → 断言 → 清理”这种四步走，你只要说清楚要什么，AI 会自己拼场景：
+
+> 帮我测一下：进 Play、执行 GM「RevGame/开始战斗」、断言回合数变成 1、截一张图、然后 stop。
+
+如果它需要落到文件，格式长这样（AI 会写，你只用来 review）：
 
 ```json
 {
@@ -137,16 +156,16 @@ Unity 里的编辑器桥（Assets/Revolution/Editor/RevAutomation）
 - **WebGL 包不支持运行时 HTTP 接口**（MCP 那条路在 WebGL 上走不通）；
 - **正式发布的包默认不含测试接口**——别担心自动化接口被玩家用到。
 
-## 7. 什么时候该升级去用 RevMCP？
+## 7. 为什么默认就推荐 RevMCP
 
-出现下面任一情况，就去看 `RevMCP使用说明`：
+因为上面这些命令，**本来就是给程序调的，不该由人来敲**：
 
-- 你不想记命令，只想说“帮我测一下这个功能”；
-- 你希望 AI 自己**发现**有哪些接口可用，而不是你告诉它；
-- 你需要 AI **看截图判断**结果对不对，而不是只看 JSON 里的布尔值；
-- 你要测的是**独立运行的开发版 Player**，不是编辑器。
+- AI 能自己 `rev_discover` 查有哪些动作，不需要你记；
+- AI 能自己组织“准备 → 执行 → 断言 → 截图 → 清理”，不需要你写脚本；
+- AI 能看截图和报告判断结果，而不是只看 JSON 里的布尔值；
+- 你要测的是**独立开发版 Player** 时，也只有 RevMCP 那条路能连上。
 
-反之，如果你要接 CI（Jenkins/GitHub Actions）跑固定脚本，**继续用 Automation**——CI 里不需要 AI，也不需要 MCP。
+**只有两种情况才回到本文档（CLI）**：接 CI（Jenkins / GitHub Actions，那里没有 AI），或者 AI 报“连不上”时你想亲手确认哪一层坏了。
 
 ## 8. 验证口径
 

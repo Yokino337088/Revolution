@@ -144,12 +144,13 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
 @media(max-width:640px){section{padding:18px 16px;}main{padding:18px 12px;}h2{display:block;font-size:20px;}.hero h1{font-size:25px;}}
 </style></head><body>
 
-<header class="hero"><div class="wrap"><span class="kicker">REVOLUTION · AUTOMATION CLI</span><h1>Revolution 自动化工具 · 新手使用说明</h1><p>一条命令，让电脑替你点 Unity：Play、GM、打包、导表、断言与报告</p></div></header>
+<header class="hero"><div class="wrap"><span class="kicker">REVOLUTION · AUTOMATION CLI</span><h1>Revolution 自动化工具 · 新手使用说明</h1><p>让 AI 驱动 Unity：你提需求，AI 执行命令、读结果、给结论</p></div></header>
 <main>
-<section class="toc"><h2>目录</h2><ol><li><a href="#s1">0. 先回答一个问题：我该用「Automation」还是「RevMCP」？</a></li><li><a href="#s2">1. 30 秒跑通</a></li><li><a href="#s3">2. 它是怎么工作的（30 秒版）</a></li><li><a href="#s4">3. 常用命令速查（够用 90% 的场景）</a></li><li><a href="#s5">4. 失败时怎么看（新手最容易卡住的地方）</a></li><li><a href="#s6">5. 写一个最小场景（多步编排）</a></li><li><a href="#s7">6. 这几件事它做不到（别浪费时间试）</a></li><li><a href="#s8">7. 什么时候该升级去用 RevMCP？</a></li><li><a href="#s9">8. 验证口径</a></li></ol><p>更新：2026-10-24。适用：Python 3.10+ / Unity 2022.3，无需第三方库。</p>
-<div class="callout good"><p>一句话：<strong>让电脑替你操作 Unity</strong>。你敲一条命令，它替你去点菜单、跑导表、打包、开 Play、查 Console，然后把结果写成报告。 你不需要会写 Unity 编辑器插件，会开命令行就行。</p></div></section>
-<section id="s1"><h2>0. 先回答一个问题：我该用「Automation」还是「RevMCP」？</h2>
-<p>这两个东西<strong>不是二选一的两套系统</strong>，而是「发动机」和「遥控器」的关系。</p>
+<section class="toc"><h2>目录</h2><ol><li><a href="#s1">0. 先说结论：命令不该由你敲</a></li><li><a href="#s2">1. 30 秒跑通（让 AI 跑，不是让你敲）</a></li><li><a href="#s3">2. 它到底怎么工作的（30 秒版）</a></li><li><a href="#s4">3. 命令速查（AI 参考用 / 你排障用）</a></li><li><a href="#s5">4. 失败时怎么看（新手最容易卡住的地方）</a></li><li><a href="#s6">5. 多步流程：也交给 AI</a></li><li><a href="#s7">6. 这几件事它做不到（别浪费时间试）</a></li><li><a href="#s8">7. 为什么默认就推荐 RevMCP</a></li><li><a href="#s9">8. 验证口径</a></li></ol><p>更新：2026-10-24。适用：Python 3.10+ / Unity 2022.3，无需第三方库。</p>
+<div class="callout good"><p>一句话：<strong>让 AI 替你操作 Unity</strong>。你说“帮我跑一次打包，结果告诉我”，AI 去执行命令、读输出、给你结论。 你不需要背命令，也不需要会写 Unity 编辑器插件。本页的命令是<strong>给 AI 和 CI 看的执行契约</strong>，不是让你手抄的。</p></div></section>
+<section id="s1"><h2>0. 先说结论：命令不该由你敲</h2>
+<p><strong>别手敲命令。</strong> 正确姿势是：你提需求 → AI 通过 MCP 或 CLI 执行 → 你只看结论和证据。</p>
+<p>这两个目录<strong>不是二选一的两套系统</strong>，而是「发动机」和「遥控器」的关系。</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -160,24 +161,37 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
 </thead>
 <tbody>
 <tr><td>本质</td><td>一个 <strong>命令行工具</strong>（<code>rev.py</code> / <code>rev.cmd</code>）</td><td>一个 <strong>MCP 服务</strong>，给 AI 客户端（CodeBuddy、Codex 等）用</td></tr>
-<tr><td>谁在按键</td><td><strong>你自己</strong>，在命令行里敲</td><td><strong>AI</strong>，你说话它去调</td></tr>
+<tr><td>谁发起</td><td>排障/CI 时是你；日常是 AI</td><td><strong>AI</strong>（日常默认）</td></tr>
 <tr><td>怎么用</td><td><code>rev.py editor play</code> 这种命令</td><td>在 AI 里说“帮我点一下增加按钮，再断言计数是 3”</td></tr>
-<tr><td>适合</td><td>手动排查、跑一次导表/打包、CI 流水线、写测试脚本</td><td>让 AI 自己发现接口、自己组织测试步骤、自己看截图判断</td></tr>
+<tr><td>适合</td><td>CI 流水线、底层排障、需要精确复现的一次性操作</td><td>日常所有事：测功能、跑流程、看截图要结论</td></tr>
 <tr><td>需要配置</td><td><strong>不需要</strong>（Python 3.10+ 就行）</td><td>需要把 MCP 配到 AI 客户端里（一次性）</td></tr>
 <tr><td>底层关系</td><td>它是<strong>执行层</strong>：真正干活的 125 个动作都在这里</td><td>它是<strong>包装层</strong>：把你的话翻译成 Automation 的动作，再额外打通游戏运行时</td></tr>
 </tbody></table></div>
-<h3>给新手的建议（按顺序来）</h3>
-<ol>
-<li><strong>先只用 Automation</strong>。先把 <code>doctor</code>、<code>editor status</code> 跑通——这一步不涉及 AI，出问题好排查；</li>
-<li>觉得“每次都要背命令好麻烦”，再上 <strong>RevMCP</strong>，让 AI 替你想命令；</li>
-<li>不要一上来就配 MCP。MCP 出问题时，你分不清是 AI 的问题、配置的问题，还是 Unity 的问题。</li>
-</ol>
-<div class="callout good"><p>一句话记忆：<strong>Automation 是手，RevMCP 是会说话的主人。</strong> 手不会自己动，主人也得靠手才能干活。</p></div>
+<h3>三种用法，按推荐程度排序</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>档次</th>
+<th>怎么做</th>
+<th>你要做的事</th>
+<th>什么时候用</th>
+</tr>
+</thead>
+<tbody>
+<tr><td><strong>① 首选</strong></td><td>配 <strong>RevMCP</strong>，直接跟 AI 说需求</td><td>配一次 MCP（3 分钟）</td><td>日常全部：测功能、跑流程、要截图和结论</td></tr>
+<tr><td><strong>② 次选</strong></td><td>让 <strong>AI 直接执行 CLI</strong>（把命令丢给 AI 跑）</td><td>说一句话</td><td>暂时没配 MCP，但已经有 AI 助手</td></tr>
+<tr><td><strong>③ 兜底</strong></td><td><strong>自己敲命令</strong></td><td>查本文档</td><td>底层排障、CI 脚本、没有 AI 的环境</td></tr>
+</tbody></table></div>
+<div class="callout good"><p>一句话：<strong>Automation 是手，RevMCP 是会说话的主人。</strong> 手不该由你去掰——让主人（AI）指挥它。 所以：<strong>日常一律让 AI 来</strong>；只有“AI 说连不上、你想确认到底哪一层坏了”时，才需要你自己敲一条 <code>doctor</code>。</p></div>
 </section>
-<section id="s2"><h2>1. 30 秒跑通</h2>
-<p>前提：Unity 工程已经打开，并等它编译完（右下角不再转圈）。</p>
-<pre><code class="language-powershell"># 在仓库根目录执行
-python Revolution.Automation/rev.py --project .\RevolutionFrameWork_Unity doctor
+<section id="s2"><h2>1. 30 秒跑通（让 AI 跑，不是让你敲）</h2>
+<p>前提：Unity 工程已打开并编译完（右下角不再转圈）。</p>
+<p><strong>第 1 步</strong>：配好 RevMCP（见 <code>RevMCP使用说明</code> 的「3 分钟接线」，只需一次）。</p>
+<p><strong>第 2 步</strong>：把下面这句话丢给 AI——</p>
+<div class="callout good"><p>用 revolution 的 rev_call 依次执行 doctor 和 editor.status，把 Python 版本、工程路径、playing / compiling 三个值报给我；哪一步失败就告诉我失败原因。</p></div>
+<p><strong>第 3 步</strong>：它把结论给你。失败时它必须说清卡在哪一层（Python 版本 / 工程路径 / Unity 没开 / 还在编译），而不是丢一句“失败了”。</p>
+<p>下面这三条是 AI 实际会执行的底层命令，<strong>只在你排障时用来对照</strong>：</p>
+<pre><code class="language-text">python Revolution.Automation/rev.py --project .\RevolutionFrameWork_Unity doctor
 python Revolution.Automation/rev.py --project .\RevolutionFrameWork_Unity commands
 python Revolution.Automation/rev.py --project .\RevolutionFrameWork_Unity --mode live editor status</code></pre>
 <p>三条命令分别回答三个问题：</p>
@@ -194,10 +208,10 @@ python Revolution.Automation/rev.py --project .\RevolutionFrameWork_Unity --mode
 <tr><td><code>commands</code></td><td>它到底能干什么？（列出全部动作）</td><td>一大段 JSON 动作清单</td></tr>
 <tr><td><code>editor status</code></td><td>Unity 现在什么状态？（在不在 Play、有没有在编译）</td><td><code>playing</code> / <code>compiling</code> 等字段</td></tr>
 </tbody></table></div>
-<div class="callout good"><p><code>--project</code> 后面填的是<strong>含 <code>Assets</code> 和 <code>ProjectSettings</code> 的那个目录</strong>。第一次建议先跑 <code>doctor</code>，它会把路径问题直接指出来。</p></div>
+<div class="callout good"><p><code>--project</code> 后面填的是<strong>含 <code>Assets</code> 和 <code>ProjectSettings</code> 的那个目录</strong>。路径写错时 <code>doctor</code> 会直接指出来——<strong>让 AI 跑这一条就行</strong>，不用你自己试。</p></div>
 </section>
-<section id="s3"><h2>2. 它是怎么工作的（30 秒版）</h2>
-<pre><code class="language-text">你敲命令
+<section id="s3"><h2>2. 它到底怎么工作的（30 秒版）</h2>
+<pre><code class="language-text">你（或 AI）发起一次调用
    ↓
 rev.py（Python，在仓库里）
    ↓  写一个"工单"文件
@@ -206,8 +220,8 @@ Unity 里的编辑器桥（Assets/Revolution/Editor/RevAutomation）
 结果写回文件 → 你的命令行打印出来</code></pre>
 <p>为什么要绕文件？因为 Unity 的编辑器 API <strong>只能在主线程调用</strong>，而命令行是另一个进程。用文件传递，不需要开端口、不需要装额外东西，断线也好恢复。</p>
 </section>
-<section id="s4"><h2>3. 常用命令速查（够用 90% 的场景）</h2>
-<pre><code class="language-powershell"># 进出 Play
+<section id="s4"><h2>3. 命令速查（AI 参考用 / 你排障用）</h2>
+<pre><code class="language-text"># 进出 Play
 ... editor play --scene Assets/Scenes/GameScene.unity
 ... editor stop
 
@@ -241,7 +255,7 @@ Unity 里的编辑器桥（Assets/Revolution/Editor/RevAutomation）
 <tr><td><code>ui.</code> / <code>asset.</code> / <code>platform.</code></td><td>UI 生成、资产、平台切换与首包</td><td>按需</td></tr>
 <tr><td><code>scenario.</code></td><td>多步编排（准备→执行→断言→清理）</td><td>见下一节</td></tr>
 </tbody></table></div>
-<div class="callout good"><p>完整清单永远以 <code>commands</code> 的输出为准，本文档不复制它——清单会随版本变，抄在文档里很快过期。</p></div>
+<div class="callout good"><p>这些命令<strong>不需要你背</strong>：AI 会自己 <code>rev_discover</code> 查清单。完整清单永远以 <code>commands</code> 的输出为准——清单会随版本变，抄进文档很快过期。</p></div>
 </section>
 <section id="s5"><h2>4. 失败时怎么看（新手最容易卡住的地方）</h2>
 <p><strong>记住一条：命令返回 <code>success: false</code> 时，<code>message</code> 才是真相，不要只看 exit code。</strong></p>
@@ -261,9 +275,11 @@ Unity 里的编辑器桥（Assets/Revolution/Editor/RevAutomation）
 <tr><td>结果文件里有 error 但命令成功</td><td>Unity 只是“执行了”，不代表“业务正确”</td><td>看报告里的断言/错误计数</td></tr>
 </tbody></table></div>
 </section>
-<section id="s6"><h2>5. 写一个最小场景（多步编排）</h2>
-<p>一个动作一条命令当然可以，但“准备 → 点 → 断言 → 清理”这种四步走，用场景文件更省事：</p>
-<pre><code class="language-json">{
+<section id="s6"><h2>5. 多步流程：也交给 AI</h2>
+<p>“准备 → 点 → 断言 → 清理”这种四步走，你只要说清楚要什么，AI 会自己拼场景：</p>
+<div class="callout good"><p>帮我测一下：进 Play、执行 GM「RevGame/开始战斗」、断言回合数变成 1、截一张图、然后 stop。</p></div>
+<p>如果它需要落到文件，格式长这样（AI 会写，你只用来 review）：</p>
+<pre><code class="language-text">{
   "steps": [
     { "action": "editor.play", "args": { "scene": "Assets/Scenes/GameScene.unity" } },
     { "action": "gm.exec", "args": { "name": "RevGame/开始战斗" } },
@@ -274,7 +290,7 @@ Unity 里的编辑器桥（Assets/Revolution/Editor/RevAutomation）
     { "action": "editor.stop" }
   ]
 }</code></pre>
-<pre><code class="language-powershell">... run my-scenario.json</code></pre>
+<pre><code class="language-text">... run my-scenario.json</code></pre>
 <p>跑完会在 <code>results/</code> 里留下 JSON / HTML 报告，能直接贴给人看。</p>
 </section>
 <section id="s7"><h2>6. 这几件事它做不到（别浪费时间试）</h2>
@@ -285,15 +301,15 @@ Unity 里的编辑器桥（Assets/Revolution/Editor/RevAutomation）
 <li><strong>正式发布的包默认不含测试接口</strong>——别担心自动化接口被玩家用到。</li>
 </ul>
 </section>
-<section id="s8"><h2>7. 什么时候该升级去用 RevMCP？</h2>
-<p>出现下面任一情况，就去看 <code>RevMCP使用说明</code>：</p>
+<section id="s8"><h2>7. 为什么默认就推荐 RevMCP</h2>
+<p>因为上面这些命令，<strong>本来就是给程序调的，不该由人来敲</strong>：</p>
 <ul>
-<li>你不想记命令，只想说“帮我测一下这个功能”；</li>
-<li>你希望 AI 自己<strong>发现</strong>有哪些接口可用，而不是你告诉它；</li>
-<li>你需要 AI <strong>看截图判断</strong>结果对不对，而不是只看 JSON 里的布尔值；</li>
-<li>你要测的是<strong>独立运行的开发版 Player</strong>，不是编辑器。</li>
+<li>AI 能自己 <code>rev_discover</code> 查有哪些动作，不需要你记；</li>
+<li>AI 能自己组织“准备 → 执行 → 断言 → 截图 → 清理”，不需要你写脚本；</li>
+<li>AI 能看截图和报告判断结果，而不是只看 JSON 里的布尔值；</li>
+<li>你要测的是<strong>独立开发版 Player</strong> 时，也只有 RevMCP 那条路能连上。</li>
 </ul>
-<p>反之，如果你要接 CI（Jenkins/GitHub Actions）跑固定脚本，<strong>继续用 Automation</strong>——CI 里不需要 AI，也不需要 MCP。</p>
+<p><strong>只有两种情况才回到本文档（CLI）</strong>：接 CI（Jenkins / GitHub Actions，那里没有 AI），或者 AI 报“连不上”时你想亲手确认哪一层坏了。</p>
 </section>
 <section id="s9"><h2>8. 验证口径</h2>
 <p>本工具在 2026-10-22 的验证覆盖：Python 自动化 19 项、RevMCP 13 项、Unity EditMode 24 项通过；Editor 与 Windows 开发版 Player 的实际按钮点击、GM、断言、截图、清理已完成。</p>
