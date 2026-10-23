@@ -143,290 +143,161 @@ img{display:block;max-width:100%;height:auto;margin:18px auto;border-radius:8px;
 td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
 @media(max-width:640px){section{padding:18px 16px;}main{padding:18px 12px;}h2{display:block;font-size:20px;}.hero h1{font-size:25px;}}
 </style></head><body>
-<header class="hero"><div class="wrap"><span class="kicker">REVOLUTION · AI AUTOMATION</span><h1>RevMCP · AI 控制编辑器与游戏使用说明</h1><p>Unity 内接线 · 真实业务契约 · 断言、截图与清理</p><div class="meta">2026-10-22 · Python 3.10+ · Unity 2022.3</div></div><div class="deco"></div></header>
-<main><section class="toc"><h2>目录</h2><ol><li><a href="#s1">1. 为什么需要 Unity 内的 RevMCP</a></li><li><a href="#s2">2. 文件放在哪里</a></li><li><a href="#s3">3. 新手先跑通 Demo</a></li><li><a href="#s4">4. 接到 Agent</a></li><li><a href="#s5">5. 三个稳定 MCP 工具</a></li><li><a href="#s6">6. 注册自己的游戏能力</a></li><li><a href="#s7">7. 内置运行时能力与 UI</a></li><li><a href="#s8">8. 独立开发版 Player</a></li><li><a href="#s9">9. 显式登记 CLI / Python</a></li><li><a href="#s10">10. 带断言与清理的计划</a></li><li><a href="#s11">11. 结果、故障与实际边界</a></li><li><a href="#s12">12. 2026-10-22 验证记录</a></li></ol></section><section id="intro">
-<p>更新：2026-10-22。适用：Python 3.10+，Revolution 当前源码，Unity 2022.3。无需安装 Python 第三方库。</p>
-<p>RevMCP 把 Unity Editor、游戏实际注册的 GM、运行时业务能力和项目登记的 CLI/Python 工具提供给 Agent。Agent 把一句话转成调用计划，工具负责执行、等待、断言、截图和收尾。玩法必须提供真实接口，工具不会凭空理解未开放的游戏业务。</p>
-</section><section id="s1"><h2>1. 为什么需要 Unity 内的 RevMCP</h2>
-<p>有必要提供 Unity 内插件。它负责知道当前工程、Play 状态、真实命令和 Unity 主线程；外部服务负责 MCP 协议与 Agent 连接。当前实现采用两端配合：Unity 内有桥和控制台，外部运行 Python MCP 服务。独立开发版 Player 复用同一个运行时注册表。</p>
-<pre><code class="language-text">第一层  人的一句话：点击增加，再用 GM 加 2，验证计数 3，并截图
-第二层  Agent + revolution-ai-automation Skill：发现、编排、判断结果
-第三层  RevMCP：rev_discover / rev_call / rev_run + 动态工具
-        ├─ Editor 文件工单 → Revolution.Automation
-        ├─ 游戏注册表 → GM / 业务能力 / UGUI / 状态 / 截图
-        └─ 显式清单 → CLI / Python 子进程
-第四层  Unity 主线程 → 玩家共用的 Service / Logic / UI 入口
-</code></pre>
-<p>第三层是稳定契约。每个接口明确名称、参数、环境、是否只读、是否需要 confirm、结果和错误。Agent 先发现真实注册表，再调用。可与已有 Unity MCP 共存；两个连接不能同时修改同一工程。</p>
-<p>维护者接线、线程/工单生命周期与扩展选型详见 <a href="RevMCP%E6%9E%B6%E6%9E%84%E8%A7%A3%E6%9E%90.html">RevMCP 架构解析</a>。</p>
-</section><section id="s2"><h2>2. 文件放在哪里</h2>
+
+<header class="hero"><div class="wrap"><span class="kicker">REVOLUTION · AI AUTOMATION</span><h1>RevMCP · 让 AI 替你操作 Unity 和游戏</h1><p>你说话，AI 动手：发现接口、执行、断言、截图与清理</p></div></header>
+<main>
+<section class="toc"><h2>目录</h2><ol><li><a href="#s1">0. 先搞清一件事：RevMCP 和 Automation 有啥区别？</a></li><li><a href="#s2">1. 3 分钟接线（以 CodeBuddy / Codex 为例）</a></li><li><a href="#s3">2. 接上之后先说这三句话（渐进式）</a></li><li><a href="#s4">3. 三个稳定工具（AI 最常用的就这三个）</a></li><li><a href="#s5">4. 让 AI 测你自己的游戏功能（关键一步）</a></li><li><a href="#s6">5. 常见问题（新手 90% 卡在这几条）</a></li><li><a href="#s7">6. 它做不到什么（提前说清，省得你试）</a></li><li><a href="#s8">7. 验证口径</a></li><li><a href="#s9">8. 相关文档</a></li></ol><p>更新：2026-10-24。适用：Python 3.10+、Unity 2022.3；需在 AI 客户端配置一次 MCP。</p>
+<div class="callout good"><p>一句话：<strong>你说话，AI 动手</strong>。你说“点一下增加按钮，再用 GM 加 2，确认计数是 3，截个图”，AI 会自己去发现接口、按顺序执行、把截图和结果给你。 它不是一个新软件，而是给 AI 装的一双“手”——这双手的肌肉，就是 <code>Revolution.Automation</code>。</p></div></section>
+<section id="s1"><h2>0. 先搞清一件事：RevMCP 和 Automation 有啥区别？</h2>
+<p>很多人一上来就懵：仓库里怎么有两个自动化目录？其实它们是<strong>上下游</strong>，不是两个竞争品。</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
-<th>路径</th>
-<th>职责</th>
+<th></th>
+<th><code>Revolution.Automation</code></th>
+<th><code>Revolution.RevMCP</code>（本文档）</th>
 </tr>
 </thead>
-<tbody><tr>
-<td><code>Revolution.RevMCP/rev_mcp.py</code></td>
-<td>人/CI 的 CLI 与 Agent 的 stdio MCP 入口</td>
-</tr>
-<tr>
-<td><code>Revolution.RevMCP/revmcp/</code></td>
-<td>协议、统一调度、运行时 HTTP、外部进程和测试编排</td>
-</tr>
-<tr>
-<td><code>Revolution.Automation/</code></td>
-<td>Editor CLI、文件工单和旧 GM scenario；保留相邻目录</td>
-</tr>
-<tr>
-<td><code>Assets/Revolution/Editor/RevAutomation/</code></td>
-<td>Editor 接线与 RevMCP 控制台</td>
-</tr>
-<tr>
-<td><code>Assets/Revolution/Runtime/RevAutomation/</code></td>
-<td>开发态游戏接口注册表、UI/截图及本机 HTTP</td>
-</tr>
-<tr>
-<td><code>Assets/Revolution.Demo/RevAutomation.Demo/</code></td>
-<td>可直接运行的教学场景</td>
-</tr>
-<tr>
-<td><code>Skills/revolution-ai-automation/</code></td>
-<td>一句话测试 Skill 源码</td>
-</tr>
+<tbody>
+<tr><td>是什么</td><td><strong>命令行工具</strong>，真正执行动作的那一层</td><td><strong>MCP 服务</strong>，把 AI 的话翻译成动作</td></tr>
+<tr><td>谁来用</td><td>人（命令行）、CI 脚本</td><td>AI 客户端：CodeBuddy、Codex、Claude 等</td></tr>
+<tr><td>入口</td><td><code>rev.py</code> / <code>rev.cmd</code></td><td><code>rev_mcp.py … serve</code>（stdio 协议）</td></tr>
+<tr><td>能做的事</td><td>125 个编辑器/打包/导表/GM 动作</td><td>上面这些 <strong>＋</strong> 游戏运行时（UI、状态、截图、业务接口）</td></tr>
+<tr><td>依赖关系</td><td>不依赖 RevMCP</td><td><strong>内部调用 Automation</strong> 去执行 Editor 动作</td></tr>
+<tr><td>配置成本</td><td>零（Python 3.10+ 直接跑）</td><td>要在 AI 客户端里配一次 MCP</td></tr>
+<tr><td>你得到什么</td><td>一条命令的结果</td><td>一句自然语言的<strong>测试结论 + 证据</strong></td></tr>
 </tbody></table></div>
-<p>复制到其他项目时，同时保留 Python 两个工具目录和 Unity 里的框架代码。只拷贝 Python 无法控制没有桥的工程。无需为了使用 Editor 文件桥而开启 HTTP。</p>
-</section><section id="s3"><h2>3. 新手先跑通 Demo</h2>
-<p>以下命令在仓库根目录的 PowerShell 执行。<code>--project</code> 填的是含 Assets/ProjectSettings 的 Unity 工程目录。先用 Unity 打开该工程并等待编译完成。</p>
-<pre><code class="language-powershell">$project = &#39;<本仓库绝对路径>/RevolutionFrameWork_Unity&#39;
-$env:PYTHONIOENCODING = &#39;utf-8&#39;
-python Revolution.Automation/rev.py --project $project --mode live editor status
-python Revolution.Automation/rev.py --project $project --mode live editor coverage
-python Revolution.Automation/rev.py --project $project --mode live editor play --scene &#39;Assets/Revolution.Demo/RevAutomation.Demo/RevAutomationDemo.unity&#39;
-python Revolution.RevMCP/rev_mcp.py --project $project discover
-python Revolution.RevMCP/rev_mcp.py --project $project run Revolution.RevMCP/examples/ui-gm.plan.json
-python Revolution.Automation/rev.py --project $project --mode live editor stop
-</code></pre>
-<p>成功计划会完成：计数归零 → 查找真实按钮 → EventSystem 点击加 1 → GM 加 2 → 精确断言 3 → 截图 → 检查错误数 → finally 归零。截图中计数为 3，执行结束后状态为 0，这是清理成功的正常表现。</p>
-<p>Unity 菜单 <code>Revolution.Tools/AI/RevMCP 控制台</code> 可查看工程/Play/GM 数量、启停 HTTP、复制配置和打开工单目录。编辑模式没有 game/GM 能力时，discover 的 unavailable 会给出原因；Editor 能力仍然可以使用。</p>
-</section><section id="s4"><h2>4. 接到 Agent</h2>
-<p>菜单中点击“复制 MCP 配置（Editor 模式）”，把配置放入所用 Agent 的 MCP 设置。窗口仅复制配置，不修改全局设置。以下是使用 mcpServers JSON 的客户端示例；其他客户端按其实际配置格式填写同一 command 和 args。</p>
+<pre><code class="language-text">你说：帮我测一下战斗能不能打起来
+        ↓
+   AI（CodeBuddy / Codex）+ Skill
+        ↓  调用 MCP 工具
+     RevMCP（本文档）───→ 游戏运行时能力（UI 点击、GM、断言、截图）
+        ↓
+   Revolution.Automation（真正干活的命令行）
+        ↓
+     Unity 编辑器 / 开发版 Player</code></pre>
+<h3>新手该先用哪个？</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>你的目的</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>只是想看看 Unity 现在什么状态、跑一次打包/导表</td><td><strong>用 Automation</strong>，一条命令，不用配任何东西</td></tr>
+<tr><td>想让 AI 帮你测功能、自动截图、写测试报告</td><td><strong>用 RevMCP</strong></td></tr>
+<tr><td>接 CI（Jenkins / GitHub Actions）跑固定流程</td><td><strong>用 Automation</strong>（CI 里不需要 AI）</td></tr>
+<tr><td>完全不熟悉命令行，只想像聊天一样操作</td><td><strong>用 RevMCP</strong>（但建议先让工具跑通一次 <code>doctor</code>）</td></tr>
+</tbody></table></div>
+<p><strong>推荐路径</strong>：先按 <code>Revolution自动化工具使用说明</code> 跑通 <code>doctor</code> 和 <code>editor status</code>，确认“命令能驱动 Unity”这件事成立；再回来配 MCP。这样出问题时你能分清是“底层不通”还是“AI 那边配错”。</p>
+</section>
+<section id="s2"><h2>1. 3 分钟接线（以 CodeBuddy / Codex 为例）</h2>
+<p>MCP 服务就一条命令，本质是让客户端在后台启动它：</p>
+<pre><code class="language-text">python &lt;本仓库绝对路径&gt;/Revolution.RevMCP/rev_mcp.py --project &lt;Unity 工程绝对路径&gt; serve</code></pre>
+<div class="callout good"><p>⚠️ 两个 <code>&amp;lt;…&amp;gt;</code> 是占位符，<strong>必须换成你自己机器上的绝对路径</strong>。MCP 客户端只接受绝对路径，这是客户端的硬要求，不是文档偷懒。文档不会写死任何人的机器目录。</p></div>
+<p><strong>CodeBuddy</strong>（<code>~/.codebuddy/mcp.json</code>）：</p>
 <pre><code class="language-json">{
-  &quot;mcpServers&quot;: {
-    &quot;revolution&quot;: {
-      &quot;command&quot;: &quot;python&quot;,
-      &quot;args&quot;: [
-        &quot;<本仓库绝对路径>/Revolution.RevMCP/rev_mcp.py&quot;,
-        &quot;--project&quot;, &quot;<本仓库绝对路径>/RevolutionFrameWork_Unity&quot;,
-        &quot;serve&quot;
-      ]
+  "mcpServers": {
+    "revolution": {
+      "type": "stdio",
+      "command": "&lt;Python 3.10+ 安装目录&gt;/python.exe",
+      "args": ["&lt;本仓库绝对路径&gt;/Revolution.RevMCP/rev_mcp.py",
+               "--project", "&lt;Unity 工程绝对路径&gt;", "serve"],
+      "env": { "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8" },
+      "description": "Revolution RevMCP：操作 Unity 编辑器与游戏运行时"
     }
   }
-}
-</code></pre>
-<p>把 command 改为本机 Python 的绝对路径可避免 PATH 差异。所有全局参数放在 serve/discover/call/run 前。stdio 由 Agent 启动并持有；命令行直接运行 serve 后等待输入属于正常状态。stdout 只输出 MCP JSON-RPC，调试信息不能混入 stdout。</p>
-<p>上面示例里的 <code>&lt;本仓库绝对路径&gt;</code>、<code>&lt;Python 3.10+ 安装目录&gt;</code> 都是占位符，不是让你照抄的路径：MCP 客户端只接受绝对路径，请替换成你自己机器上的目录（本文档不写死任何人的机器路径）。</p>
-<p>安装 Skill：把仓库 <code>Skills/revolution-ai-automation</code> 整个目录复制到你所用 Agent 的 skills 目录（例如 Codex 的 <code>~/.codex/skills/</code>、Claude 的 <code>~/.claude/skills/</code>）。复制后若工具列表没刷新，开一个新会话即可。</p>
-<p>连接后可说：</p>
-<blockquote>
-<p>使用 revolution-ai-automation，测试 RevAutomationDemo：点击增加按钮，再通过 GM 增加 2，断言计数为 3，截图并清理归零；给我结果和证据。</p>
-</blockquote>
-<p>真实业务也可以说“测试背包添加道具后数量与格子刷新”，前提是项目已注册对应查询、动作与复位接口。Agent 根据实际接口组织测试，不要求用户手写 JSON。</p>
-</section><section id="s5"><h2>5. 三个稳定 MCP 工具</h2>
+}</code></pre>
+<p>填完在 MCP 面板点 <strong>Try to Run</strong>，绿灯即成功。<strong>不需要重启 IDE。</strong></p>
+<p><strong>Codex</strong>（<code>~/.codex/config.toml</code>）：</p>
+<pre><code class="language-toml">[mcp_servers.revolution]
+command = '&lt;Python 3.10+ 安装目录&gt;/python.exe'
+args = ['&lt;本仓库绝对路径&gt;/Revolution.RevMCP/rev_mcp.py', '--project', '&lt;Unity 工程绝对路径&gt;', 'serve']
+startup_timeout_sec = 60
+tool_timeout_sec = 300
+
+[mcp_servers.revolution.env]
+PYTHONUTF8 = '1'
+PYTHONIOENCODING = 'utf-8'</code></pre>
+<p>验证：<code>codex mcp get revolution</code>，能看到 <code>enabled: true</code> 和正确的 args 就对了。</p>
+<div class="callout good"><p><strong>为什么要写死绝对路径？</strong> 客户端是被别的程序（IDE/终端）拉起来的，工作目录不可控，相对路径会指到别的地方。所以这里必须绝对路径，正文其它地方一律用相对路径。</p></div>
+</section>
+<section id="s3"><h2>2. 接上之后先说这三句话（渐进式）</h2>
+<p>不要一上来就让它跑完整回归。按这个顺序：</p>
+<p><strong>第 1 句——确认能连上：</strong></p>
+<div class="callout good"><p>用 revolution 的 rev_discover 列出所有可用动作，告诉我一共多少个，并挑 3 个和编辑器状态相关的给我看。</p></div>
+<p><strong>第 2 句——确认能操作编辑器：</strong></p>
+<div class="callout good"><p>用 rev_call 调 editor.status，把 playing、compiling 报给我。</p></div>
+<p><strong>第 3 句——确认能操作游戏：</strong></p>
+<div class="callout good"><p>进入 Play，调 gm.list 看看有哪些 GM 指令，然后停掉。</p></div>
+<p>三句话都通了，再让它测真实业务。</p>
+</section>
+<section id="s4"><h2>3. 三个稳定工具（AI 最常用的就这三个）</h2>
+<p>工具清单会变（当前 124 个），但下面三个是<strong>稳定钉子</strong>，名字永远不变：</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
 <th>工具</th>
-<th>输入</th>
-<th>作用</th>
+<th>干什么</th>
+<th>类比</th>
 </tr>
 </thead>
-<tbody><tr>
-<td><code>rev_discover</code></td>
-<td><code>{}</code></td>
-<td>读取当前 Editor、game、GM、CLI 能力及不可用原因</td>
-</tr>
-<tr>
-<td><code>rev_call</code></td>
-<td>target/action/arguments/confirm</td>
-<td>调用一个真实注册接口</td>
-</tr>
-<tr>
-<td><code>rev_run</code></td>
-<td><code>{ &quot;plan&quot;: { ... } }</code></td>
-<td>执行带断言、等待和 finally 的完整测试</td>
-</tr>
+<tbody>
+<tr><td><code>rev_discover</code></td><td>列出真实可用的动作、参数、环境要求</td><td>先看菜单有什么菜</td></tr>
+<tr><td><code>rev_call</code></td><td>调一个具体动作（target + action + 参数）</td><td>点一道菜</td></tr>
+<tr><td><code>rev_run</code></td><td>跑一份多步计划（准备→执行→断言→清理）</td><td>点套餐</td></tr>
 </tbody></table></div>
-<p>tools/list 还会把真实接口生成 <code>editor_*</code>、<code>game_*</code>、<code>gm_*</code>、<code>cli_*</code> 动态工具。动态工具名包含稳定摘要，中文 GM 完整名保留在说明中。动态工具参数是 <code>{ &quot;arguments&quot;: { ... }, &quot;confirm&quot;: false }</code>。场景/注册表变化后重新刷新工具列表或使用 rev_discover，再用稳定 rev_call 调用；服务不声明主动 listChanged 推送。</p>
-<pre><code class="language-json">{
-  &quot;target&quot;: &quot;gm&quot;,
-  &quot;action&quot;: &quot;自动化演示/增加&quot;,
-  &quot;arguments&quot;: { &quot;arg0&quot;: 2 }
-}
-</code></pre>
-<p>GM 参数使用 arg0/arg1 等位置名，类型、必填、枚举和 Int32 范围由真实 RevGMArg 推导。只允许完整注册名；HighRisk 必须 confirm=true。Hidden 是显示标记，不是权限隔离。GM 本体是否允许执行仍由 RevGM.Enabled 控制。</p>
-</section><section id="s6"><h2>6. 注册自己的游戏能力</h2>
-<p>业务应先提供玩家共用入口，再登记受控能力。最小完整范例见 <code>Assets/Revolution.Demo/RevAutomation.Demo/RevAutomationDemo.cs</code>。下面是接入结构，<code>inventory</code> 是项目已有的业务服务，需要替换为你的实际实现。</p>
-<pre><code class="language-csharp">#if UNITY_EDITOR || DEVELOPMENT_BUILD || REV_AUTOMATION
-// 在业务启动处登记一次。查询可轮询，动作调用玩家同一个服务。
-RevRuntimeAutomation.Register(
-    &quot;inventory.state&quot;, &quot;查询真实背包数量&quot;,
-    &quot;{\&quot;type\&quot;:\&quot;object\&quot;,\&quot;additionalProperties\&quot;:false}&quot;,
-    _ =&gt; new InventoryState { count = inventory.Count },
-    readOnly: true, owner: this);
-
-RevRuntimeAutomation.Register(
-    &quot;inventory.add&quot;, &quot;测试账号调用正常添加道具入口&quot;,
-    &quot;{\&quot;type\&quot;:\&quot;object\&quot;,\&quot;properties\&quot;:{\&quot;amount\&quot;:{\&quot;type\&quot;:\&quot;integer\&quot;,\&quot;minimum\&quot;:1,\&quot;maximum\&quot;:100}},\&quot;required\&quot;:[\&quot;amount\&quot;],\&quot;additionalProperties\&quot;:false}&quot;,
-    json =&gt; {
-        var args = JsonUtility.FromJson&lt;AddArgs&gt;(json);
-        inventory.Add(args.amount);
-        return new InventoryState { count = inventory.Count };
-    }, owner: this);
-
-// 场景退出/服务释放时清掉自己登记的委托。
-RevRuntimeAutomation.UnregisterAllOf(this);
-#endif
-</code></pre>
-<p>返回 DTO 要声明 <code>[Serializable]</code>，使用可序列化字段；也可返回字符串键字典、数组、数字、布尔或 null。失败抛出带原因的异常。不要返回 Unity 对象、任意复杂服务、循环引用或把 <code>success=false</code> 藏在普通业务 DTO 中代替工单失败；跨帧能力用 RevRuntimeOperation.Success/Message 明确结果。</p>
-<p>回调只在 Unity 主线程调用，必须快速返回。网络登录/战斗等异步流程由现有 RevTask/业务生命周期启动，另提供 readOnly 状态查询；需要直接等待多帧时返回 RevRuntimeOperation，在 Tick 返回 true 时结束，并实现 Cancel/Dispose。取消不能撤销已发生的业务效果。</p>
-<p>Schema 支持：单一 type（object/array/string/integer/number/boolean/null）、properties、required、additionalProperties 布尔值、items、enum、minimum/maximum、min/maxLength、min/maxItems，以及 description/title/default。default 只作说明，不自动补值；不支持 oneOf、远程引用或正则 pattern。未知关键字在注册时拒绝。数字内核使用 double，不承诺任意 Int64 无损；大 ID 用字符串。</p>
-</section><section id="s7"><h2>7. 内置运行时能力与 UI</h2>
-<div class="table-wrap"><table>
-<thead>
-<tr>
-<th>能力</th>
-<th>用途</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>runtime.state</code></td>
-<td>活动场景、帧、timeScale、作用域/服务/计时器/UI 状态和错误数</td>
-</tr>
-<tr>
-<td><code>runtime.logs</code></td>
-<td>最近 128 条日志、当前局累计 Error/Exception/Assert 数</td>
-</tr>
-<tr>
-<td><code>runtime.ping</code></td>
-<td>运行实例产品名和平台</td>
-</tr>
-<tr>
-<td><code>runtime.screenshot</code></td>
-<td>等待完整 PNG，返回路径、base64、mimeType，MCP 转为 image 内容</td>
-</tr>
-<tr>
-<td><code>ui.dump</code></td>
-<td>分页查询 UGUI/TMP Selectable、文本、可交互与中心射线可达状态</td>
-</tr>
-<tr>
-<td><code>ui.click</code></td>
-<td>目标 id/objectPath，真实 EventSystem 指针事件，拒绝禁用/中心遮挡</td>
-</tr>
-<tr>
-<td><code>ui.input</code></td>
-<td>输入框 text；submit=true 时触发结束编辑</td>
-</tr>
-<tr>
-<td><code>ui.back</code> / <code>ui.close</code></td>
-<td>使用 RevUI 的真实返回/关闭入口</td>
-</tr>
-</tbody></table></div>
-<p>先 dump 再点击当次 id；同名路径会拒绝，跨场景/重载后 id 过期。通用点击测试的是控件中心，不能代表所有边缘位置。非 UGUI 控件、拖拽、摇杆、战斗移动、虚拟列表等应登记项目专用能力。输入接口设置控件文本，不模拟输入法逐键交互。场景切换可以登记调用 RevScene 的能力，由业务清理和查询实际就绪。</p>
-<p>截图保存在 <code>Application.persistentDataPath/RevolutionAutomation/screenshots/</code>，最大 8 MiB PNG。MCP 一次响应最多附带 4 张图片；报告省略重复 base64 并保留图片路径。截图需要图形渲染环境，不应用无图形模式验视觉。</p>
-</section><section id="s8"><h2>8. 独立开发版 Player</h2>
-<p>勾选 Development Build 出包。启动时显式指定：</p>
-<pre><code class="language-powershell">&amp; &#39;<你的构建目录>/Player.exe&#39; -revAutomation -revAutomationPort 18767
-</code></pre>
-<p>也可在开发态启动入口调用 <code>RevRuntimeAutomation.Start(18767)</code>。默认端口 18766。Editor 控制台启用服务时凭据在工程 <code>Library/RevolutionAutomation/runtime.json</code>；Player 在 <code>Application.persistentDataPath/RevolutionAutomation/runtime.json</code>。凭据含随机 token、session、pid 和本机 URL，不提交 Git、不贴到聊天。</p>
-<pre><code class="language-powershell">$endpoint = &quot;$env:USERPROFILE\AppData\LocalLow\DefaultCompany\RevolutionFrameWork_Unity\RevolutionAutomation\runtime.json&quot;
-python Revolution.RevMCP/rev_mcp.py --runtime-endpoint $endpoint discover
-python Revolution.RevMCP/rev_mcp.py --runtime-endpoint $endpoint run Revolution.RevMCP/examples/ui-gm.plan.json
-</code></pre>
-<p>Company/Product 改名后上述路径也会变化，以实际 persistentDataPath 为准。Player 的 MCP 配置将 --project 换成 --runtime-endpoint 与实际路径。游戏必须运行并持续刷新帧；服务启动期间临时启用 runInBackground，停止时恢复。</p>
-<p>HTTP 是运行时内部传输，不是直接提供给 Agent 的 MCP Streamable HTTP；Agent 仍连接 Python stdio。只监听 loopback，要求 Bearer token 和 session，拒绝浏览器 Origin，不自动跟随重定向。POST /call 接单、GET /jobs/id 查询、DELETE /jobs/id 取消。队列最多 16，单 session 最多保存 1024 工单，达到后结束本轮再重启服务；旧请求不重放。</p>
-<p>正式构建默认不包含运行时测试模块，除非项目主动定义 REV_AUTOMATION。WebGL 无本机 HttpListener，此版本明确拒绝；手机/小游戏真机、跨机器连接与端口转发未在本次验证。不要将本机监听直接改为公网监听。</p>
-</section><section id="s9"><h2>9. 显式登记 CLI / Python</h2>
-<p>外部工具使用 JSON 清单，不扫描硬盘并执行任意脚本。复制 <code>Revolution.RevMCP/examples/external-tools.example.json</code>，按本机修改 command 和 cwd。Python.exe 用 <code>python -c &quot;import sys; print(sys.executable)&quot;</code> 查询。command 是固定参数数组，第一个元素必须为真实绝对可执行文件；py 文件由 Python.exe 启动。</p>
-<pre><code class="language-json">{
-  &quot;version&quot;: 1,
-  &quot;tools&quot;: [{
-    &quot;name&quot;: &quot;project.echo&quot;,
-    &quot;description&quot;: &quot;教学：返回收到的文本&quot;,
-    &quot;command&quot;: [&quot;<Python 3.10+ 安装目录>/python.exe&quot;, &quot;<本仓库绝对路径>/Revolution.RevMCP/examples/echo_tool.py&quot;],
-    &quot;cwd&quot;: &quot;<本仓库绝对路径>&quot;,
-    &quot;inputSchema&quot;: {&quot;type&quot;:&quot;object&quot;,&quot;properties&quot;:{&quot;text&quot;:{&quot;type&quot;:&quot;string&quot;}},&quot;required&quot;:[&quot;text&quot;],&quot;additionalProperties&quot;:false},
-    &quot;readOnly&quot;: true, &quot;confirm&quot;: false, &quot;timeoutSeconds&quot;: 10, &quot;output&quot;: &quot;json&quot;
-  }]
-}
-</code></pre>
-<pre><code class="language-powershell">python Revolution.RevMCP/rev_mcp.py --project $project --external-manifest &#39;<你的配置目录>/tools.json&#39; discover
-</code></pre>
-<p>Agent 用 target=cli、action=project.echo、arguments={&quot;text&quot;:&quot;你好&quot;}。参数通过 UTF-8 JSON stdin 传递；stdout 返回 JSON（或 output=text），stderr 用于日志。进程非零退出或 JSON 顶层 success=false 判失败。shell=False，不直接启动 cmd/bat/ps1；原工具只接受 argv 时，为它写固定 JSON 包装脚本。输出合计限制 4 MiB。取消会终止直接子进程，工具自己派生的进程应自行管理生命周期。</p>
-</section><section id="s10"><h2>10. 带断言与清理的计划</h2>
-<p>计划顶层 name/steps/finally；步骤 target/action/arguments，可选 id/confirm/expect/until。完整可执行示例为 <code>Revolution.RevMCP/examples/ui-gm.plan.json</code>。</p>
-<pre><code class="language-json">{
-  &quot;name&quot;: &quot;验证按钮增加&quot;,
-  &quot;steps&quot;: [
-    {&quot;target&quot;:&quot;game&quot;,&quot;action&quot;:&quot;demo.reset&quot;},
-    {&quot;id&quot;:&quot;button&quot;,&quot;target&quot;:&quot;game&quot;,&quot;action&quot;:&quot;ui.dump&quot;,&quot;arguments&quot;:{&quot;query&quot;:&quot;AutomationCanvas/Increment&quot;},&quot;expect&quot;:[{&quot;path&quot;:&quot;/data/total&quot;,&quot;equals&quot;:1}]},
-    {&quot;target&quot;:&quot;game&quot;,&quot;action&quot;:&quot;ui.click&quot;,&quot;arguments&quot;:{&quot;id&quot;:{&quot;$ref&quot;:&quot;button#/data/items/0/id&quot;}}},
-    {&quot;target&quot;:&quot;game&quot;,&quot;action&quot;:&quot;demo.state&quot;,&quot;until&quot;:{&quot;path&quot;:&quot;/data/count&quot;,&quot;equals&quot;:1,&quot;timeoutSeconds&quot;:5,&quot;intervalSeconds&quot;:0.2}},
-    {&quot;target&quot;:&quot;game&quot;,&quot;action&quot;:&quot;runtime.screenshot&quot;}
-  ],
-  &quot;finally&quot;: [{&quot;target&quot;:&quot;game&quot;,&quot;action&quot;:&quot;demo.reset&quot;,&quot;expect&quot;:[{&quot;path&quot;:&quot;/data/count&quot;,&quot;equals&quot;:0}]}]
-}
-</code></pre>
-<p>断言 path 是完整响应中的 JSON Pointer：结构化数据通常在 /data/count，GM 文本在 /data/message。支持 equals 或 exists，不能同时提供；精确比较，布尔值与数字不同。$ref 必须单独构成一个对象，只能引用先前步骤，保留数字、布尔、对象等原类型。</p>
-<p>整份计划先预检，引用值在实际调用前再次验证。until 仅允许 readOnly=true 的查询，必须有期限，不能自动重复变更。单次请求期限由 --timeout 控制（RevMCP 最大 3600 秒）；条件期限可能要等一个已提交请求结束后才被观察到。finally 在失败、取消后继续逐条执行，清理失败使总结果失败。断言失败后的已执行动作不自动回滚。finally 尽量使用不依赖前面成功步骤的幂等复位。</p>
-<p>三个格式不要混用：RevMCP plan 用 target/action/arguments；Automation pipeline 用 action/payload；旧 GM scenario 用 kind/command，并提供 repeat/warmup/cleanup/teardown 与性能采样。循环和性能测试仍可用 scenario，详见 <a href="Revolution%E8%87%AA%E5%8A%A8%E5%8C%96%E5%B7%A5%E5%85%B7%E4%BD%BF%E7%94%A8%E8%AF%B4%E6%98%8E.html">Automation 使用说明</a>。</p>
-</section><section id="s11"><h2>11. 结果、故障与实际边界</h2>
-<p>CLI 退出码 0 表示顶层成功；MCP 看 isError 和 structuredContent.success，并核对每步业务断言、日志和 cleanup。结果默认写 <code>Revolution.RevMCP/results/</code>，可用 --reports 修改。Editor 原始工单在 <code>Library/RevolutionAutomation/jobs/</code>。不能以 progress、握手成功或按钮 dispatched 代替玩法通过。</p>
+<p>其余一百多个工具是<strong>按动作动态生成</strong>的，名字后面带一串哈希（例如 <code>editor_ab_build_d76143ddf55a0617</code>）。它们能用，但不适合让 AI 去记忆——<strong>优先让 AI 用 <code>rev_discover</code> + <code>rev_call</code></strong>，这样接口变了也不会失效。</p>
+</section>
+<section id="s5"><h2>4. 让 AI 测你自己的游戏功能（关键一步）</h2>
+<p>AI 不可能凭空知道你的“背包加道具”怎么查。你得给游戏<strong>注册能力</strong>，AI 才有东西可调：</p>
+<pre><code class="language-csharp">// 在游戏侧登记一个可被自动化的业务能力（名称由你定）
+RevRuntimeAutomation.Register("inventory.count", () =&gt; bag.Count);
+RevRuntimeAutomation.Register("inventory.add", args =&gt; bag.Add(args.GetInt("id"), 1));
+RevRuntimeAutomation.Register("inventory.reset", () =&gt; bag.Clear());</code></pre>
+<p>登记之后，AI 才可以说：</p>
+<div class="callout good"><p>记录背包数量 → 加一个道具 → 断言数量 +1 → 截图 → 复位归零。</p></div>
+<p><strong>这就是 RevMCP 的边界</strong>：它负责“发现 + 调用 + 断言 + 证据”，业务接口必须由项目提供。工具不会猜你的游戏逻辑。</p>
+</section>
+<section id="s6"><h2>5. 常见问题（新手 90% 卡在这几条）</h2>
 <div class="table-wrap"><table>
 <thead>
 <tr>
 <th>现象</th>
-<th>处理</th>
+<th>原因</th>
+<th>怎么办</th>
 </tr>
 </thead>
-<tbody><tr>
-<td>Editor unavailable</td>
-<td>检查 --project、桥是否编译、是否正在重载；已有工程不另开 batch</td>
-</tr>
-<tr>
-<td>game/GM 不可用</td>
-<td>进入目标场景 Play，确认注册/RevGM.Enabled；重新 discover</td>
-</tr>
-<tr>
-<td>HTTP 401 / SessionChanged</td>
-<td>检查凭据属于当前 pid/session；不能重放刚才可能已执行的变更</td>
-</tr>
-<tr>
-<td>Busy / RuntimeBusy / TestsRunning</td>
-<td>等待或取消原工单后核对副作用；Editor/HTTP 串行操作</td>
-</tr>
-<tr>
-<td>参数小数/拼错字段被拒绝</td>
-<td>按真实 inputSchema 修改，不靠静默类型转换</td>
-</tr>
-<tr>
-<td>UI 中心被挡</td>
-<td>先排查真实遮罩/滚动位置；不要绕过射线直接 Invoke 点击事件</td>
-</tr>
-<tr>
-<td>测试被取消但引擎仍运行</td>
-<td>Test Framework 1.1 不支持公开强制取消；查询 test.result，保持变更门禁到完成</td>
-</tr>
-<tr>
-<td>报告失败但业务似乎完成</td>
-<td>查看各步、Unity Error、断言和清理结果；不能忽略清理失败</td>
-</tr>
+<tbody>
+<tr><td>AI 说「没有在线 Unity 桥接」</td><td>Unity 没开 / 还在编译 / 工程路径不对</td><td>打开工程等编译完；核对 <code>--project</code></td></tr>
+<tr><td>客户端里看不到 revolution</td><td>JSON 写错（少逗号、BOM）或路径不存在</td><td>用 <code>python &amp;lt;路径&amp;gt;/rev_mcp.py --project &amp;lt;工程&amp;gt; discover</code> 手动验证能否跑</td></tr>
+<tr><td>能发现动作，但一执行就失败</td><td>动作要求 Play 模式 / EditMode</td><td>看动作的 <code>environment</code> 字段，先切到正确模式</td></tr>
+<tr><td>AI 跑完说“成功”但游戏没变</td><td>缺断言——它只调了动作，没验证结果</td><td>明确要求“断言 + 截图”，别只说“点一下”</td></tr>
+<tr><td>中文路径报错</td><td>Python 默认编码不是 UTF-8</td><td>配置里加 <code>PYTHONUTF8=1</code></td></tr>
+<tr><td>想用 WebGL 包做自动化</td><td><strong>不支持</strong></td><td>WebGL 没有本机 HTTP 能力，只能用编辑器或开发版 Player</td></tr>
 </tbody></table></div>
-</section><section id="s12"><h2>12. 2026-10-22 验证记录</h2>
-<p>本次本机验证覆盖 Python 自动化 19 项、RevMCP 13 项、Unity EditMode 24 项。真实 MCP stdio → Editor 文件桥，以及 stdio → 本机 HTTP → Windows Development Player 均完成 UI、GM、计数断言、PNG 和归零清理。Windows64 BuildReport 成功，0 错误、0 警告。当前实际 20 个 Revolution.Tools 菜单均有命令映射；离线清单 125 个动作，示例工程实时 122 个（另 3 个由 Python 客户端实现）。</p>
-<p>首次集成曾发现重载恢复、测试夹具场景管理和 Player 输出目录问题，已修复后复测；零匹配测试会明确失败。本记录不代表每个编辑器动作、任意项目业务或所有平台逐一通过。Android、IL2CPP、小游戏和真机性能未验证。</p>
-<p>脱敏证据见 <a href="%E9%AA%8C%E8%AF%81%E8%AE%B0%E5%BD%95/2026-10-22-RevMCP.md">本次验证记录</a>，包括可核对的计数、构建摘要和截图；本机原始凭据/日志不入库。</p>
-</section></main>
-<footer>Revolution · 2026-10-22<br><a href="../index.html">文档总入口</a> · <a href="RevMCP使用说明.md">Markdown 源文档</a></footer>
+</section>
+<section id="s7"><h2>6. 它做不到什么（提前说清，省得你试）</h2>
+<ul>
+<li><strong>不能凭空理解未注册的业务</strong>：没登记查询/动作/复位，AI 只能“点按钮”，无法断言业务结果；</li>
+<li><strong>WebGL 构建不支持</strong>运行时测试接口；</li>
+<li><strong>正式发布的包默认不含这些接口</strong>，只在 Development Build + 显式开启时存在；</li>
+<li><strong>两个 MCP 连接不能同时改同一个工程</strong>（比如 Unity MCP 和 RevMCP 同时操作）；</li>
+<li>断言失败、清理失败都会被记为失败——这是<strong>故意的</strong>，避免“跑完看起来绿了、其实脏了”。</li>
+</ul>
+</section>
+<section id="s8"><h2>7. 验证口径</h2>
+<p>2026-10-22 的验证：Python 自动化 19 项、RevMCP 13 项、Unity EditMode 24 项通过；真实 MCP stdio → Editor 文件桥，以及 stdio → 本机 HTTP → Windows Development Player 的“按钮 + GM + 断言 + 截图 + 归零”全链路已跑通。</p>
+<p><strong>未</strong>声称 Android、IL2CPP、小游戏真机通过。需要哪个平台结论，就在那个平台单独跑。</p>
+</section>
+<section id="s9"><h2>8. 相关文档</h2>
+<ul>
+<li><a href="Revolution自动化工具使用说明.html">Revolution 自动化工具（命令行）</a> —— 底层那双手怎么用</li>
+<li><a href="RevMCP架构解析.html">RevMCP 架构解析</a> —— 写给维护者：线程、工单生命周期、扩展选型</li>
+<li>仓库内：<code>Revolution.RevMCP/README.md</code>、<code>Revolution.Automation/README.md</code></li>
+</ul>
+</section>
+</main>
+<footer>Revolution · 2026-10-24<br><a href="../index.html">文档总入口</a> · <a href="RevMCP使用说明.md">Markdown 源文档</a></footer>
 </body></html>
