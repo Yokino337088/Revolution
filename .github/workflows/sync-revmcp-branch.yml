@@ -1,0 +1,117 @@
+name: 同步 revmcp 分支（RevMCP MCP 服务）
+
+# 把 RevMCP 与其必需的客户端一起发布到 revmcp 分支根目录。
+# 用途：只想接入 MCP、不想克隆整个 Unity 框架开发仓库时，一条 clone 就能跑。
+#
+# 为什么同时带 Revolution.Automation：
+#   rev_mcp.py 启动时要用相邻的自动化客户端（revautomation.client），
+#   单独发布 RevMCP 会得到一个"缺依赖、连不上"的分支。两者放在分支根目录，
+#   克隆后目录关系与开发仓库完全一致，默认路径不用改。
+#
+# 边界：本分支只是客户端工具。真正操作 Unity 仍需要目标工程安装框架与桥接代码，
+#       也只有目标工程实际注册的 Editor / GM / 业务能力可被调用。
+# revmcp 是生成分支，每次从主分支整份重建；源文件只改 Revolution.RevMCP/ 与 Revolution.Automation/。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Revolution.RevMCP/**'
+      - 'Revolution.Automation/**'
+      - '.github/workflows/sync-revmcp-branch.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取出主分支
+        uses: actions/checkout@v4
+
+      - name: 组装 RevMCP 与必需依赖
+        run: |
+          mkdir -p /tmp/revmcp
+          cp -r Revolution.RevMCP /tmp/revmcp/
+          cp -r Revolution.Automation /tmp/revmcp/
+          # 本机运行结果与字节码不进生成分支
+          rm -rf /tmp/revmcp/Revolution.RevMCP/results /tmp/revmcp/Revolution.Automation/results
+          find /tmp/revmcp -name '__pycache__' -type d -prune -exec rm -rf {} +
+          echo "文件数：$(find /tmp/revmcp -type f | wc -l)"
+          test -f /tmp/revmcp/Revolution.RevMCP/rev_mcp.py
+          test -f /tmp/revmcp/Revolution.Automation/revautomation/client.py
+
+      - name: 校验能作为库导入
+        run: |
+          cd /tmp/revmcp
+          python -m compileall -q Revolution.RevMCP Revolution.Automation
+          python -c "
+          import sys
+          sys.path.insert(0, 'Revolution.Automation')
+          sys.path.insert(0, 'Revolution.RevMCP')
+          import revmcp.server, revmcp.backends, revautomation.client
+          print('imports ok')
+          "
+
+      - name: 写入分支说明
+        run: |
+          cat > /tmp/revmcp/README.md <<'EOF'
+          # Revolution RevMCP
+
+          把 Revolution 的 Editor、实际注册 GM、运行时业务、UGUI、状态/截图，
+          以及显式登记的 CLI/Python 接口提供给 AI Agent。Python 3.10+，仅用标准库。
+
+          本分支根目录包含两个目录，缺一不可：
+
+          | 目录 | 作用 |
+          |---|---|
+          | `Revolution.RevMCP/` | MCP 服务与 CLI（`rev_mcp.py`），入口在这里 |
+          | `Revolution.Automation/` | 自动化客户端，`rev_mcp.py` 启动时要导入它 |
+
+          ## 接入
+
+          ```text
+          git clone -b revmcp --depth 1 https://github.com/<owner>/Revolution.git tools
+          ```
+
+          克隆后目录关系与开发仓库一致，`rev_mcp.py` 的默认依赖路径不用改：
+
+          ```powershell
+          python tools/Revolution.RevMCP/rev_mcp.py --project <Unity工程绝对路径> discover
+          ```
+
+          Agent 客户端启动命令：
+
+          ```text
+          python <tools>/Revolution.RevMCP/rev_mcp.py --project <Unity工程绝对路径> serve
+          ```
+
+          配置示例见 `Revolution.RevMCP/examples/mcp-config.example.json`，
+          其中的路径必须换成本机绝对路径。
+
+          ## 前提
+
+          - 目标 Unity 工程已安装框架与自动化桥接代码，并等待编译完成；
+          - 工具只能调用工程里**实际注册**的 Editor / GM / 业务能力，没有登记就测不到；
+          - 独立 Player 需显式开启运行时接口，正式发行包默认不开放；
+          - 部分删除类与高风险 GM 动作要求 `confirm`，但它是接口参数，不是完整权限系统。
+
+          详细说明见 `Revolution.RevMCP/README.md`。
+
+          > 本分支由 CI 从 `main` 的 `Revolution.RevMCP/` 与 `Revolution.Automation/` 整份重建，
+          > 不保留历史，也不接受直接提交；请改主分支上的源目录。
+          EOF
+
+      - name: 推送到 revmcp 分支
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd /tmp/revmcp
+          git init -b revmcp
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "publish: Revolution RevMCP（源 ${GITHUB_SHA:0:7}）"
+          git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" revmcp
