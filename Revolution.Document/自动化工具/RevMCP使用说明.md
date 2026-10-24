@@ -155,13 +155,31 @@ RevRuntimeAutomation.Register("inventory.reset", () => bag.Clear());
 - **两个 MCP 连接不能同时改同一个工程**（比如 Unity MCP 和 RevMCP 同时操作）；
 - 断言失败、清理失败都会被记为失败——这是**故意的**，避免“跑完看起来绿了、其实脏了”。
 
-## 7. 验证口径
+## 7. 测试产出：报告 + 截图 + GIF（硬规矩）
+
+跑完计划**不等于任务结束**。每次测试都必须留一份能直接发给别人看的 `report.html`，只有"success: true"的报告会被当成没做完。
+
+- 报告样式与《进度同步》那批文档一致（hero / 目录 / 卡片 / 表格 / 图墙）；
+- 必须带**本次运行的截图**（初始态、关键操作后、失败现场）；
+- **动态效果必须给 GIF**（技能、位移、粒子、UI 过渡），单帧看不出节奏；
+- 结论只由断言决定，图片只证画面。
+
+`rev_run` 现在会**自动**做这件事：把计划里截图动作产出的 PNG 收进报告目录、超过 1 帧就合成 `anim.gif`，并写出 `report.html`，返回里带 `evidencePath`。
+
+手动补也可以（同一个引擎）：
+
+```powershell
+python Revolution.Automation/rev.py evidence --directory <结果目录> --title "本次测试" --subtitle "截图与动图"
+python Revolution.Automation/rev.py --project <工程> --mode live capture --out results\anim.gif --frames 12 --interval 120 --report
+```
+
+## 8. 验证口径
 
 2026-10-22 的验证：Python 自动化 19 项、RevMCP 13 项、Unity EditMode 24 项通过；真实 MCP stdio → Editor 文件桥，以及 stdio → 本机 HTTP → Windows Development Player 的“按钮 + GM + 断言 + 截图 + 归零”全链路已跑通。
 
 **未**声称 Android、IL2CPP、小游戏真机通过。需要哪个平台结论，就在那个平台单独跑。
 
-## 8. 相关文档
+## 9. 相关文档
 
 - [Revolution 自动化工具（命令行）](Revolution自动化工具使用说明.html) —— 底层那双手怎么用
 - [RevMCP 架构解析](RevMCP架构解析.html) —— 写给维护者：线程、工单生命周期、扩展选型

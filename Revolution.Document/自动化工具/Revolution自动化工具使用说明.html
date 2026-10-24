@@ -146,7 +146,7 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
 
 <header class="hero"><div class="wrap"><span class="kicker">REVOLUTION · AUTOMATION CLI</span><h1>Revolution 自动化工具 · 新手使用说明</h1><p>让 AI 驱动 Unity：你提需求，AI 执行命令、读结果、给结论</p></div></header>
 <main>
-<section class="toc"><h2>目录</h2><ol><li><a href="#s1">0. 先说结论：命令不该由你敲</a></li><li><a href="#s2">1. 30 秒跑通（让 AI 跑，不是让你敲）</a></li><li><a href="#s3">2. 它到底怎么工作的（30 秒版）</a></li><li><a href="#s4">3. 命令速查（AI 参考用 / 你排障用）</a></li><li><a href="#s5">4. 失败时怎么看（新手最容易卡住的地方）</a></li><li><a href="#s6">5. 多步流程：也交给 AI</a></li><li><a href="#s7">6. 这几件事它做不到（别浪费时间试）</a></li><li><a href="#s8">7. 为什么默认就推荐 RevMCP</a></li><li><a href="#s9">8. 验证口径</a></li></ol><p>更新：2026-10-24。适用：Python 3.10+ / Unity 2022.3，无需第三方库。</p>
+<section class="toc"><h2>目录</h2><ol><li><a href="#s1">0. 先说结论：命令不该由你敲</a></li><li><a href="#s2">1. 30 秒跑通（让 AI 跑，不是让你敲）</a></li><li><a href="#s3">2. 它到底怎么工作的（30 秒版）</a></li><li><a href="#s4">3. 命令速查（AI 参考用 / 你排障用）</a></li><li><a href="#s5">4. 失败时怎么看（新手最容易卡住的地方）</a></li><li><a href="#s6">5. 多步流程：也交给 AI</a></li><li><a href="#s7">6. 这几件事它做不到（别浪费时间试）</a></li><li><a href="#s8">7. 为什么默认就推荐 RevMCP</a></li><li><a href="#s9">8. 测试产出：HTML 报告 + 截图 + GIF（硬规矩）</a></li><li><a href="#s10">9. 验证口径</a></li></ol><p>更新：2026-10-24。适用：Python 3.10+ / Unity 2022.3，无需第三方库。</p>
 <div class="callout good"><p>一句话：<strong>让 AI 替你操作 Unity</strong>。你说“帮我跑一次打包，结果告诉我”，AI 去执行命令、读输出、给你结论。 你不需要背命令，也不需要会写 Unity 编辑器插件。本页的命令是<strong>给 AI 和 CI 看的执行契约</strong>，不是让你手抄的。</p></div></section>
 <section id="s1"><h2>0. 先说结论：命令不该由你敲</h2>
 <p><strong>别手敲命令。</strong> 正确姿势是：你提需求 → AI 通过 MCP 或 CLI 执行 → 你只看结论和证据。</p>
@@ -311,7 +311,32 @@ Unity 里的编辑器桥（Assets/Revolution/Editor/RevAutomation）
 </ul>
 <p><strong>只有两种情况才回到本文档（CLI）</strong>：接 CI（Jenkins / GitHub Actions，那里没有 AI），或者 AI 报“连不上”时你想亲手确认哪一层坏了。</p>
 </section>
-<section id="s9"><h2>8. 验证口径</h2>
+<section id="s9"><h2>8. 测试产出：HTML 报告 + 截图 + GIF（硬规矩）</h2>
+<p><strong>一次测试的交付物不是"success: true"，而是一份能直接发给别人看的报告。</strong></p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>必须有</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr><td><code>report.html</code></td><td>视觉与《进度同步》那批文档一致（蓝色 hero、目录、卡片、表格、图墙），不要另造样式</td></tr>
+<tr><td><strong>截图</strong></td><td>至少覆盖初始态、关键操作后、失败现场；截图只证画面，不能替代数值断言</td></tr>
+<tr><td><strong>GIF</strong></td><td>技能、位移、粒子、UI 过渡这类"动起来才看得懂"的效果，必须连拍成动图</td></tr>
+<tr><td>结论</td><td>通过/失败只由断言决定；写清环境、首个失败原因、未验证项</td></tr>
+</tbody></table></div>
+<pre><code class="language-text"># 一遍连拍 + 合成 + 出报告（Unity 在 Play 中时）
+.\rev.py --project &lt;工程&gt; --mode live capture --out results\anim.gif --frames 12 --interval 120 --report
+
+# 已有图，只补报告
+.\rev.py evidence --directory results\&lt;本次目录&gt; --title "第一章流程自动化测试" --subtitle "截图与动图"
+
+# 只有零散截图，先合动图（离线）
+.\rev.py gif a.png b.png c.png --out results\anim.gif --delay 120</code></pre>
+<div class="callout good"><p>用 RevMCP 跑计划时会<strong>自动</strong>产出这份报告（见 <code>RevMCP使用说明</code>），不需要你手动补。</p></div>
+</section>
+<section id="s10"><h2>9. 验证口径</h2>
 <p>本工具在 2026-10-22 的验证覆盖：Python 自动化 19 项、RevMCP 13 项、Unity EditMode 24 项通过；Editor 与 Windows 开发版 Player 的实际按钮点击、GM、断言、截图、清理已完成。</p>
 <p><strong>没有</strong>以此声称 Android、IL2CPP、小游戏真机或全部动作逐一通过——需要哪个平台的结论，就在那个平台上单独跑一遍。</p>
 </section>

@@ -167,7 +167,31 @@ Unity 里的编辑器桥（Assets/Revolution/Editor/RevAutomation）
 
 **只有两种情况才回到本文档（CLI）**：接 CI（Jenkins / GitHub Actions，那里没有 AI），或者 AI 报“连不上”时你想亲手确认哪一层坏了。
 
-## 8. 验证口径
+## 8. 测试产出：HTML 报告 + 截图 + GIF（硬规矩）
+
+**一次测试的交付物不是"success: true"，而是一份能直接发给别人看的报告。**
+
+| 必须有 | 说明 |
+|---|---|
+| `report.html` | 视觉与《进度同步》那批文档一致（蓝色 hero、目录、卡片、表格、图墙），不要另造样式 |
+| **截图** | 至少覆盖初始态、关键操作后、失败现场；截图只证画面，不能替代数值断言 |
+| **GIF** | 技能、位移、粒子、UI 过渡这类"动起来才看得懂"的效果，必须连拍成动图 |
+| 结论 | 通过/失败只由断言决定；写清环境、首个失败原因、未验证项 |
+
+```powershell
+# 一遍连拍 + 合成 + 出报告（Unity 在 Play 中时）
+.\rev.py --project <工程> --mode live capture --out results\anim.gif --frames 12 --interval 120 --report
+
+# 已有图，只补报告
+.\rev.py evidence --directory results\<本次目录> --title "第一章流程自动化测试" --subtitle "截图与动图"
+
+# 只有零散截图，先合动图（离线）
+.\rev.py gif a.png b.png c.png --out results\anim.gif --delay 120
+```
+
+> 用 RevMCP 跑计划时会**自动**产出这份报告（见 `RevMCP使用说明`），不需要你手动补。
+
+## 9. 验证口径
 
 本工具在 2026-10-22 的验证覆盖：Python 自动化 19 项、RevMCP 13 项、Unity EditMode 24 项通过；Editor 与 Windows 开发版 Player 的实际按钮点击、GM、断言、截图、清理已完成。
 
