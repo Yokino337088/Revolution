@@ -14,7 +14,9 @@ python Revolution.RevCLI/rev.py --project $project --mode live editor stop
 
 Agent 启动命令：`python <rev_mcp.py绝对路径> --project <Unity工程绝对路径> serve`。配置示例见 examples/mcp-config.example.json，也可直接从 Unity 控制台复制。稳定工具为 rev_discover、rev_call、rev_run；真实注册表还会生成动态工具。
 
-CLI 目录默认取同级 `Revolution.RevCLI`；若放在别处用 `--cli-root` 指定（改名前的 `--automation-root` 仍可用）。桥接侧轮询已从 100ms 降到 20ms，Python 侧 5ms 起步自适应，短动作的等待成本明显下降。
+CLI 目录默认取同级 `Revolution.RevCLI`；若放在别处用 `--cli-root` 指定（改名前的 `--automation-root` 仍可用）。
+
+关于速度：真实编辑器上单次往返约 110ms，实测改造轮询间隔（100ms→20ms）前后没有可测差异——空闲编辑器 `EditorApplication.update` 本身约 110ms 才触发一次，瓶颈在编辑器 tick 而不是轮询。要减少耗时，应当减少往返次数（一次调用做更多事），而不是继续压轮询间隔。
 
 独立 Player 显式 `-revAutomation` 开启服务，MCP 使用 `--runtime-endpoint <runtime.json>`。正式包默认无运行时测试接口。game 业务能力通过 `RevRuntimeAutomation.Register` 登记，GM 从真实 RevGM.Commands 读取；外部脚本必须用 manifest 显式登记，不执行任意模型生成的 shell。
 

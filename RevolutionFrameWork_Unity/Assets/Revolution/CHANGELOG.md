@@ -5,7 +5,9 @@
 ### RevCLI 更名与桥接提速（2026-10-26）
 
 - `Revolution.Automation` 更名为 `Revolution.RevCLI`：目录、README/文档、工作流与全部引用同步；Python 包名 `revautomation` 不变（内部 import 名），发布分支沿用 `automation` 以免旧克隆失效。MCP 参数 `--automation-root` 更名 `--cli-root`，旧名保留为别名。
-- Editor 桥接轮询间隔 100ms → 20ms；Python 侧改为 5ms 起步、20ms 稳定、长操作退让到 50ms，并按 mtime 缓存 `commands.json`。假桥实测 Python 侧往返 9.2ms（30 次，p50 9.1ms）；改造前固定 80ms 轮询，短动作通常要等 40~80ms。以上只缩短等待，不改变动作本身的执行耗时。
+- 轮询节奏调整：Editor 桥接 100ms → 20ms，Python 侧 5ms 起步自适应（20ms/50ms 退让），`commands.json` 按 mtime 缓存。
+  **实测结论与预期不符**：真实编辑器上 `editor.status` 各 20 次，改造前 mean 107.7ms / p50 111.4ms，改造后 mean 107.9ms / p50 111.6ms，**无可测差异**。原因是空闲编辑器 `EditorApplication.update` 本身约 110ms 才触发一次，轮询间隔不是约束项；假桥单独测 Python 侧往返 9.2ms，只说明该段不是瓶颈。不要把本次改动当作提速成果，端到端延迟仍由编辑器 tick 与动作自身耗时决定。
+- 修复读取回执与写入方原子替换的竞争：Python 读取 `response.json` 偶发 `PermissionError`（与 2026-10-20 boss-ai 作业失败同源），改为有限次重试读取，只重试读、绝不重发动作。
 - 覆盖核对：能力目录与工程特性合计 122 个 Editor 动作，CLI 清单 125 条（多出 `editor.launch`/`editor.wait`/`scenario.validate` 三个客户端动作），**编辑器有而 CLI 缺 0 条**，本次未新增编辑器能力。
 - 回归：CLI Python 19 项、RevMCP Python 13 项通过；未在本次重开 Unity 复测真实往返，端到端数字以实际编辑会话为准。
 

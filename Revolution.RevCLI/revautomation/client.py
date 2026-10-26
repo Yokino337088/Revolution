@@ -42,6 +42,23 @@ def read_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8-sig"), parse_constant=reject_constant)
 
 
+def read_json_settled(path: Path, attempts: int = 60, delay: float = .005):
+    """等文件落定后再读，避免与写入方的原子替换撞车。
+
+    Windows 上写入方用 temp + os.replace（Unity 侧是 File.Replace）发布结果；
+    这期间读方打开同名文件会短暂拿到 PermissionError。2026-10-20 的 boss-ai 作业
+    就是因为同一竞争被直接判失败。这里只重试“读”，绝不重发动作——读取失败不代表动作没执行。
+    """
+    for attempt in range(attempts):
+        try:
+            return read_json(path)
+        except (PermissionError, FileNotFoundError):
+            if attempt == attempts - 1:
+                raise
+            time.sleep(delay)
+    raise RevError(f"无法读取结果文件：{path}")
+
+
 def atomic_json(path: Path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
@@ -168,7 +185,7 @@ class RevClient:
                     cadence = .02
                 elif time.monotonic() - started > .3:
                     cadence = .05
-            response = read_json(response_path)
+            response = read_json_settled(response_path)
             if response.get("id") != request_id or response.get("protocol") != 1:
                 raise RevError("Unity 返回了不匹配的协议或请求 ID。")
             if process is not None:
