@@ -110,6 +110,26 @@ namespace Revolution.Editor
                 keys = attr.Keys, confirm = attr.Confirm, resumesAfterReload = attr.ResumeAfterReload };
         }
 
+        /// <summary>
+        /// 查询动作声明的运行环境（edit / either / live / play）。未登记返回 null。
+        /// 批量执行要靠它判断某一步能不能在同一帧里安全跑完。
+        /// </summary>
+        public static string EnvironmentOf(string action)
+        {
+            var builtin = Builtins.FirstOrDefault(b => b.id == action);
+            if (builtin != null) { return builtin.environment; }
+            try
+            {
+                var method = Extension(action);
+                return method == null ? null : method.GetCustomAttribute<RevAutomationActionAttribute>().Environment;
+            }
+            catch (InvalidOperationException)
+            {
+                // 重复或签名无效的扩展：交给 Execute 报原来的错，这里不掩盖。
+                return null;
+            }
+        }
+
         public static MethodInfo Extension(string action)
         {
             var methods = Methods.Where(m => m.GetCustomAttribute<RevAutomationActionAttribute>().Name == action).ToArray();

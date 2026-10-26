@@ -28,6 +28,8 @@ client.batch([{"action": "editor.status"}, {"action": "ab.config"}])
 
 默认遇错即停（后续步骤常依赖前一步状态），需要全部执行时传 `stop_on_error=False`；单步可自带 `payloadJson` 与 `confirm`，批量不会绕过高危确认。
 
+批量是**同一帧内同步跑完**，因此只接受能同步完成、不依赖帧推进的动作。`editor.play/stop/refresh/menu` 与各类构建会被明确拒绝，`gm.*`、`ui.*`、`runtime.*`、`scenario.*`、`test.*` 这类需要 Play 或运行时状态的动作同样拒绝。**游戏运行时测试（战斗、UI、业务流程）仍用 pipeline 或计划 JSON**——那里才有等待、断言和 finally 清理。
+
 commands.json 是离线说明，commands --live 才是实际安装能力。2026-10-22 示例工程有 122 个 Editor 动作，另 3 个 Python 动作为 editor.launch/editor.wait/scenario.validate；20 个 Revolution.Tools 菜单都有映射。覆盖表用于发现漏接线，不意味着所有第三方控件或未来新增功能自动可用。
 
 需要一句话 Agent 测试、GM 动态工具、独立开发版 Player、外部 CLI/Python，使用相邻的 [Revolution.RevMCP](../Revolution.RevMCP/README.md) 与 Skills/revolution-ai-automation。

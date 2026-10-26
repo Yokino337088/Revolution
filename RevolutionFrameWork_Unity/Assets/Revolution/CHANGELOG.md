@@ -9,6 +9,7 @@
   **实测结论与预期不符**：真实编辑器上 `editor.status` 各 20 次，改造前 mean 107.7ms / p50 111.4ms，改造后 mean 107.9ms / p50 111.6ms，**无可测差异**。原因是空闲编辑器 `EditorApplication.update` 本身约 110ms 才触发一次，轮询间隔不是约束项；假桥单独测 Python 侧往返 9.2ms，只说明该段不是瓶颈。不要把本次改动当作提速成果，端到端延迟仍由编辑器 tick 与动作自身耗时决定。
 - 修复读取回执与写入方原子替换的竞争：Python 读取 `response.json` 偶发 `PermissionError`（与 2026-10-20 boss-ai 作业失败同源），改为有限次重试读取，只重试读、绝不重发动作。
 - 新增 `batch.call`：一次请求顺序执行最多 64 个编辑器动作，省掉每步一次往返。真实编辑器实测 10 步：分 10 次调用 994ms，一次批量 111ms（约 9 倍），编辑器内部 10 步仅 4.5ms——耗时几乎全在一次往返上。每步仍走同一分发逻辑，参数校验与 confirm 规则不变；默认遇错即停（`stopOnError=false` 可继续），禁止嵌套。配套 `RevClient.batch(...)`。
+- 批量只收「同一帧内能同步完成」的动作：`environment` 为 live/play 的（`gm.*`、`ui.*`、`runtime.*`、`scenario.*`、`test.*`）以及 `editor.play/stop/refresh/menu`、构建类一律明确拒绝并说明原因，避免后续步骤读到旧状态。**游戏运行时测试继续用 pipeline 或计划 JSON**，那里才有等待、断言与 finally 清理。实测：安全动作 2/2 通过；混入 `editor.play`、`editor.refresh`、`ab.build` 均被拒并给出可执行的替代建议。
 - 覆盖核对：能力目录与工程特性合计 122 个 Editor 动作，CLI 清单 125 条（多出 `editor.launch`/`editor.wait`/`scenario.validate` 三个客户端动作），**编辑器有而 CLI 缺 0 条**，本次未新增编辑器能力。
 - 回归：CLI Python 19 项、RevMCP Python 13 项通过；未在本次重开 Unity 复测真实往返，端到端数字以实际编辑会话为准。
 

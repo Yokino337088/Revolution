@@ -149,6 +149,33 @@ namespace Revolution.Editor
         /// - 不允许嵌套 batch，避免超时与错误归属变得不可推理；
         /// - 默认遇错即停（stopOnError=false 可继续），因为后续步骤常常依赖前一步的状态。
         /// </summary>
+        /// <summary>发起后需要等待完成、或长耗时阻塞的动作，不适合塞进同帧批量。</summary>
+        private static readonly string[] BatchDeferredActions =
+        {
+            "editor.refresh", "editor.menu", "editor.play", "editor.stop", "editor.pause", "editor.resume", "editor.step",
+        };
+
+        private static string BatchRejectReason(string action)
+        {
+            string environment = RevAutomationCatalog.EnvironmentOf(action);
+            if (environment == "live" || environment == "play")
+            {
+                return "该动作需要 Play 或运行时状态，无法在同一帧内完成；请改用 pipeline 或计划 JSON";
+            }
+            foreach (string deferred in BatchDeferredActions)
+            {
+                if (action == deferred)
+                {
+                    return "该动作发起后需要等待（刷新/菜单/Play 切换），放进批量会读到旧状态";
+                }
+            }
+            if (action.EndsWith(".build") || action.StartsWith("build."))
+            {
+                return "构建类动作耗时长且不适合批量；请单独调用以便看到进度";
+            }
+            return null;
+        }
+
         private static object ExecuteBatch(RevAutomationRequest request)
         {
             var payload = JsonUtility.FromJson<RevAutomationBatchPayload>(request.payloadJson ?? "{}");
@@ -180,6 +207,20 @@ namespace Revolution.Editor
                 {
                     item.success = false;
                     item.message = "batch.call 不允许嵌套";
+                    results.Add(item);
+                    failed++;
+                    if (payload.stopOnError) { break; }
+                    continue;
+                }
+                // 批量是"同一帧内同步跑完"，所以必须挡掉两类动作，否则后续步骤会读到旧状态：
+                // 1) 需要 Play / 运行时状态的（live、play）；
+                // 2) 发起后要等一帧或长时间阻塞的（刷新、菜单、各种构建）。
+                // 运行期/UI/战斗这类多帧验证请继续用 pipeline 或计划 JSON，那里有等待与断言。
+                string reason = BatchRejectReason(step.action);
+                if (reason != null)
+                {
+                    item.success = false;
+                    item.message = reason;
                     results.Add(item);
                     failed++;
                     if (payload.stopOnError) { break; }
