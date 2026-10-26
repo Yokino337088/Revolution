@@ -173,10 +173,14 @@ Unity 里的编辑器桥（Assets/Revolution/Editor/RevAutomation）
 
 | 必须有 | 说明 |
 |---|---|
-| `report.html` | 视觉与《进度同步》那批文档一致（蓝色 hero、目录、卡片、表格、图墙），不要另造样式 |
-| **截图** | 至少覆盖初始态、关键操作后、失败现场；截图只证画面，不能替代数值断言 |
-| **GIF** | 技能、位移、粒子、UI 过渡这类"动起来才看得懂"的效果，必须连拍成动图 |
+| `<中文标题>_<日期>.html` | 例如 `第一章流程自动化测试_2026-10-26.html`；不叫 `report.html`，日期取数据产生那天 |
+| **版式** | 沿用工程手册风（纸色底 + 绿金主色：顶栏 / hero / 章节卡片 / 表格 / 图墙），样式来自 `revautomation/report.py` 的 `REPORT_CSS` |
+| **截图** | 至少覆盖初始态、关键操作后、失败现场；转成 1600 宽 JPEG，别塞 3MB 原图 |
+| **GIF** | 技能、位移、粒子、UI 过渡这类"动起来才看得懂"的效果，必须连拍成动图（≤720 宽） |
+| **证据包** | 每轮的 markers/status/逐帧 CSV 合成一个 zip，不要摊在目录里 |
 | 结论 | 通过/失败只由断言决定；写清环境、首个失败原因、未验证项 |
+
+命名规则实现在 `revautomation/report.py::report_file_name`，`evidence` / `capture --report` / `run --report` 三条路径都走它。
 
 ```powershell
 # 一遍连拍 + 合成 + 出报告（Unity 在 Play 中时）

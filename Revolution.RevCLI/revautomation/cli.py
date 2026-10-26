@@ -337,7 +337,7 @@ def main(argv=None):
                 result = dict(success=True, **info)
                 if args.report:
                     result["report"] = export_evidence(
-                        args.out.parent, "Revolution 自动化测试报告",
+                        args.out.parent, "自动化测试报告",
                         "连续 %d 帧 · 间隔 %d ms" % (len(frames), args.interval),
                         {"帧数": len(frames), "帧间隔毫秒": args.interval, "GIF": args.out.name})
             elif args.family == "pipeline":

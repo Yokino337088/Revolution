@@ -2,6 +2,14 @@
 
 ## [未发布]
 
+### 测试报告命名与版式（2026-10-26）
+
+- 报告不再统一叫 `report.html`：改为 `<中文标题>_<YYYY-MM-DD>.html`，日期取数据产生当天，非法文件名字符替换为 `-`。新增 `revautomation/report.py::report_file_name`，`evidence`、`capture --report`、`run --report` 与 RevMCP 自动证据全部走它。
+- 报告样式改为项目既有的工程手册风（纸色底 + 绿金主色、顶栏 / hero / 章节卡片 / 表格 / 图墙），常量更名 `EVIDENCE_CSS` → `REPORT_CSS`。目的是和《战斗性能优化规则》这类文档放一起时是同一套视觉语言，不是两个项目。
+- 新增 `Skills/revolution-ai-automation/references/report.md`：命名、目录结构（正文在顶层，`画面/` 与 `证据/` 进子目录）、版式设计变量、内容清单、截图压缩口径（1600 宽 JPEG / 动图 ≤720）、证据打包规则与被退回的反例。
+- Skill 产出规矩同步：过程文件（markers/status/逐帧 CSV）必须合进一个证据 zip，不要把几十个散文件摊在报告目录里。
+- 回归：RevCLI Python 24 项（含新增 5 项命名与版式测试）通过；未重开 Unity，本次不涉及编辑器侧代码。
+
 ### RevCLI 更名与桥接提速（2026-10-26）
 
 - `Revolution.Automation` 更名为 `Revolution.RevCLI`：目录、README/文档、工作流与全部引用同步；Python 包名 `revautomation` 不变（内部 import 名），发布分支沿用 `automation` 以免旧克隆失效。MCP 参数 `--automation-root` 更名 `--cli-root`，旧名保留为别名。
