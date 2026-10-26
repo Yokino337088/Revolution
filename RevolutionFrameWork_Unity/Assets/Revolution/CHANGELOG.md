@@ -2,6 +2,13 @@
 
 ## [未发布]
 
+### RevCLI 更名与桥接提速（2026-10-26）
+
+- `Revolution.Automation` 更名为 `Revolution.RevCLI`：目录、README/文档、工作流与全部引用同步；Python 包名 `revautomation` 不变（内部 import 名），发布分支沿用 `automation` 以免旧克隆失效。MCP 参数 `--automation-root` 更名 `--cli-root`，旧名保留为别名。
+- Editor 桥接轮询间隔 100ms → 20ms；Python 侧改为 5ms 起步、20ms 稳定、长操作退让到 50ms，并按 mtime 缓存 `commands.json`。假桥实测 Python 侧往返 9.2ms（30 次，p50 9.1ms）；改造前固定 80ms 轮询，短动作通常要等 40~80ms。以上只缩短等待，不改变动作本身的执行耗时。
+- 覆盖核对：能力目录与工程特性合计 122 个 Editor 动作，CLI 清单 125 条（多出 `editor.launch`/`editor.wait`/`scenario.validate` 三个客户端动作），**编辑器有而 CLI 缺 0 条**，本次未新增编辑器能力。
+- 回归：CLI Python 19 项、RevMCP Python 13 项通过；未在本次重开 Unity 复测真实往返，端到端数字以实际编辑会话为准。
+
 ### RevMCP 与 AI 自动化接口层（2026-10-22）
 
 - 新增 `Revolution.RevMCP` 标准库 Python MCP stdio 服务，统一发现/调用 Editor、真实 GM、运行时业务与显式 CLI/Python。提供 rev_discover/rev_call/rev_run、动态工具、精确业务断言、只读轮询、取消、finally 与截图 image 证据。

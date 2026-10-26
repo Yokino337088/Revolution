@@ -113,7 +113,7 @@ namespace Revolution.Demo.ActionSequence
         /// <c>.WaitTask(ctx =&gt; 带返回值的任务, (ctx, 结果) =&gt; …)</c>。老的回调式接口先用
         /// <see cref="RevTaskCompletionSource"/> 包成任务（见 <see cref="RequestGatherConfirm"/>），再交给 <c>WaitTask</c>。</para>
         /// </summary>
-        public static readonly RevSequenceDefinition WaitTaskDemo =
+        public static readonly RevSequenceDefinition WaitTaskDemo = 
             RevSequence.Create("次元\\灵果采集（等异步任务）", RevSequenceConcurrency.RejectPerSource)
                 .WaitTask(ctx => RequestGatherConfirm(ok => UnityEngine.Debug.Log($"[协议] 回调式回包：{ok}")),
                           "等异步任务返回")

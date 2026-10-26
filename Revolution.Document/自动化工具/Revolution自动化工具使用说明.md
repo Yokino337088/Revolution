@@ -10,7 +10,7 @@
 
 这两个目录**不是二选一的两套系统**，而是「发动机」和「遥控器」的关系。
 
-| | `Revolution.Automation`（本文档） | `Revolution.RevMCP`（另一份文档） |
+| | `Revolution.RevCLI`（本文档） | `Revolution.RevMCP`（另一份文档） |
 |---|---|---|
 | 本质 | 一个 **命令行工具**（`rev.py` / `rev.cmd`） | 一个 **MCP 服务**，给 AI 客户端（CodeBuddy、Codex 等）用 |
 | 谁发起 | 排障/CI 时是你；日常是 AI | **AI**（日常默认） |
@@ -46,9 +46,9 @@
 下面这三条是 AI 实际会执行的底层命令，**只在你排障时用来对照**：
 
 ```powershell
-python Revolution.Automation/rev.py --project .\RevolutionFrameWork_Unity doctor
-python Revolution.Automation/rev.py --project .\RevolutionFrameWork_Unity commands
-python Revolution.Automation/rev.py --project .\RevolutionFrameWork_Unity --mode live editor status
+python Revolution.RevCLI/rev.py --project .\RevolutionFrameWork_Unity doctor
+python Revolution.RevCLI/rev.py --project .\RevolutionFrameWork_Unity commands
+python Revolution.RevCLI/rev.py --project .\RevolutionFrameWork_Unity --mode live editor status
 ```
 
 三条命令分别回答三个问题：

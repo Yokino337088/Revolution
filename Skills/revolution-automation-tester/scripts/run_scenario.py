@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and run a Revolution.Automation scenario in an already-running Unity Play session.
+"""Validate and run a Revolution.RevCLI scenario in an already-running Unity Play session.
 
 The script does not start/stop Unity or invent GM commands. Use the skill workflow to inspect
 editor state and choose a real scenario/GM contract first.

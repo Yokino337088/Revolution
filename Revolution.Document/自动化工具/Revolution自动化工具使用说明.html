@@ -155,7 +155,7 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
 <thead>
 <tr>
 <th></th>
-<th><code>Revolution.Automation</code>（本文档）</th>
+<th><code>Revolution.RevCLI</code>（本文档）</th>
 <th><code>Revolution.RevMCP</code>（另一份文档）</th>
 </tr>
 </thead>
@@ -191,9 +191,9 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
 <div class="callout good"><p>用 revolution 的 rev_call 依次执行 doctor 和 editor.status，把 Python 版本、工程路径、playing / compiling 三个值报给我；哪一步失败就告诉我失败原因。</p></div>
 <p><strong>第 3 步</strong>：它把结论给你。失败时它必须说清卡在哪一层（Python 版本 / 工程路径 / Unity 没开 / 还在编译），而不是丢一句“失败了”。</p>
 <p>下面这三条是 AI 实际会执行的底层命令，<strong>只在你排障时用来对照</strong>：</p>
-<pre><code class="language-text">python Revolution.Automation/rev.py --project .\RevolutionFrameWork_Unity doctor
-python Revolution.Automation/rev.py --project .\RevolutionFrameWork_Unity commands
-python Revolution.Automation/rev.py --project .\RevolutionFrameWork_Unity --mode live editor status</code></pre>
+<pre><code class="language-text">python Revolution.RevCLI/rev.py --project .\RevolutionFrameWork_Unity doctor
+python Revolution.RevCLI/rev.py --project .\RevolutionFrameWork_Unity commands
+python Revolution.RevCLI/rev.py --project .\RevolutionFrameWork_Unity --mode live editor status</code></pre>
 <p>三条命令分别回答三个问题：</p>
 <div class="table-wrap"><table>
 <thead>

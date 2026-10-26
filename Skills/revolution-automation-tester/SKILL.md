@@ -1,11 +1,11 @@
 ---
 name: revolution-automation-tester
-description: 执行或维护 Revolution.Automation 的 GM scenario 循环回归、预热、性能采样及报告时使用；发现真实GM，验证轮次、业务断言和清理。跨Editor/业务/UI/截图/独立Player/外部工具的一句话自动化任务使用revolution-ai-automation与RevMCP，本Skill保留旧scenario格式与采样流程。
+description: 执行或维护 Revolution.RevCLI 的 GM scenario 循环回归、预热、性能采样及报告时使用；发现真实GM，验证轮次、业务断言和清理。跨Editor/业务/UI/截图/独立Player/外部工具的一句话自动化任务使用revolution-ai-automation与RevMCP，本Skill保留旧scenario格式与采样流程。
 ---
 
 # Revolution Automation Tester
 
-把“一句话测试需求”转成**真实业务入口 + 精确预期 + 可回收清理**的自动化测试，并实际执行、核对结果。本 Skill 专注 Revolution.Automation 的 GM scenario 循环/性能采样；跨 Editor/业务/UI/截图/Player/CLI 的一句话任务优先使用 `revolution-ai-automation` 与 RevMCP。已有 scenario 可继续复用，无需改格式。
+把“一句话测试需求”转成**真实业务入口 + 精确预期 + 可回收清理**的自动化测试，并实际执行、核对结果。本 Skill 专注 Revolution.RevCLI 的 GM scenario 循环/性能采样；跨 Editor/业务/UI/截图/Player/CLI 的一句话任务优先使用 `revolution-ai-automation` 与 RevMCP。已有 scenario 可继续复用，无需改格式。
 
 ## 一句话执行协议（优先于后文的通用说明）
 
@@ -35,8 +35,8 @@ description: 执行或维护 Revolution.Automation 的 GM scenario 循环回归�
 
 ### 1. 找到真实工程与工具
 
-1. 从当前工作区/用户路径定位 Unity 工程和 `Revolution.Automation/rev.py`（可能位于 `UnityProject/Revolution.Automation/`）。不要假设 cwd、工程名、场景名或 Python 启动器。
-2. 检查 `Revolution.Automation/README.md` 和 `commands.json`；需要精确 schema 时读取 `Revolution.Document/自动化工具/Revolution自动化工具使用说明.md`。
+1. 从当前工作区/用户路径定位 Unity 工程和 `Revolution.RevCLI/rev.py`（可能位于 `UnityProject/Revolution.RevCLI/`）。不要假设 cwd、工程名、场景名或 Python 启动器。
+2. 检查 `Revolution.RevCLI/README.md` 和 `commands.json`；需要精确 schema 时读取 `Revolution.Document/自动化工具/Revolution自动化工具使用说明.md`。
 3. 用实际 Python 解释器执行：`python <automation-root>/rev.py --project <unity-project> doctor`，并查询 `editor status`。先看 `bridgeInstalled`、`playing`、`compiling`、会话和工程路径。
 4. 若 Unity 正在编译，等待 `compiling=false`；若 GM/scenario 测试不在 Play，选择项目真实启动场景后用 `editor play`。启动场景从 Build Settings/项目源码/README 中发现，不猜默认名字。
 5. `gm list` 读取**运行期真实注册表**，不能拿源码里找到的 `RevGM.Register` 当已在当前 Play 注册。编辑态静态快照只作线索。
@@ -57,7 +57,7 @@ description: 执行或维护 Revolution.Automation 的 GM scenario 循环回归�
 优先顺序：
 
 1. 项目已经有的 `Game*Checks` / 专用 `RevGM` 查询和动作；
-2. 项目已有 `Revolution.Automation/examples/*.scenario.json` 模板，复制到本次输出目录后修改；
+2. 项目已有 `Revolution.RevCLI/examples/*.scenario.json` 模板，复制到本次输出目录后修改；
 3. 用真实运行期 GM 组合 `setup → steps → cleanup → teardown`；
 4. 需要视觉证据时，配合可用 Unity MCP 读取运行状态、Console、对象层级或截图。
 
@@ -65,7 +65,7 @@ description: 执行或维护 Revolution.Automation 的 GM scenario 循环回归�
 
 ### 4. 生成并验证 scenario
 
-- 优先临时写到 `Revolution.Automation/results/<test-name>/scenario.json` 或本次报告目录，不覆盖用户现有场景文件。
+- 优先临时写到 `Revolution.RevCLI/results/<test-name>/scenario.json` 或本次报告目录，不覆盖用户现有场景文件。
 - 场景 schema 仅允许 `name/repeat/warmup/setup/steps/cleanup/teardown/stopOnFailure/failOnUnityError/thresholds`；step `kind` 仅 `gm/wait/until/assert`。
 - `until` 必须给准确 GM、精确 `expected`、正数 `timeoutSeconds`；使用合理 `intervalSeconds`，不要用长时间盲等代替状态轮询。
 - 设置 `failOnUnityError: true`、`stopOnFailure: true`；无性能诉求时将阈值设为 0（关闭采样门禁），不要为了“测性能”临时编阈值。

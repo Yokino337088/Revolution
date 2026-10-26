@@ -2,13 +2,13 @@
 
 > 一句话：**你说话，AI 动手**。你说“点一下增加按钮，再用 GM 加 2，确认计数是 3，截个图”，AI 会自己去发现接口、按顺序执行、把截图和结果给你。
 >
-> 它不是一个新软件，而是给 AI 装的一双“手”——这双手的肌肉，就是 `Revolution.Automation`。
+> 它不是一个新软件，而是给 AI 装的一双“手”——这双手的肌肉，就是 `Revolution.RevCLI`。
 
 ## 0. 先搞清一件事：RevMCP 和 Automation 有啥区别？
 
 很多人一上来就懵：仓库里怎么有两个自动化目录？其实它们是**上下游**，不是两个竞争品。
 
-| | `Revolution.Automation` | `Revolution.RevMCP`（本文档） |
+| | `Revolution.RevCLI` | `Revolution.RevMCP`（本文档） |
 |---|---|---|
 | 是什么 | **命令行工具**，真正执行动作的那一层 | **MCP 服务**，把 AI 的话翻译成动作 |
 | 谁来用 | AI 客户端、CI 脚本、排障的你 | AI 客户端：CodeBuddy、Codex、Claude 等 |
@@ -25,7 +25,7 @@
         ↓  调用 MCP 工具
      RevMCP（本文档）───→ 游戏运行时能力（UI 点击、GM、断言、截图）
         ↓
-   Revolution.Automation（真正干活的命令行）
+   Revolution.RevCLI（真正干活的命令行）
         ↓
      Unity 编辑器 / 开发版 Player
 ```
@@ -169,8 +169,8 @@ RevRuntimeAutomation.Register("inventory.reset", () => bag.Clear());
 手动补也可以（同一个引擎）：
 
 ```powershell
-python Revolution.Automation/rev.py evidence --directory <结果目录> --title "本次测试" --subtitle "截图与动图"
-python Revolution.Automation/rev.py --project <工程> --mode live capture --out results\anim.gif --frames 12 --interval 120 --report
+python Revolution.RevCLI/rev.py evidence --directory <结果目录> --title "本次测试" --subtitle "截图与动图"
+python Revolution.RevCLI/rev.py --project <工程> --mode live capture --out results\anim.gif --frames 12 --interval 120 --report
 ```
 
 ## 8. 验证口径
@@ -183,4 +183,4 @@ python Revolution.Automation/rev.py --project <工程> --mode live capture --out
 
 - [Revolution 自动化工具（命令行）](Revolution自动化工具使用说明.html) —— 底层那双手怎么用
 - [RevMCP 架构解析](RevMCP架构解析.html) —— 写给维护者：线程、工单生命周期、扩展选型
-- 仓库内：`Revolution.RevMCP/README.md`、`Revolution.Automation/README.md`
+- 仓库内：`Revolution.RevMCP/README.md`、`Revolution.RevCLI/README.md`

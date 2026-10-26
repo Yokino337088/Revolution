@@ -83,7 +83,7 @@ def export_evidence(directory, title="Revolution 自动化测试报告", subtitl
 <section class="toc"><h2>目录</h2><ol>
 <li><a href="#s1">概览</a></li><li><a href="#s2">指标</a></li>
 <li><a href="#s3">截图</a></li><li><a href="#s4">动图</a></li><li><a href="#s5">说明</a></li>
-</ol><p>由 Revolution.Automation 生成；图片与动图均来自本次运行目录，未做美化。</p></section>
+</ol><p>由 Revolution.RevCLI 生成；图片与动图均来自本次运行目录，未做美化。</p></section>
 <section id="s1"><h2>1. 概览</h2><div class="table-wrap"><table><tbody>%s</tbody></table></div></section>
 <section id="s2"><h2>2. 指标</h2><div class="table-wrap"><table><tbody>%s</tbody></table></div></section>
 <section id="s3"><h2>3. 截图</h2><div class="gallery">%s</div></section>

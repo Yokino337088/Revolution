@@ -1,16 +1,16 @@
-name: 同步 automation 分支（Revolution.Automation CLI）
+name: 同步 automation 分支（Revolution.RevCLI CLI）
 
 # 把仓库中的独立 CLI 工具发布到 automation 分支根目录。
 # 用途：只需获取 Python CLI/示例时，不必克隆整个 Unity 框架开发仓库。
 # 注意：GM 与 scenario 仍需要目标 Unity 工程 Assets/Revolution/Editor/RevAutomation 桥接，
 # 以及目标工程注册的业务 GM；本分支只含客户端工具，不会伪造业务测试能力。
-# automation 是生成分支，每次从主分支指定目录整份重建；源文件只改 Revolution.Automation/。
+# automation 是生成分支，每次从主分支指定目录整份重建；源文件只改 Revolution.RevCLI/。
 
 on:
   push:
     branches: [main]
     paths:
-      - 'Revolution.Automation/**'
+      - 'Revolution.RevCLI/**'
       - '.github/workflows/sync-automation-branch.yml'
   workflow_dispatch:
 
@@ -27,7 +27,7 @@ jobs:
       - name: 组装自动化工具
         run: |
           mkdir -p /tmp/automation
-          cp -r Revolution.Automation/. /tmp/automation/
+          cp -r Revolution.RevCLI/. /tmp/automation/
           echo "文件数：$(find /tmp/automation -type f | wc -l)"
           test -f /tmp/automation/rev.py
           test -f /tmp/automation/rev.cmd

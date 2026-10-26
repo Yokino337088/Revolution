@@ -1,4 +1,4 @@
-# Revolution.Automation CLI 速查
+# Revolution.RevCLI CLI 速查
 
 从 Unity 工程仓库根目录执行，或显式传 `--project`。`--mode/--timeout/--project` 等全局选项在子命令之前。
 
@@ -16,7 +16,7 @@ python <AutomationRoot>/rev.py --project <UnityProject> report <scenario-result.
 
 CLI 写请求到 Unity 工程 `Library/RevolutionAutomation/inbox/`，Editor Bridge 主线程执行后在 `jobs/<id>/response.json` 返回。完成信号看 response，不看 progress。job 通常含 `request.json`、`response.json`、`progress.json`、`scenario-result.json`、`iterations.jsonl`、`unity-errors.jsonl`；报告导出 HTML/CSV/JSON。
 
-此文件通信桥是 Revolution.Automation 自己的 CLI/Editor Bridge，不等于 Unity MCP，也不表示框架内置 GM↔MCP 服务。
+此文件通信桥是 Revolution.RevCLI 自己的 CLI/Editor Bridge，不等于 Unity MCP，也不表示框架内置 GM↔MCP 服务。
 
 ## `scenario-result.json` 常看字段
 

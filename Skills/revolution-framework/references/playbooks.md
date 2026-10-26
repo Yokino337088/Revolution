@@ -421,7 +421,7 @@ public static class GameFlowGmCommands
 
 - **注册时机**：`[RevGMEntry]` 方法必须静态、无参、只做命令注册（编辑期会调用它生成目录）；handler 到 Play 时才取服务。Boot 在**受控测试环境**注册一次业务服务与这些命令，避免重复注册；参数描述 `RevGMArg.Int("数量", n)` 与 handler `args.Int(0, n)` 的默认值保持一致。
 - **机器判定**：让项目自建适配器在主线程调用 `RevGM.Execute("流程/快照")` 等白名单命令，读取 `RevGMResult.Success/Message/ElapsedMs`，对比操作前后 FSM、`RevScope.Dump()`、判空后的 `LastCloseReport`、`RevLogic.Count` 与错误日志；非法转换要失败且状态不变。只注册命令不等于自动测试已经跑过。
-- **执行通道与安全边界**：先读取 `automation-integration.md`。工程已安装 Revolution.Automation 时，使用 CLI + Editor 文件桥在图形 Play 中调用真实 GM 与 scenario，不重复新造文件桥；Unity MCP 是另一个可选观察通道，不假设已有 GM→MCP 工具或独立Player控制台。核对当前版本 CLI 的 confirm/环境门禁；`RevGMFlags.HighRisk` 不是权限控制，直接 `RevGM.Execute` 不应绕过项目授权。正式环境不注册变更类命令，不暴露任意代码执行、删档、强制卸载、真实支付或敏感数据。
+- **执行通道与安全边界**：先读取 `automation-integration.md`。工程已安装 Revolution.RevCLI 时，使用 CLI + Editor 文件桥在图形 Play 中调用真实 GM 与 scenario，不重复新造文件桥；Unity MCP 是另一个可选观察通道，不假设已有 GM→MCP 工具或独立Player控制台。核对当前版本 CLI 的 confirm/环境门禁；`RevGMFlags.HighRisk` 不是权限控制，直接 `RevGM.Execute` 不应绕过项目授权。正式环境不注册变更类命令，不暴露任意代码执行、删档、强制卸载、真实支付或敏感数据。
 - **验收**：合法登录/战斗/结算/退出与非法转移、异步取消都记录输入、结果和域/资源收尾证据；离线断言、Unity Play、AB/设备验收分别标记，MCP 未连通就明确写“未执行”。
 
 ## R22 玩法数值 / 说明文案 / 概率 / 关卡阵容：Excel → 导表 → 启动校验 → 强类型读取（**不写死在 C#**）

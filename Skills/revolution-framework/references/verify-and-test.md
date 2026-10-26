@@ -2,7 +2,7 @@
 
 > 这个框架的哲学是"**没有'猜它能不能工作'，只有'跑给看'**"。改完代码不要停在"应该没问题"。
 
-## 0. Revolution.Automation 业务回归入口
+## 0. Revolution.RevCLI 业务回归入口
 
 先读 `automation-integration.md`，定位目标工程与真实能力。跨接口测试联合 `revolution-ai-automation` 使用 RevMCP；旧 GM 循环/采样继续 `scenario validate → scenario run`。先发现、再实际运行、核对业务断言/日志/清理并记录证据，不止列出命令。
 

@@ -3,21 +3,21 @@ name: 同步 revmcp 分支（RevMCP MCP 服务）
 # 把 RevMCP 与其必需的客户端一起发布到 revmcp 分支根目录。
 # 用途：只想接入 MCP、不想克隆整个 Unity 框架开发仓库时，一条 clone 就能跑。
 #
-# 为什么同时带 Revolution.Automation：
+# 为什么同时带 Revolution.RevCLI：
 #   rev_mcp.py 启动时要用相邻的自动化客户端（revautomation.client），
 #   单独发布 RevMCP 会得到一个"缺依赖、连不上"的分支。两者放在分支根目录，
 #   克隆后目录关系与开发仓库完全一致，默认路径不用改。
 #
 # 边界：本分支只是客户端工具。真正操作 Unity 仍需要目标工程安装框架与桥接代码，
 #       也只有目标工程实际注册的 Editor / GM / 业务能力可被调用。
-# revmcp 是生成分支，每次从主分支整份重建；源文件只改 Revolution.RevMCP/ 与 Revolution.Automation/。
+# revmcp 是生成分支，每次从主分支整份重建；源文件只改 Revolution.RevMCP/ 与 Revolution.RevCLI/。
 
 on:
   push:
     branches: [main]
     paths:
       - 'Revolution.RevMCP/**'
-      - 'Revolution.Automation/**'
+      - 'Revolution.RevCLI/**'
       - '.github/workflows/sync-revmcp-branch.yml'
   workflow_dispatch:
 
@@ -35,21 +35,21 @@ jobs:
         run: |
           mkdir -p /tmp/revmcp
           cp -r Revolution.RevMCP /tmp/revmcp/
-          cp -r Revolution.Automation /tmp/revmcp/
+          cp -r Revolution.RevCLI /tmp/revmcp/
           # 本机运行结果与字节码不进生成分支
-          rm -rf /tmp/revmcp/Revolution.RevMCP/results /tmp/revmcp/Revolution.Automation/results
+          rm -rf /tmp/revmcp/Revolution.RevMCP/results /tmp/revmcp/Revolution.RevCLI/results
           find /tmp/revmcp -name '__pycache__' -type d -prune -exec rm -rf {} +
           echo "文件数：$(find /tmp/revmcp -type f | wc -l)"
           test -f /tmp/revmcp/Revolution.RevMCP/rev_mcp.py
-          test -f /tmp/revmcp/Revolution.Automation/revautomation/client.py
+          test -f /tmp/revmcp/Revolution.RevCLI/revautomation/client.py
 
       - name: 校验能作为库导入
         run: |
           cd /tmp/revmcp
-          python -m compileall -q Revolution.RevMCP Revolution.Automation
+          python -m compileall -q Revolution.RevMCP Revolution.RevCLI
           python -c "
           import sys
-          sys.path.insert(0, 'Revolution.Automation')
+          sys.path.insert(0, 'Revolution.RevCLI')
           sys.path.insert(0, 'Revolution.RevMCP')
           import revmcp.server, revmcp.backends, revautomation.client
           print('imports ok')
@@ -68,7 +68,7 @@ jobs:
           | 目录 | 作用 |
           |---|---|
           | `Revolution.RevMCP/` | MCP 服务与 CLI（`rev_mcp.py`），入口在这里 |
-          | `Revolution.Automation/` | 自动化客户端，`rev_mcp.py` 启动时要导入它 |
+          | `Revolution.RevCLI/` | 自动化客户端，`rev_mcp.py` 启动时要导入它 |
 
           ## 接入
 
@@ -100,7 +100,7 @@ jobs:
 
           详细说明见 `Revolution.RevMCP/README.md`。
 
-          > 本分支由 CI 从 `main` 的 `Revolution.RevMCP/` 与 `Revolution.Automation/` 整份重建，
+          > 本分支由 CI 从 `main` 的 `Revolution.RevMCP/` 与 `Revolution.RevCLI/` 整份重建，
           > 不保留历史，也不接受直接提交；请改主分支上的源目录。
           EOF
 

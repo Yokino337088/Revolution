@@ -18,6 +18,24 @@ class RevCancelled(RevError):
     pass
 
 
+_COMMANDS_CACHE = {}
+
+
+def command_specs(path: Path):
+    """读取 commands.json 的动作清单，按文件修改时间缓存。
+
+    每次 call 都重新解析一百多条 JSON 只省不了多少时间，但在高频短操作里会白白多花毫秒；
+    缓存键带 mtime_ns，所以改了清单立刻生效，不会拿旧规则去校验新动作。
+    """
+    stamp = path.stat().st_mtime_ns
+    hit = _COMMANDS_CACHE.get(path)
+    if hit is not None and hit[0] == stamp:
+        return hit[1]
+    specs = read_json(path)["actions"]
+    _COMMANDS_CACHE[path] = (stamp, specs)
+    return specs
+
+
 def read_json(path: Path):
     def reject_constant(value):
         raise ValueError("JSON 不接受非有限数：" + value)
@@ -99,7 +117,7 @@ class RevClient:
             raise RevError("没有在线 Unity 桥接。先打开工程等待编译；长时间打包时请等待当前操作完成。")
         if endpoint and endpoint.get("batchMode"):
             raise RevError("当前桥接属于正在运行的 batch Unity，请等待其退出。")
-        specs = read_json(Path(__file__).resolve().parents[1] / "commands.json")["actions"]
+        specs = command_specs(Path(__file__).resolve().parents[1] / "commands.json")
         spec = next((item for item in specs if item["id"] == action), {})
         if mode == "batch" and (spec.get("environment") in ("live", "play") or action.startswith("gm.")):
             raise RevError("此操作需要图形编辑器。先执行 editor launch，再执行 editor play。")
@@ -125,6 +143,9 @@ class RevClient:
                     args.append("-nographics")
                 process = subprocess.Popen(args, cwd=self.project, shell=False)
             end, last_progress = time.monotonic() + self.timeout, None
+            # 起步 5ms、稳定后 20ms、长操作退到 50ms：本地文件桥通常几十毫秒就出结果，
+            # 固定 80ms 轮询会让每个短操作都白等一轮。
+            started, cadence = time.monotonic(), .005
             while not response_path.exists():
                 if cancel is not None and cancel.is_set():
                     raise RevCancelled(f"请求取消：{request_id}，请检查工单已发生的副作用：{work}")
@@ -142,7 +163,11 @@ class RevClient:
                             last_progress = update
                     except (OSError, ValueError):
                         pass
-                time.sleep(0.08)
+                time.sleep(cadence)
+                if cadence < .02:
+                    cadence = .02
+                elif time.monotonic() - started > .3:
+                    cadence = .05
             response = read_json(response_path)
             if response.get("id") != request_id or response.get("protocol") != 1:
                 raise RevError("Unity 返回了不匹配的协议或请求 ID。")

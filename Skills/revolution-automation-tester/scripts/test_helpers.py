@@ -26,7 +26,7 @@ class HelpersTests(unittest.TestCase):
             (project / 'Assets').mkdir(parents=True)
             (project / 'ProjectSettings').mkdir()
             (project / 'ProjectSettings/EditorBuildSettings.asset').write_text('path: Assets/Start.unity')
-            cli = root / 'Revolution.Automation'
+            cli = root / 'Revolution.RevCLI'
             cli.mkdir()
             (cli / 'rev.py').touch()
             (cli / 'commands.json').write_text('{}')

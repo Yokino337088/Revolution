@@ -2,7 +2,7 @@
 
 ## A. 定位工程
 
-从用户当前工程、明确路径或工作区递归发现包含 `Revolution.Automation/rev.py`、`Assets/Revolution/Editor/RevAutomation` 的 Unity 项目。多工程匹配时结合用户提到的功能/活动文件选择，不要随意选首个。CLI 默认工程可能指向 Revolution 示例工程，务必显式传 `--project <UnityProject>`。
+从用户当前工程、明确路径或工作区递归发现包含 `Revolution.RevCLI/rev.py`、`Assets/Revolution/Editor/RevAutomation` 的 Unity 项目。多工程匹配时结合用户提到的功能/活动文件选择，不要随意选首个。CLI 默认工程可能指向 Revolution 示例工程，务必显式传 `--project <UnityProject>`。
 
 检查：
 

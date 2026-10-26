@@ -5,7 +5,7 @@
 先区分真实执行入口和协议适配：
 
 - `RevGM`：运行期同步命令注册/执行后端，由项目实现真实动作与查询。
-- `Revolution.Automation`：Editor CLI/文件工单，覆盖场景/对象/组件/资产/设置/构建/测试及旧 GM scenario。
+- `Revolution.RevCLI`：Editor CLI/文件工单，覆盖场景/对象/组件/资产/设置/构建/测试及旧 GM scenario。
 - `RevRuntimeAutomation`：开发态真实业务注册表，Editor 与独立开发版 Player 共用 UI、状态、日志和截图；Player 显式开启本机 HTTP。
 - `Revolution.RevMCP`：外部 Python stdio MCP，统一 Editor/game/gm/cli 的发现、调用、断言、清理和 image 证据。Unity 内入口是 RevMCP 控制台。
 - 第三方 Unity MCP：可选补充连接，调用前核对目标工程，不能从包已安装推断已连接。
@@ -37,7 +37,7 @@
 
 跨 Editor/游戏/UI/Player 的一句话任务优先加载 `revolution-ai-automation`，用 RevMCP rev_discover/rev_run 做真实验证。GM 多轮/性能 scenario 可继续用 `revolution-automation-tester`。未安装新版时先明确缺项，不把旧桥当成新能力。
 
-1. 定位目标 Unity 工程、`Revolution.Automation/rev.py`、`commands.json` 和真实启动场景。始终显式传 `--project`，不能默认测框架 Demo。
+1. 定位目标 Unity 工程、`Revolution.RevCLI/rev.py`、`commands.json` 和真实启动场景。始终显式传 `--project`，不能默认测框架 Demo。
 2. 查询 `doctor`、`editor status`，记录原始Play/场景状态；编译中有界等待，未保存场景不得擅自覆盖，不另开占用工程。
 3. Editor 游戏回归用未暂停图形 Play、`--mode live`；batch仅资产操作。独立开发版 Player 用 runtime endpoint。资产变更退出Play后做，等待导表/编译完成再开Play。
 4. 查看运行期 `gm list`，确认刚补的入口实际注册。源码里的注册语句或编辑期快照不代表运行期可用。

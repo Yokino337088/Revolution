@@ -140,7 +140,7 @@ Agent 可以先发现工程里有什么，再调用对应工具：查看场景�
 
 ### ⌨️ CLI 让鼠标操作变成可重复的流程
 
-[`Revolution.Automation`](Revolution.Automation/README.md) 提供命令行入口。原先需要人反复打开窗口、点按钮的操作，可以用明确命令组织起来。
+[`Revolution.RevCLI`](Revolution.RevCLI/README.md) 提供命令行入口。原先需要人反复打开窗口、点按钮的操作，可以用明确命令组织起来。
 
 对新手而言，你不必一开始就会写复杂脚本。先理解区别：
 
@@ -287,7 +287,7 @@ Revolution 的核心价值，是把它们连起来，让“AI 能写”向“AI 
 
 新手可以先获取本仓库，用 Unity 打开 `RevolutionFrameWork_Unity/`；已有游戏工程的开发者，按 [框架安装说明](RevolutionFrameWork_Unity/Assets/Revolution/README.md) 接入框架本体。
 
-使用 RevMCP 时，保留相邻的 `Revolution.RevMCP/` 和 `Revolution.Automation/`，并确保目标 Unity 工程安装了对应桥接代码。**只复制 Python 文件，不会自动让任意 Unity 工程具备工具能力。**
+使用 RevMCP 时，保留相邻的 `Revolution.RevMCP/` 和 `Revolution.RevCLI/`，并确保目标 Unity 工程安装了对应桥接代码。**只复制 Python 文件，不会自动让任意 Unity 工程具备工具能力。**
 
 自动化侧需要 Python **3.10+**，仅使用标准库，无需安装 pip 第三方依赖。仓库开发工程的既有验证环境为 Unity `2022.3.15f1c1`；其它版本和平台应按实际工程验证，不从此处推断兼容结论。
 
@@ -336,7 +336,7 @@ Revolution 的核心价值，是把它们连起来，让“AI 能写”向“AI 
 | AI 应该怎样组织工程代码？ | [官方编程架构规范](Revolution.Document/编程范式/Revolution官方编程架构规范.md) · [开发 Skill](Skills/revolution-framework/SKILL.md) |
 | 怎样安装并启用 AI 工作手册？ | [Skills 安装说明](Skills/README.md) |
 | 怎样让 Agent 操作和测试 Unity？ | [RevMCP 使用说明](Revolution.Document/自动化工具/RevMCP使用说明.md) · [自动化 Skill](Skills/revolution-ai-automation/SKILL.md) |
-| 怎样用脚本执行编辑器操作？ | [Automation 入口](Revolution.Automation/README.md) · [CLI 使用说明](Revolution.Document/自动化工具/Revolution自动化工具使用说明.md) |
+| 怎样用脚本执行编辑器操作？ | [Automation 入口](Revolution.RevCLI/README.md) · [CLI 使用说明](Revolution.Document/自动化工具/Revolution自动化工具使用说明.md) |
 | 工具怎样连接、为什么这样设计？ | [RevMCP 架构解析](Revolution.Document/自动化工具/RevMCP架构解析.md) |
 | 是否有实际运行证据？ | [2026-10-22 验证记录](Revolution.Document/自动化工具/验证记录/2026-10-22-RevMCP.md) |
 | 临时需要查资源、UI、音效或热更新？ | [在线文档站](https://yokino337088.github.io/Revolution/) · [全部文档索引](Revolution.Document/README.md) |

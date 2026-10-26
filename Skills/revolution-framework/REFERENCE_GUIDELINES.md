@@ -17,7 +17,7 @@
 ## 自动化可验收检查
 
 - [ ] 业务变更有正常路径、非法前置与结果数据断言，而不是只有GM成功或状态回Idle。
-- [ ] 优先复用已安装的 Revolution.Automation CLI/Editor Bridge；未把它与可选Unity MCP混为一谈。
+- [ ] 优先复用已安装的 Revolution.RevCLI CLI/Editor Bridge；未把它与可选Unity MCP混为一谈。
 - [ ] GM只调用真实业务入口，注册/注销对称且限定开发环境；查询无副作用，参数有上限。
 - [ ] scenario.setup只执行一次，每轮需要的数据由steps/cleanup正确复位，整场teardown能收尾。
 - [ ] 当前注册表经过Play中gm list确认，脚本修改后完成编译；未保存场景和原始Play状态受保护。

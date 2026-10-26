@@ -208,7 +208,7 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
 </ul>
 </section><section id="s2"><h2>证据与复现</h2>
 <p><a href="2026-10-22-RevMCP.json">脱敏结构化摘要</a> 保留测试计数、调用动作、清理和构建结果。原始工单位于本机 Unity工程/Library/RevolutionAutomation，未将凭据token/session或启动日志提交。</p>
-<pre><code class="language-powershell">python -m unittest discover -s Revolution.Automation/tests -v
+<pre><code class="language-powershell">python -m unittest discover -s Revolution.RevCLI/tests -v
 python -m unittest discover -s Revolution.RevMCP/tests -v
 # 先在目标Unity工程运行RevAutomationDemo
 python Revolution.RevMCP/tests/verify_unity.py --project &lt;Unity工程绝对路径&gt; --output &lt;本机证据.json&gt;
