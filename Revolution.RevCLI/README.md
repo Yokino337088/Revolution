@@ -18,6 +18,16 @@ python Revolution.RevCLI/rev.py --project $project --mode live scene list
 python Revolution.RevCLI/rev.py --project $project --mode live gameobject find --query Canvas
 ```
 
+多步操作走 `batch.call`，一次往返执行多个动作（真实编辑器实测 10 步约 111ms，分 10 次调用约 994ms）：
+
+```python
+from revautomation.client import RevClient
+client = RevClient(project, mode="live")
+client.batch([{"action": "editor.status"}, {"action": "ab.config"}])
+```
+
+默认遇错即停（后续步骤常依赖前一步状态），需要全部执行时传 `stop_on_error=False`；单步可自带 `payloadJson` 与 `confirm`，批量不会绕过高危确认。
+
 commands.json 是离线说明，commands --live 才是实际安装能力。2026-10-22 示例工程有 122 个 Editor 动作，另 3 个 Python 动作为 editor.launch/editor.wait/scenario.validate；20 个 Revolution.Tools 菜单都有映射。覆盖表用于发现漏接线，不意味着所有第三方控件或未来新增功能自动可用。
 
 需要一句话 Agent 测试、GM 动态工具、独立开发版 Player、外部 CLI/Python，使用相邻的 [Revolution.RevMCP](../Revolution.RevMCP/README.md) 与 Skills/revolution-ai-automation。

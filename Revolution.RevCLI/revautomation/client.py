@@ -210,6 +210,17 @@ class RevClient:
                     process.terminate()
             raise
 
+    def batch(self, steps, stop_on_error=True, confirm=False):
+        """一次请求执行多个动作，省掉"每步一次往返"。
+
+        实测单次往返约 110ms 且几乎全花在编辑器 tick 上，所以批量是唯一有效的提速方式。
+        steps 形如 [{"action": "editor.status"}, {"action": "ab.config"}]，
+        每步可单独带 payloadJson 与 confirm；默认遇错即停，避免后续步骤依赖错误状态。
+        """
+        if not isinstance(steps, list) or not steps:
+            raise RevError("batch 需要非空步骤数组")
+        return self.call("batch.call", {"steps": steps, "stopOnError": stop_on_error}, confirm=confirm)
+
     def launch(self):
         """Open a graphical editor and wait for compilation/bridge; never terminate it."""
         endpoint = self.endpoint()
