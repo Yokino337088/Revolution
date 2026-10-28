@@ -39,7 +39,7 @@
 
 1. 定位目标 Unity 工程、`Revolution.RevCLI/rev.py`、`commands.json` 和真实启动场景。始终显式传 `--project`，不能默认测框架 Demo。
 2. 查询 `doctor`、`editor status`，记录原始Play/场景状态；编译中有界等待，未保存场景不得擅自覆盖，不另开占用工程。
-3. Editor 游戏回归用未暂停图形 Play、`--mode live`；batch仅资产操作。独立开发版 Player 用 runtime endpoint。资产变更退出Play后做，等待导表/编译完成再开Play。
+3. Editor 游戏回归用未暂停图形 Play、`--mode live`；已有工程的资产操作也走live，不另启batch Unity。独立开发版 Player 用 runtime endpoint。资产变更退出Play后做，等待导表/编译完成再开Play。
 4. 查看运行期 `gm list`，确认刚补的入口实际注册。源码里的注册语句或编辑期快照不代表运行期可用。
 5. 复制/生成本次scenario到报告目录，先 `scenario validate`，再 `scenario run`；默认1轮、0预热、无性能阈值，按用户要求调整。
 6. 回合间使用 `cleanup`，全场用 `teardown`。`setup`只执行一次，重复测试不能复用已被消耗的数据。
@@ -75,3 +75,8 @@
 - “更新参数并回归”：Automation导表→等待编译→真实业务回归；按需验证AB而不只测编辑器直读。
 
 安装方式：工具可由 `automation` 生成分支独立获取；技能由 `skill` 生成分支分发。修改源文件在main对应目录完成，不直接编辑生成分支。安装CLI不等于安装Unity桥接。
+
+
+## 真实工程闭环补充
+
+按 [真实工程闭环补充](revgame-ai-workflow.md) 读取RevGame同类实现，核对版本、所有者、失败路径与已执行证据；不得把历史样本结果当当前项目通过。

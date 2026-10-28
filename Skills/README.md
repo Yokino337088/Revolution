@@ -1,4 +1,6 @@
-# revolution-framework
+# Revolution 官方Skills
+
+2026-10-28：加入 [RevGame真实工程架构/编程参考](revolution-framework/references/revgame-engineering.md)、[Unity编辑器实践](revolution-framework/references/revgame-editor-practice.md)、[AI开发闭环](revolution-framework/references/revgame-ai-workflow.md) 和 [自动化测试实践](revolution-ai-automation/references/revgame-testing.md)。AI写Revolution业务前须按职责读取 [RevGame工程](https://github.com/Yokino337088/RevGame) 的同类源码，记录参考版本与契约，再适配目标项目；Demo补模块用法，项目样本不替代当前API/用户规则。
 
 2026-10-22 新增 [revolution-ai-automation](revolution-ai-automation/SKILL.md)：一句话驱动 RevMCP 发现真实 Editor/GM/业务/UI/截图/外部工具，执行断言和清理。仓库同时维护框架开发 Skill 与旧 GM scenario 测试 Skill；跨接口测试用新 Skill，循环采样可继续用 revolution-automation-tester。安装时把对应完整目录复制进所用 Agent 的 skills 目录。教程见 [RevMCP 使用说明](../Revolution.Document/自动化工具/RevMCP使用说明.html)。
 

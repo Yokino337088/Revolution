@@ -241,3 +241,8 @@ private async void OnStart()
     catch (Exception e) { RevLog.Exception(e, "启动失败", "Boot"); }
 }
 ```
+
+
+## 工程实践审查入口
+
+按 [工程实践审查入口](references/revgame-engineering.md) 读取RevGame同类实现，核对版本、所有者、失败路径与已执行证据；不得把历史样本结果当当前项目通过。

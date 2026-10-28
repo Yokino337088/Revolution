@@ -7,6 +7,10 @@ description: 执行或维护 Revolution.RevCLI 的 GM scenario 循环回归、�
 
 把“一句话测试需求”转成**真实业务入口 + 精确预期 + 可回收清理**的自动化测试，并实际执行、核对结果。本 Skill 专注 Revolution.RevCLI 的 GM scenario 循环/性能采样；跨 Editor/业务/UI/截图/Player/CLI 的一句话任务优先使用 `revolution-ai-automation` 与 RevMCP。已有 scenario 可继续复用，无需改格式。
 
+## 真实工程示例
+
+维护项目测试/GM接线时，先在 [RevGame GitHub工程](https://github.com/Yokino337088/RevGame) 阅读同类真实指针、GM、规则或Play检查，按 [RevGame测试规范](../revolution-ai-automation/references/revgame-testing.md) 提取契约与失败/清理边界。该参考未随单独安装分发时，从官方Skills源读取或直接查RevGame代码；样本参数与命令必须适配目标项目。用户/AGENTS证据策略优先，RevGame禁止报告ZIP和提交.codex。
+
 ## 一句话执行协议（优先于后文的通用说明）
 
 收到“测试 X”后立即执行，不只输出计划、教程或待用户运行的命令。把缺少的非关键参数从工作区推断并说明，默认一次功能回归、零预热、不设性能达标阈值；用户明确次数与目标则采用用户值。

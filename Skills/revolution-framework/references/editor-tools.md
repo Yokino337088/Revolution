@@ -81,3 +81,8 @@
 `Assets/Revolution.Demo/<模块>.Demo/<模块>Demo.unity`，索引在 `Assets/Revolution.Demo/RevDemoSceneList.txt` 与 `Assets/Revolution.Demo/README.md`。
 每个场景：打开 → Play → 左侧按钮逐个点，右侧是步骤日志（讲清每一步发生了什么）。
 写新 demo 照 `templates/RevXxxDemo.cs.txt` 的骨架（OnGUI：左按钮 + 右日志 + 简单样式）。
+
+
+## RevGame编辑器制作与操作参考
+
+按 [RevGame编辑器制作与操作参考](revgame-editor-practice.md) 读取RevGame同类实现，核对版本、所有者、失败路径与已执行证据；不得把历史样本结果当当前项目通过。

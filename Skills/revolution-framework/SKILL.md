@@ -19,6 +19,16 @@ Revolution 是一套**从零手写、可读可测、无魔法**的 Unity 游戏�
 2. **失败必须可见**：不吞异常、不静默 return —— 失败一律给原因枚举 / 句柄字段 / 返回值，日志有唯一出口 `RevLog`。
 3. **内核尽量不依赖引擎**：路径、句柄、槽位表、池引擎、日志/计时器内核是纯 C#，**能链接进普通 .NET 工程跑断言**（见 `references/verify-and-test.md`）。
 
+## 真实工程实践：写业务前必须参考RevGame
+
+游戏架构、玩法/UI/流程、资源与测试接线以 [RevGame GitHub工程](https://github.com/Yokino337088/RevGame) 为真实实践参考。编码前按 [工程实践索引](references/revgame-engineering.md) 找到并阅读同类源码，记录版本、参考文件与复用契约；仅查API或读Demo不替代工程实践。目标项目的安装版本与用户约束优先，不照搬游戏数值或项目专用夹具。
+
+- 架构/编程/资源：[revgame-engineering.md](references/revgame-engineering.md)。
+- Unity资产、Prefab、导表、构建、Play：[revgame-editor-practice.md](references/revgame-editor-practice.md)。
+- 需求→实现→真实验证→报告/发布：[revgame-ai-workflow.md](references/revgame-ai-workflow.md)。
+
+只读当前任务命中的参考与源码，不通读整个项目。引用失效先在当前checkout或GitHub核对；无法访问明确未读，不假称参考成功。样本是可review实践，不是无需校验的标准答案。
+
 ## 基础模块总览（新增开发态 RevAutomation 见自动化接入参考）
 
 > "我想做 X → 用哪个门面"。签名与最小示例在对应参考文件里；没有合适门面时先按生存期选面板、域 Logic 或服务，不为单个业务新造框架系统。
@@ -170,7 +180,7 @@ Revolution 是一套**从零手写、可读可测、无魔法**的 Unity 游戏�
 
 1. **先读官方规范，再定位模块/配方**：涉及游戏业务先读 `Revolution.Document/编程范式/Revolution官方编程架构规范.md`，再在 `references/playbooks.md` 找 R1~R22。选模块按生存期与现有门面，不先改框架；不确定时读 `decision-guide.md` §1。
 2. **需要完整细节时读该模块的《使用说明》**（`references/docs-map.md` 给路径）——它是权威，本 skill 只是索引。
-3. **找最近的 demo**（`Assets/Revolution.Demo/<模块>.Demo/`，18 个可运行场景；`playbooks.md` 每节都写了"抄哪个 Demo"）照着写。
+3. **先读同类RevGame实践，再核对公开API**：按 `references/revgame-engineering.md` 选择真实业务文件与生命周期；框架 Demo 只补模块最小用法。目标工程没有 Demo 目录时不要寻找不存在的路径，不直接复制样本中的旧注释、游戏参数或测试强化。
    **要动框架本身（修 bug / 加功能）时，先查 `Assets/Revolution/CHANGELOG.md` 与 `Revolution.Document/bug修复日志/`**：这个模块以前修过什么、现行契约是什么——避免重复踩坑，也避免给"已修复的缺陷"写绕过代码（见 `references/pitfalls.md` 末尾"现行契约速查"）。
 4. 写代码，守住上文的铁律与规范。
 5. **自我审查**：过一遍 `REFERENCE_GUIDELINES.md` 的清单。
@@ -204,6 +214,7 @@ Revolution 是一套**从零手写、可读可测、无魔法**的 Unity 游戏�
 - **按任务找**（优先）：`references/playbooks.md`（22 个配方）· `references/decision-guide.md`（选型 + 不存在清单）· `references/troubleshooting.md`（症状速查）
 - **查 API 与专题**：`references/modules-core.md` · `references/modules-content.md` · `references/startup-and-platform.md` · `references/resource-and-ab.md` · `references/ui-and-layering.md` · `references/hot-update.md`
 - **规范与交付**：`references/code-style.md` · `references/editor-tools.md` · `references/verify-and-test.md` · `references/docs-map.md` · `references/pitfalls.md`（坑位 + 已修复缺陷的现行契约）
+- **真实工程参考**：`references/revgame-engineering.md` · `references/revgame-editor-practice.md` · `references/revgame-ai-workflow.md`。编码前必须按职责读取RevGame同类实现。
 - **自动化开发闭环**：`references/automation-integration.md`；执行任务联合 `revolution-automation-tester`，先确认真实工具/GM，再运行与验收。
 - **审查**：`REFERENCE_GUIDELINES.md`
 - **骨架模板**（`templates/`）：`RevBoot.cs.txt`（启动入口）· `RevXxxPanel.cs.txt`（UI 面板）· `RevXxxService.cs.txt`（业务服务）· `RevXxxDemo.cs.txt`（Demo 场景脚本）· `offline-harness/`（工程外断言工程）

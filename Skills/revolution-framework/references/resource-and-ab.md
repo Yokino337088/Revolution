@@ -92,3 +92,8 @@ if (!h.IsLoaded) { RevLog.Error($"加载失败：{h.ErrorReason}", "Res"); }
 3. 编辑器直读 vs AB 模式是否一致（`RevResBootstrap.UseABInEditor`）；
 4. `RevResManager.CachedCount` / `GetRefCount(...)` 看引用计数是否归零（不归零就永远不卸）；
 5. 打包工具的「检查」页签看漏标 / 依赖 / 体积。
+
+
+## RevGame资源所有权与分包实践
+
+按 [RevGame资源所有权与分包实践](revgame-engineering.md) 读取RevGame同类实现，核对版本、所有者、失败路径与已执行证据；不得把历史样本结果当当前项目通过。
