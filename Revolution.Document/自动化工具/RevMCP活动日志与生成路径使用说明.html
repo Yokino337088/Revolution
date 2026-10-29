@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RevMCP 活动日志与 RevResPath 生成路径</title><style>
+/* ============================================================
+   Revolution 文档 · 公共样式
+   —— 与 assets/docs.css 同一套视觉语言（配色 / 字体 / 组件）。
+   ★ 本套文档刻意「自包含」：样式内联在 <head> 里，不依赖外部文件 ——
+     因为外链样式在「单独打开 / IDE 预览（虚拟根）/ 单文件分享」时解析不到，
+     页面会退化成一坨无样式 HTML（详见仓库提交说明）。
+     新增文档：复制本段样式（或从 assets/docs.css 取值）内联进来即可。
+   兼容类名：hero / toc / callout(good|warn|bad) / plain / table-wrap / card / cheat / cmp / flow / pre
+   ============================================================ */
+:root{
+  --accent:#2F6FED; --accent-soft:#EAF1FE;
+  --page:#F4F6F9; --panel:#FFFFFF; --border:#E3E7ED;
+  --text:#1F2329; --text-sub:#6B7280;
+  --good:#12A150; --good-soft:#E8F8EF;
+  --warn:#B7791F; --warn-soft:#FDF6E3;
+  --bad:#D93F31;  --bad-soft:#FDECEA;
+  --code-bg:#1E2430; --code-fg:#D7DEEA;
+  --radius:10px;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0; background:var(--page); color:var(--text);
+  font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC","Segoe UI",system-ui,sans-serif;
+  font-size:15.5px; line-height:1.85; -webkit-font-smoothing:antialiased;
+}
+.hero{background:linear-gradient(135deg,#2F6FED 0%,#4A84F5 55%,#6E9BFF 100%);color:#fff;padding:46px 24px 40px;position:relative;overflow:hidden;}
+.hero .wrap{max-width:1000px;margin:0 auto;position:relative;z-index:2;}
+.hero .kicker{display:inline-block;font-size:12px;letter-spacing:.12em;background:rgba(255,255,255,.18);
+  border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:3px 12px;margin-bottom:14px;}
+.hero h1{margin:0 0 12px;font-size:31px;line-height:1.35;font-weight:700;}
+.hero p{margin:6px 0 0;color:rgba(255,255,255,.94);font-size:14.5px;}
+.hero code{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.35);color:#fff;}
+.hero .meta{margin-top:16px;font-size:13px;color:rgba(255,255,255,.85);}
+.hero .deco{position:absolute;left:0;right:0;bottom:0;height:3px;
+  background:repeating-linear-gradient(90deg,rgba(255,255,255,.85) 0 26px,transparent 26px 52px);
+  animation:march 1.1s linear infinite;opacity:.75;z-index:1;}
+
+main{max-width:1000px;margin:0 auto;padding:26px 24px 70px;}
+section{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:26px 28px;margin-bottom:20px;}
+h2{font-size:21px;margin:0 0 6px;display:flex;align-items:center;gap:10px;}
+h2 .num{flex:0 0 auto;min-width:30px;height:30px;line-height:30px;text-align:center;border-radius:9px;
+  background:var(--accent);color:#fff;font-size:14px;font-weight:700;padding:0 8px;}
+h2 + .lead{color:var(--text-sub);font-size:14px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid var(--border);}
+h3{font-size:17px;margin:28px 0 10px;}
+h3:first-of-type{margin-top:6px;}
+h4{font-size:15px;margin:20px 0 8px;color:#2B3444;}
+p{margin:10px 0;}
+ul,ol{margin:10px 0;padding-left:24px;}
+li{margin:6px 0;}
+a{color:var(--accent);text-decoration:none;}
+a:hover{text-decoration:underline;}
+code{font-family:"Cascadia Mono",Consolas,"Courier New",monospace;font-size:13px;
+  background:#EEF2F8;border:1px solid #E1E7F0;border-radius:4px;padding:1px 5px;color:#22304A;}
+
+.toc{background:#FBFCFE;}
+.toc ol{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:4px 22px;}
+.toc a{display:block;padding:6px 10px;border-radius:6px;color:var(--text);font-size:14px;}
+.toc a:hover{background:var(--accent-soft);color:var(--accent);text-decoration:none;}
+
+.table-wrap{overflow-x:auto;margin:14px 0;}
+table{border-collapse:collapse;width:100%;font-size:13.5px;}
+th,td{border:1px solid var(--border);padding:10px 12px;text-align:left;vertical-align:top;}
+thead th{background:#F3F6FB;font-weight:700;}
+tbody tr:nth-child(even){background:#FAFBFD;}
+tbody tr:hover{background:#F1F6FF;}
+td.c,th.c{text-align:center;white-space:nowrap;}
+
+.plain{border-radius:10px;padding:14px 16px;margin:14px 0;font-size:14.5px;background:#F7F9FC;border:1px solid #E4E9F2;}
+.plain .tag{display:inline-block;font-size:11.5px;background:#5B6B84;color:#fff;border-radius:999px;padding:1px 9px;margin-right:8px;vertical-align:2px;}
+.plain p:first-child{margin-top:0;}
+.plain p:last-child{margin-bottom:0;}
+
+.callout{border-radius:8px;padding:14px 16px;margin:14px 0;font-size:14.5px;
+  border-left:4px solid var(--accent);background:var(--accent-soft);}
+.callout.good{border-left-color:var(--good);background:var(--good-soft);}
+.callout.warn{border-left-color:var(--warn);background:var(--warn-soft);}
+.callout.bad{border-left-color:var(--bad);background:var(--bad-soft);}
+.callout p:first-child{margin-top:0;}
+.callout p:last-child{margin-bottom:0;}
+.callout .t{font-weight:700;display:block;margin-bottom:4px;}
+
+pre{background:var(--code-bg);color:var(--code-fg);border-radius:8px;padding:15px 17px;overflow-x:auto;
+  font-family:"Cascadia Mono",Consolas,"Courier New",monospace;font-size:12.5px;line-height:1.7;margin:14px 0;}
+pre .c{color:#7D8CA6;}
+pre .k{color:#8FB8FF;}
+pre .s{color:#A5D6A7;}
+pre .n{color:#FFB86C;}
+pre b{color:#FFD479;font-weight:700;}
+
+.card{border:1px solid var(--border);border-radius:10px;background:#FBFCFE;padding:16px 18px;margin:16px 0;}
+.card > .h{font-weight:700;font-size:15.5px;margin-bottom:4px;}
+.card > .when{font-size:13.5px;color:var(--text-sub);margin-bottom:10px;}
+.card pre{margin:10px 0;}
+.card .note{font-size:13px;color:var(--text-sub);margin-top:8px;}
+
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0;}
+.cmp > div{border-radius:9px;padding:12px 14px;font-size:13.5px;border:1px solid;}
+.cmp .no{background:var(--bad-soft);border-color:#F3C9C3;}
+.cmp .yes{background:var(--good-soft);border-color:#BFE9D2;}
+.cmp .h{font-weight:700;margin-bottom:6px;}
+.cmp pre{margin:6px 0 0;font-size:12px;}
+
+.flow{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:16px 0;}
+.flow .n{border:1.5px solid var(--border);background:#fff;border-radius:8px;padding:7px 12px;font-size:13px;}
+.flow .n.on{border-color:var(--accent);background:var(--accent-soft);}
+.flow .n.wait{border-color:#EBCF8A;background:var(--warn-soft);}
+.flow .ar{color:var(--accent);font-weight:700;}
+
+.cheat{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;margin:14px 0;}
+.cheat div{border:1px solid var(--border);border-radius:8px;background:#fff;padding:9px 12px;font-size:13px;}
+.cheat div b{display:block;font-size:12.5px;color:var(--text-sub);font-weight:400;margin-bottom:2px;}
+
+footer{max-width:1000px;margin:0 auto;padding:0 24px 60px;color:var(--text-sub);font-size:13px;}
+
+@keyframes march{to{background-position:28px 0;}}
+@media (max-width:760px){
+  .hero h1{font-size:23px;}
+  section{padding:18px 16px;}
+  .cmp{grid-template-columns:1fr;}
+}
+@media (prefers-reduced-motion:reduce){ .hero .deco{animation:none !important;} }
+@media print{
+  body{background:#fff;font-size:12px;}
+  .hero{background:#fff;color:#000;border-bottom:2px solid #000;}
+  .hero .kicker,.hero .meta{color:#333;}
+  section{break-inside:avoid;border:0;padding:0;margin-bottom:20px;}
+  pre{background:#F5F5F5;color:#000;border:1px solid #CCC;}
+  .toc{display:none;}
+}
+
+
+pre code{background:transparent;border:0;padding:0;color:inherit;font:inherit;white-space:pre;}
+img{display:block;max-width:100%;height:auto;margin:18px auto;border-radius:8px;}
+td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
+@media(max-width:640px){section{padding:18px 16px;}main{padding:18px 12px;}h2{display:block;font-size:20px;}.hero h1{font-size:25px;}}
+
+pre code{background:transparent;border:0;padding:0;color:inherit;font:inherit;white-space:pre;}
+img{display:block;max-width:100%;height:auto;margin:18px auto;border-radius:8px;}
+td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
+@media(max-width:640px){section{padding:18px 16px;}main{padding:18px 12px;}h2{display:block;font-size:20px;}.hero h1{font-size:25px;}}
+</style></head><body>
+<header class="hero"><div class="wrap"><span class="kicker">REVOLUTION · AI AUTOMATION</span><h1>RevMCP 活动日志与 RevResPath 生成路径</h1><p>操作透明，结果有据，面向新手</p></div></header><main><section class="toc"><h2>目录</h2><ol><li><a href="#s1">1. 打开窗口，先看 AI 在做什么</a></li><li><a href="#s2">2. AI 的目的与接口用途怎样区分</a></li><li><a href="#s3">3. 日志查看与筛选</a></li><li><a href="#s4">4. 连接设置更简单了</a></li><li><a href="#s5">5. 指定 RevResPath.cs 的生成路径</a></li><li><a href="#s6">6. 相关文档</a></li></ol><p>更新：2026-10-29</p></section><section id="s1"><h2>1. 打开窗口，先看 AI 在做什么</h2><p>Unity 菜单：<code>Revolution.Tools/AI/RevMCP 控制台</code>。默认打开“活动日志”，另一页是“连接设置”。顶栏显示工程和游戏状态，常用的“复制 Agent 配置”就在右上方。</p><p>每条记录先用中文说明操作，再说明用途，例如：</p><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>原始命令</th>
+<th>窗口里的说明</th>
+<th>有什么用</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>editor.status</td><td>检查编辑器是否就绪</td><td>确认工程、编译和游戏状态，判断能否继续测试</td></tr>
+<tr><td>editor.refresh</td><td>重新导入修改后的资源</td><td>让 Unity 发现代码与资源变化；还需等待编译完成</td></tr>
+<tr><td>ui.click</td><td>模拟玩家点击控件</td><td>经真实 EventSystem 触发 UI，检查玩家能否完成操作</td></tr>
+<tr><td>gm.exec</td><td>执行 GM 指令：自动化演示/增加 2</td><td>显示实际注册指令的说明和完整参数</td></tr>
+<tr><td>runtime.screenshot</td><td>截取游戏画面作为证据</td><td>保存本次画面，配合业务数值断言验收</td></tr>
+<tr><td>rev_run</td><td>执行一份测试计划</td><td>按步骤操作、核对断言，最后执行清理</td></tr>
+</tbody></table></div><p>时间、来源、执行中/成功/失败/取消和耗时在每条记录底部。点击一条记录，查看“在做什么”“有什么用”“AI 说明的目的”、原命令、参数和结果摘要。有编辑器工单时，可点“工单”打开证据目录。</p></section><section id="s2"><h2>2. AI 的目的与接口用途怎样区分</h2><p>接口名称和 Description 能解释动作的用途，但不能知道 Agent 心里的想法。所以窗口明确区分两种来源：</p><ul>
+<li>“有什么用”：来自确定的内置说明或接口注册的 Description。</li>
+<li>“AI 说明的目的”：来自 Agent 显式提供的 intent；没传时显示“Agent 没有提供目的说明”。</li>
+</ul><p>新版 <code>rev_call</code> 和动态工具可传外层 <code>intent</code>（最多 512 字符）：</p><pre><code class="language-text">{
+  "target": "editor",
+  "action": "editor.status",
+  "intent": "确认脚本编译完成后，再测试增加按钮",
+  "arguments": {}
+}</code></pre><p>intent 只用于说明，不进入业务 arguments，不改变权限，也不会被当作另一条执行指令。外部 Agent 的思考、编辑文件或通过其它工具做的事情，不属于 RevMCP 日志覆盖范围。</p><p>测试计划也可以说明目的，步骤的 intent 优先于计划。finally 是收尾阶段，独立记录，不因失败或取消跳过。</p><pre><code class="language-text">{
+  "name": "检查编辑器就绪",
+  "intent": "确认当前工程可以继续自动化测试",
+  "steps": [
+    {
+      "target": "editor",
+      "action": "editor.status",
+      "intent": "核对编译状态",
+      "expect": [{"path": "/data/compiling", "equals": false}]
+    }
+  ],
+  "finally": []
+}</code></pre></section><section id="s3"><h2>3. 日志查看与筛选</h2><p>可以按来源、执行状态筛选，搜索中文说明、原命令、参数、计划名或 intent。“自动跟随最新”会滚动到最新记录，点选历史记录后暂停跟随。“复制可见日志”只复制筛选结果，“清空视图”只清屏，不删工单与证据。</p><p>Agent 请求、Unity Editor 实际执行、游戏运行时、GM、外部 CLI、计划断言分别显示。一次跨层调用可能出现数条相关记录，这是同一次请求的不同执行层；每层自己的开始与完成使用同一 id 合并。HTTP 接单、单条调用成功和计划断言通过是不同结果。</p><p>界面每 250ms 读取增量文件，最多显示最近 500 条。日志在 <code>Library/RevolutionAutomation/activity</code>，Python 和 Unity 使用不同文件，不会竞争写同一个流。每个流最多保留四个约 2MiB 的分段；窗口只读最近 64 个流文件。旧进程留下的文件可以在证据不再需要时自行清理。常见 token、password、Authorization 等字段和截图 base64 不进入日志摘要；业务私密内容仍应避免放进自由文本。</p><p>脚本重载或重新打开窗口后重新读取本地账本。纯独立 Player 的 Unity 日志在 persistentDataPath 的 RevolutionAutomation/activity；MCP 使用 <code>--project</code> 时 Agent 调用记录会同时落入该工程的活动目录。Unity 窗口不主动扫描任意远程设备的文件。</p><p>CLI 也可只读查询：</p><pre><code class="language-text">python Revolution.RevCLI/rev.py --project &lt;工程绝对路径&gt; --mode live call editor.activity --set limit=20
+python Revolution.RevMCP/rev_mcp.py --project &lt;工程绝对路径&gt; call editor editor.status --intent "确认本工程编译完毕"</code></pre><p><code>editor.activity</code> 返回 entries 和 summaries（中文 operation、purpose、agentIntent）。窗口自刷新不通过 MCP，所以不会出现“查看日志又不断生成查看日志”的循环。</p></section><section id="s4"><h2>4. 连接设置更简单了</h2><p>默认连接可调用 Editor，也可在 Play 中操作 GM/UI，无须启动 HTTP。按“复制默认连接配置”，把 JSON 添加到 Agent 客户端，然后先让 Agent 调用 rev_discover 确认工程。</p><p>“高级连接”提供 Python 命令、rev_mcp.py 文件选择和 HTTP 启停。脚本会在当前工程及上级目录中查找明确命名的 Revolution.RevMCP；找不到时可以选择实际文件。端口、凭据路径与命令行细节收在高级区，初次使用不需要先理解所有技术项。暂停游戏时也可停止 HTTP 服务。</p><p>升级需要同步 Unity 桥、Revolution.RevMCP 和相邻 Revolution.RevCLI，再重启 Agent 的 MCP 会话并重新发现工具。仅更新 Unity 时仍可看到 Unity 实际执行；外部 CLI、计划断言和 intent 需要新版 Python 服务。</p></section><section id="s5"><h2>5. 指定 RevResPath.cs 的生成路径</h2><p>打开 RevAB 打包工具 → “打包” → “代码生成”。新增的“RevResPath 生成路径”支持：</p><div class="table-wrap"><table>
+<thead>
+<tr>
+<th>输入</th>
+<th>实际输出</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>留空或点“默认”</td><td>Assets/Revolution/Generation/RevResPath.cs</td></tr>
+<tr><td>Assets/GameScripts/Generated</td><td>Assets/GameScripts/Generated/RevResPath.cs</td></tr>
+<tr><td>Assets/GameScripts/Generated/RevResPath.cs</td><td>这个文件</td></tr>
+<tr><td>当前工程 Assets 内的绝对目录</td><td>自动转成 Assets/.../RevResPath.cs</td></tr>
+</tbody></table></div><p>“选择…”用于选择目录；“实际输出”显示最终落点。点击生成，“打开 RevResPath.cs”打开同一位置。配置保存在 ABBuildConfig.resPathCodePath，重编译/重启不会丢。菜单生成、一键打包、仅生成映射、自动重生成和 CLI 使用相同位置。</p><p>输出路径放的是 C# 文件；资源根目录 resRoot 是生成器扫描资源的位置，两者不要混淆。类名继续是 Revolution.RevResPath。若自定义目录属于另一个 asmdef，使用常量的业务程序集要引用它；不能让 Runtime 反向依赖业务程序集。</p><p>迁移时只移动带本生成器标记的旧文件并保留 GUID，避免出现两份同名类。已有手写代码不覆盖，新旧位置都有生成物时明确报错。不能生成到工程外、Editor 目录、../ 路径或改成其它文件名。框架以只读 UPM 包安装时沿用原生成限制，先用 Assets 安装方式验证。</p><p>Agent 设置示例：</p><pre><code class="language-text">{"configJson":"{\"resPathCodePath\":\"Assets/GameScripts/Generated\"}"}</code></pre><p>将这份参数文件传给 <code>ab.configure</code>，再执行 <code>ab.res-paths</code>。传空 resPathCodePath 后再次生成，即移动回默认位置。RevSoundPath 仍使用原有音效配置和默认生成路径，本次不改音效加载接线。</p></section><section id="s6"><h2>6. 相关文档</h2><ul>
+<li><a href="RevMCP使用说明.html">RevMCP 完整使用说明</a></li>
+<li><a href="RevMCP架构解析.html">RevMCP 架构解析</a></li>
+<li><a href="验证记录/RevMCP活动日志与生成路径测试_2026-10-29.html">本次验证记录</a></li>
+</ul></section></main><footer>Revolution · 2026-10-29 · <a href="RevMCP活动日志与生成路径使用说明.md">Markdown 源文档</a></footer></body></html>

@@ -1,5 +1,15 @@
 # RevMCP · 架构与扩展方式
 
+## 2026-10-29：活动账本与目的说明
+
+Python Hub/Server 记录 Agent 请求、外部进程和计划步骤；Unity 文件桥、GM 适配与 HTTP 主线程记录实际执行。每层用唯一 id 合并开始和完成事件，跨层记录各自显示，避免把接单、执行完成和业务断言混为一谈。活动文件为 UTF-8 JSONL，位于 Library/RevolutionAutomation/activity；进程使用独立流，每流最多保留四个约 2MiB 分段。RevMCPActivityReader 每 250ms 按偏移读取完整行，最多读取最近 64 个文件并保留最近 500 项；半行、重载、乱序完成和清空视图按明确规则处理。
+
+日志是旁路观察，不改变调用、取消、回执或重放规则；写入失败记录诊断，不重复执行业务。参数/结果摘要递归隐藏常见凭据，省略图像 base64 并限制大小；editor.activity 查询结果只记摘要，避免账本递归复制。自由文本不保证覆盖所有业务隐私，报告/复制前由项目决定分享范围。
+
+RevMCPActivityDescription 根据内置契约或实时注册 Description 解释操作用途。intent 由 Agent 明确提供，最多 512 字符，仅为显示元数据，不是业务参数、指令或授权。rev_call/动态工具外层、计划与步骤支持 intent；步骤覆盖计划。窗口默认显示活动页，连接设置单列；editor.activity 只读查询日志与人话 summaries，editor.activity-window 负责可调用的页签和筛选。
+
+RevResPath 输出位置由 ABBuildConfig.resPathCodePath 决定，空值回退原默认。生成器与窗口/CLI共用解析与迁移入口；仅移动有本生成器标记的旧资产并保留 GUID，不覆盖手写代码、不产生两份同名类。RevSoundPath 不改动。使用步骤与边界见 [新版使用说明](RevMCP活动日志与生成路径使用说明.html)。
+
 更新：2026-10-22。配套 [使用说明](RevMCP使用说明.html) 和 [实测记录](验证记录/2026-10-22-RevMCP.html)。
 
 ## 1. 第三层负责稳定调用契约

@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RevMCP · AI 控制编辑器与游戏使用说明</title><style>
+<title>RevMCP · 让 AI 替你操作 Unity 和游戏</title><style>
 /* ============================================================
    Revolution 文档 · 公共样式
    —— 与 assets/docs.css 同一套视觉语言（配色 / 字体 / 组件）。
@@ -143,14 +143,7 @@ img{display:block;max-width:100%;height:auto;margin:18px auto;border-radius:8px;
 td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
 @media(max-width:640px){section{padding:18px 16px;}main{padding:18px 12px;}h2{display:block;font-size:20px;}.hero h1{font-size:25px;}}
 </style></head><body>
-
-<header class="hero"><div class="wrap"><span class="kicker">REVOLUTION · AI AUTOMATION</span><h1>RevMCP · 让 AI 替你操作 Unity 和游戏</h1><p>你说话，AI 动手：发现接口、执行、断言、截图与清理</p></div></header>
-<main>
-<section class="toc"><h2>目录</h2><ol><li><a href="#s1">0. 先搞清一件事：RevMCP 和 Automation 有啥区别？</a></li><li><a href="#s2">1. 3 分钟接线（以 CodeBuddy / Codex 为例）</a></li><li><a href="#s3">2. 接上之后先说这三句话（渐进式）</a></li><li><a href="#s4">3. 三个稳定工具（AI 最常用的就这三个）</a></li><li><a href="#s5">4. 让 AI 测你自己的游戏功能（关键一步）</a></li><li><a href="#s6">5. 常见问题（新手 90% 卡在这几条）</a></li><li><a href="#s7">6. 它做不到什么（提前说清，省得你试）</a></li><li><a href="#s8">7. 测试产出：报告 + 截图 + GIF（硬规矩）</a></li><li><a href="#s9">8. 验证口径</a></li><li><a href="#s10">9. 相关文档</a></li></ol><p>更新：2026-10-24。适用：Python 3.10+、Unity 2022.3；需在 AI 客户端配置一次 MCP。</p>
-<div class="callout good"><p>一句话：<strong>你说话，AI 动手</strong>。你说“点一下增加按钮，再用 GM 加 2，确认计数是 3，截个图”，AI 会自己去发现接口、按顺序执行、把截图和结果给你。 它不是一个新软件，而是给 AI 装的一双“手”——这双手的肌肉，就是 <code>Revolution.RevCLI</code>。</p></div></section>
-<section id="s1"><h2>0. 先搞清一件事：RevMCP 和 Automation 有啥区别？</h2>
-<p>很多人一上来就懵：仓库里怎么有两个自动化目录？其实它们是<strong>上下游</strong>，不是两个竞争品。</p>
-<div class="table-wrap"><table>
+<header class="hero"><div class="wrap"><span class="kicker">REVOLUTION · AI AUTOMATION</span><h1>RevMCP · 让 AI 替你操作 Unity 和游戏</h1><p>操作透明，结果有据，面向新手</p></div></header><main><section class="toc"><h2>目录</h2><ol><li><a href="#s1">0. 先搞清一件事：RevMCP 和 Automation 有啥区别？</a></li><li><a href="#s2">1. 3 分钟接线（以 CodeBuddy / Codex 为例）</a></li><li><a href="#s3">2. 接上之后先说这三句话（渐进式）</a></li><li><a href="#s4">3. 三个稳定工具（AI 最常用的就这三个）</a></li><li><a href="#s5">4. 让 AI 测你自己的游戏功能（关键一步）</a></li><li><a href="#s6">5. 常见问题（新手 90% 卡在这几条）</a></li><li><a href="#s7">6. 它做不到什么（提前说清，省得你试）</a></li><li><a href="#s8">7. 测试产出：报告 + 截图 + GIF（硬规矩）</a></li><li><a href="#s9">8. 验证口径</a></li><li><a href="#s10">9. 相关文档</a></li></ol><p>更新：2026-10-29</p><div class="callout good"><p><strong>2026-10-29 更新</strong>：Unity 控制台新增实时活动日志，用中文解释 AI 在做什么和有什么用，并独立显示 Agent 明确提供的 intent。连接设置收在单独页签。完整教程见 <a href="RevMCP活动日志与生成路径使用说明.html">活动日志与生成路径使用说明</a>。RevResPath 支持自定义生成路径；RevSoundPath 保持原生成方式和位置。</p></div><div class="callout good"><p>一句话：<strong>你说话，AI 动手</strong>。你说“点一下增加按钮，再用 GM 加 2，确认计数是 3，截个图”，AI 会自己去发现接口、按顺序执行、把截图和结果给你。 它不是一个新软件，而是给 AI 装的一双“手”——这双手的肌肉，就是 <code>Revolution.RevCLI</code>。</p></div></section><section id="s1"><h2>0. 先搞清一件事：RevMCP 和 Automation 有啥区别？</h2><p>很多人一上来就懵：仓库里怎么有两个自动化目录？其实它们是<strong>上下游</strong>，不是两个竞争品。</p><div class="table-wrap"><table>
 <thead>
 <tr>
 <th></th>
@@ -166,8 +159,7 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
 <tr><td>依赖关系</td><td>不依赖 RevMCP</td><td><strong>内部调用 Automation</strong> 去执行 Editor 动作</td></tr>
 <tr><td>配置成本</td><td>零（Python 3.10+ 直接跑）</td><td>要在 AI 客户端里配一次 MCP</td></tr>
 <tr><td>你得到什么</td><td>一条命令的结果</td><td>一句自然语言的<strong>测试结论 + 证据</strong></td></tr>
-</tbody></table></div>
-<pre><code class="language-text">你说：帮我测一下战斗能不能打起来
+</tbody></table></div><pre><code class="language-text">你说：帮我测一下战斗能不能打起来
         ↓
    AI（CodeBuddy / Codex）+ Skill
         ↓  调用 MCP 工具
@@ -175,9 +167,7 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
         ↓
    Revolution.RevCLI（真正干活的命令行）
         ↓
-     Unity 编辑器 / 开发版 Player</code></pre>
-<h3>该用哪个？——默认就用 RevMCP，别手敲命令</h3>
-<div class="table-wrap"><table>
+     Unity 编辑器 / 开发版 Player</code></pre><h3>该用哪个？——默认就用 RevMCP，别手敲命令</h3><div class="table-wrap"><table>
 <thead>
 <tr>
 <th>你的目的</th>
@@ -188,16 +178,7 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
 <tr><td>日常：测功能、跑流程、看截图、要测试结论</td><td><strong>用 RevMCP</strong>（让 AI 来）</td></tr>
 <tr><td>接 CI（Jenkins / GitHub Actions）跑固定脚本</td><td>用 Automation 的 CLI（CI 里没有 AI）</td></tr>
 <tr><td>底层排障：AI 说连不上，你想确认哪一层坏了</td><td>用 Automation 的 <code>doctor</code> / <code>editor.status</code> 单独试</td></tr>
-</tbody></table></div>
-<p><strong>推荐路径</strong>：<strong>直接配 RevMCP</strong>。不需要“先学会手敲命令”再上 AI——<code>doctor</code> 这类自检，让 AI 跑一遍就行，它跑不通会告诉你卡在哪。</p>
-<p>手敲命令只留给两种情况：<strong>CI 流水线</strong>，以及 <strong>AI 连不上时的底层排障</strong>。</p>
-</section>
-<section id="s2"><h2>1. 3 分钟接线（以 CodeBuddy / Codex 为例）</h2>
-<p>MCP 服务就一条命令，本质是让客户端在后台启动它：</p>
-<pre><code class="language-text">python &lt;本仓库绝对路径&gt;/Revolution.RevMCP/rev_mcp.py --project &lt;Unity 工程绝对路径&gt; serve</code></pre>
-<div class="callout good"><p>⚠️ 两个 <code>&amp;lt;…&amp;gt;</code> 是占位符，<strong>必须换成你自己机器上的绝对路径</strong>。MCP 客户端只接受绝对路径，这是客户端的硬要求，不是文档偷懒。文档不会写死任何人的机器目录。</p></div>
-<p><strong>CodeBuddy</strong>（<code>~/.codebuddy/mcp.json</code>）：</p>
-<pre><code class="language-text">{
+</tbody></table></div><p><strong>推荐路径</strong>：<strong>直接配 RevMCP</strong>。不需要“先学会手敲命令”再上 AI——<code>doctor</code> 这类自检，让 AI 跑一遍就行，它跑不通会告诉你卡在哪。</p><p>手敲命令只留给两种情况：<strong>CI 流水线</strong>，以及 <strong>AI 连不上时的底层排障</strong>。</p></section><section id="s2"><h2>1. 3 分钟接线（以 CodeBuddy / Codex 为例）</h2><p>MCP 服务就一条命令，本质是让客户端在后台启动它：</p><pre><code class="language-text">python &lt;本仓库绝对路径&gt;/Revolution.RevMCP/rev_mcp.py --project &lt;Unity 工程绝对路径&gt; serve</code></pre><div class="callout good"><p>⚠️ 两个 <code>&amp;lt;…&amp;gt;</code> 是占位符，<strong>必须换成你自己机器上的绝对路径</strong>。MCP 客户端只接受绝对路径，这是客户端的硬要求，不是文档偷懒。文档不会写死任何人的机器目录。</p></div><p><strong>CodeBuddy</strong>（<code>~/.codebuddy/mcp.json</code>）：</p><pre><code class="language-text">{
   "mcpServers": {
     "revolution": {
       "type": "stdio",
@@ -208,10 +189,7 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
       "description": "Revolution RevMCP：操作 Unity 编辑器与游戏运行时"
     }
   }
-}</code></pre>
-<p>填完在 MCP 面板点 <strong>Try to Run</strong>，绿灯即成功。<strong>不需要重启 IDE。</strong></p>
-<p><strong>Codex</strong>（<code>~/.codex/config.toml</code>）：</p>
-<pre><code class="language-text">[mcp_servers.revolution]
+}</code></pre><p>填完在 MCP 面板点 <strong>Try to Run</strong>，绿灯即成功。<strong>不需要重启 IDE。</strong></p><p><strong>Codex</strong>（<code>~/.codex/config.toml</code>）：</p><pre><code class="language-text">[mcp_servers.revolution]
 command = '&lt;Python 3.10+ 安装目录&gt;/python.exe'
 args = ['&lt;本仓库绝对路径&gt;/Revolution.RevMCP/rev_mcp.py', '--project', '&lt;Unity 工程绝对路径&gt;', 'serve']
 startup_timeout_sec = 60
@@ -219,23 +197,7 @@ tool_timeout_sec = 300
 
 [mcp_servers.revolution.env]
 PYTHONUTF8 = '1'
-PYTHONIOENCODING = 'utf-8'</code></pre>
-<p>验证：<code>codex mcp get revolution</code>，能看到 <code>enabled: true</code> 和正确的 args 就对了。</p>
-<div class="callout good"><p><strong>为什么要写死绝对路径？</strong> 客户端是被别的程序（IDE/终端）拉起来的，工作目录不可控，相对路径会指到别的地方。所以这里必须绝对路径，正文其它地方一律用相对路径。</p></div>
-</section>
-<section id="s3"><h2>2. 接上之后先说这三句话（渐进式）</h2>
-<p>不要一上来就让它跑完整回归。按这个顺序：</p>
-<p><strong>第 1 句——确认能连上：</strong></p>
-<div class="callout good"><p>用 revolution 的 rev_discover 列出所有可用动作，告诉我一共多少个，并挑 3 个和编辑器状态相关的给我看。</p></div>
-<p><strong>第 2 句——确认能操作编辑器：</strong></p>
-<div class="callout good"><p>用 rev_call 调 editor.status，把 playing、compiling 报给我。</p></div>
-<p><strong>第 3 句——确认能操作游戏：</strong></p>
-<div class="callout good"><p>进入 Play，调 gm.list 看看有哪些 GM 指令，然后停掉。</p></div>
-<p>三句话都通了，再让它测真实业务。</p>
-</section>
-<section id="s4"><h2>3. 三个稳定工具（AI 最常用的就这三个）</h2>
-<p>工具清单会变（当前 124 个），但下面三个是<strong>稳定钉子</strong>，名字永远不变：</p>
-<div class="table-wrap"><table>
+PYTHONIOENCODING = 'utf-8'</code></pre><p>验证：<code>codex mcp get revolution</code>，能看到 <code>enabled: true</code> 和正确的 args 就对了。</p><div class="callout good"><p><strong>为什么要写死绝对路径？</strong> 客户端是被别的程序（IDE/终端）拉起来的，工作目录不可控，相对路径会指到别的地方。所以这里必须绝对路径，正文其它地方一律用相对路径。</p></div></section><section id="s3"><h2>2. 接上之后先说这三句话（渐进式）</h2><p>不要一上来就让它跑完整回归。按这个顺序：</p><p><strong>第 1 句——确认能连上：</strong></p><div class="callout good"><p>用 revolution 的 rev_discover 列出所有可用动作，告诉我一共多少个，并挑 3 个和编辑器状态相关的给我看。</p></div><p><strong>第 2 句——确认能操作编辑器：</strong></p><div class="callout good"><p>用 rev_call 调 editor.status，把 playing、compiling 报给我。</p></div><p><strong>第 3 句——确认能操作游戏：</strong></p><div class="callout good"><p>进入 Play，调 gm.list 看看有哪些 GM 指令，然后停掉。</p></div><p>三句话都通了，再让它测真实业务。</p></section><section id="s4"><h2>3. 三个稳定工具（AI 最常用的就这三个）</h2><p>工具清单会变（当前 124 个），但下面三个是<strong>稳定钉子</strong>，名字永远不变：</p><div class="table-wrap"><table>
 <thead>
 <tr>
 <th>工具</th>
@@ -247,21 +209,10 @@ PYTHONIOENCODING = 'utf-8'</code></pre>
 <tr><td><code>rev_discover</code></td><td>列出真实可用的动作、参数、环境要求</td><td>先看菜单有什么菜</td></tr>
 <tr><td><code>rev_call</code></td><td>调一个具体动作（target + action + 参数）</td><td>点一道菜</td></tr>
 <tr><td><code>rev_run</code></td><td>跑一份多步计划（准备→执行→断言→清理）</td><td>点套餐</td></tr>
-</tbody></table></div>
-<p>其余一百多个工具是<strong>按动作动态生成</strong>的，名字后面带一串哈希（例如 <code>editor_ab_build_d76143ddf55a0617</code>）。它们能用，但不适合让 AI 去记忆——<strong>优先让 AI 用 <code>rev_discover</code> + <code>rev_call</code></strong>，这样接口变了也不会失效。</p>
-</section>
-<section id="s5"><h2>4. 让 AI 测你自己的游戏功能（关键一步）</h2>
-<p>AI 不可能凭空知道你的“背包加道具”怎么查。你得给游戏<strong>注册能力</strong>，AI 才有东西可调：</p>
-<pre><code class="language-text">// 在游戏侧登记一个可被自动化的业务能力（名称由你定）
+</tbody></table></div><p>其余一百多个工具是<strong>按动作动态生成</strong>的，名字后面带一串哈希（例如 <code>editor_ab_build_d76143ddf55a0617</code>）。它们能用，但不适合让 AI 去记忆——<strong>优先让 AI 用 <code>rev_discover</code> + <code>rev_call</code></strong>，这样接口变了也不会失效。</p></section><section id="s5"><h2>4. 让 AI 测你自己的游戏功能（关键一步）</h2><p>AI 不可能凭空知道你的“背包加道具”怎么查。你得给游戏<strong>注册能力</strong>，AI 才有东西可调：</p><pre><code class="language-text">// 在游戏侧登记一个可被自动化的业务能力（名称由你定）
 RevRuntimeAutomation.Register("inventory.count", () =&gt; bag.Count);
 RevRuntimeAutomation.Register("inventory.add", args =&gt; bag.Add(args.GetInt("id"), 1));
-RevRuntimeAutomation.Register("inventory.reset", () =&gt; bag.Clear());</code></pre>
-<p>登记之后，AI 才可以说：</p>
-<div class="callout good"><p>记录背包数量 → 加一个道具 → 断言数量 +1 → 截图 → 复位归零。</p></div>
-<p><strong>这就是 RevMCP 的边界</strong>：它负责“发现 + 调用 + 断言 + 证据”，业务接口必须由项目提供。工具不会猜你的游戏逻辑。</p>
-</section>
-<section id="s6"><h2>5. 常见问题（新手 90% 卡在这几条）</h2>
-<div class="table-wrap"><table>
+RevRuntimeAutomation.Register("inventory.reset", () =&gt; bag.Clear());</code></pre><p>登记之后，AI 才可以说：</p><div class="callout good"><p>记录背包数量 → 加一个道具 → 断言数量 +1 → 截图 → 复位归零。</p></div><p><strong>这就是 RevMCP 的边界</strong>：它负责“发现 + 调用 + 断言 + 证据”，业务接口必须由项目提供。工具不会猜你的游戏逻辑。</p></section><section id="s6"><h2>5. 常见问题（新手 90% 卡在这几条）</h2><div class="table-wrap"><table>
 <thead>
 <tr>
 <th>现象</th>
@@ -276,41 +227,21 @@ RevRuntimeAutomation.Register("inventory.reset", () =&gt; bag.Clear());</code></
 <tr><td>AI 跑完说“成功”但游戏没变</td><td>缺断言——它只调了动作，没验证结果</td><td>明确要求“断言 + 截图”，别只说“点一下”</td></tr>
 <tr><td>中文路径报错</td><td>Python 默认编码不是 UTF-8</td><td>配置里加 <code>PYTHONUTF8=1</code></td></tr>
 <tr><td>想用 WebGL 包做自动化</td><td><strong>不支持</strong></td><td>WebGL 没有本机 HTTP 能力，只能用编辑器或开发版 Player</td></tr>
-</tbody></table></div>
-</section>
-<section id="s7"><h2>6. 它做不到什么（提前说清，省得你试）</h2>
-<ul>
+</tbody></table></div></section><section id="s7"><h2>6. 它做不到什么（提前说清，省得你试）</h2><ul>
 <li><strong>不能凭空理解未注册的业务</strong>：没登记查询/动作/复位，AI 只能“点按钮”，无法断言业务结果；</li>
 <li><strong>WebGL 构建不支持</strong>运行时测试接口；</li>
 <li><strong>正式发布的包默认不含这些接口</strong>，只在 Development Build + 显式开启时存在；</li>
 <li><strong>两个 MCP 连接不能同时改同一个工程</strong>（比如 Unity MCP 和 RevMCP 同时操作）；</li>
 <li>断言失败、清理失败都会被记为失败——这是<strong>故意的</strong>，避免“跑完看起来绿了、其实脏了”。</li>
-</ul>
-</section>
-<section id="s8"><h2>7. 测试产出：报告 + 截图 + GIF（硬规矩）</h2>
-<p>跑完计划<strong>不等于任务结束</strong>。每次测试都必须留一份能直接发给别人看的 <code>report.html</code>，只有"success: true"的报告会被当成没做完。</p>
-<ul>
-<li>报告样式与《进度同步》那批文档一致（hero / 目录 / 卡片 / 表格 / 图墙）；</li>
-<li>必须带<strong>本次运行的截图</strong>（初始态、关键操作后、失败现场）；</li>
+</ul></section><section id="s8"><h2>7. 测试产出：报告 + 截图 + GIF（硬规矩）</h2><p>跑完计划<strong>不等于任务结束</strong>。每次测试都必须留一份能直接发给别人看的报告，文件名是 <code>&amp;lt;中文标题&amp;gt;_&amp;lt;日期&amp;gt;.html</code>（例如 <code>登录流程验收_2026-10-26.html</code>），只有"success: true"的结果会被当成没做完。</p><ul>
+<li>报告样式沿用项目既有的工程手册风（纸色底 + 绿金主色：顶栏 / hero / 章节卡片 / 表格 / 图墙），样式由 <code>revautomation/report.py</code> 的 <code>REPORT_CSS</code> 提供，不另造一套；</li>
+<li>必须带<strong>本次运行的截图</strong>（初始态、关键操作后、失败现场），并压到网页可用的体积；</li>
 <li><strong>动态效果必须给 GIF</strong>（技能、位移、粒子、UI 过渡），单帧看不出节奏；</li>
+<li>过程文件（markers / status / 逐帧 CSV）合进一个证据 zip，不要散落在报告目录里；</li>
 <li>结论只由断言决定，图片只证画面。</li>
-</ul>
-<p><code>rev_run</code> 现在会<strong>自动</strong>做这件事：把计划里截图动作产出的 PNG 收进报告目录、超过 1 帧就合成 <code>anim.gif</code>，并写出 <code>report.html</code>，返回里带 <code>evidencePath</code>。</p>
-<p>手动补也可以（同一个引擎）：</p>
-<pre><code class="language-text">python Revolution.RevCLI/rev.py evidence --directory &lt;结果目录&gt; --title "本次测试" --subtitle "截图与动图"
-python Revolution.RevCLI/rev.py --project &lt;工程&gt; --mode live capture --out results\anim.gif --frames 12 --interval 120 --report</code></pre>
-</section>
-<section id="s9"><h2>8. 验证口径</h2>
-<p>2026-10-22 的验证：Python 自动化 19 项、RevMCP 13 项、Unity EditMode 24 项通过；真实 MCP stdio → Editor 文件桥，以及 stdio → 本机 HTTP → Windows Development Player 的“按钮 + GM + 断言 + 截图 + 归零”全链路已跑通。</p>
-<p><strong>未</strong>声称 Android、IL2CPP、小游戏真机通过。需要哪个平台结论，就在那个平台单独跑。</p>
-</section>
-<section id="s10"><h2>9. 相关文档</h2>
-<ul>
+</ul><p><code>rev_run</code> 现在会<strong>自动</strong>做这件事：把计划里截图动作产出的 PNG 收进报告目录、超过 1 帧就合成 <code>anim.gif</code>，并写出带日期的报告，返回里带 <code>evidencePath</code>。完整的命名、目录结构与反例见 <code>Skills/revolution-ai-automation/references/report.md</code>。</p><p>手动补也可以（同一个引擎）：</p><pre><code class="language-text">python Revolution.RevCLI/rev.py evidence --directory &lt;结果目录&gt; --title "本次测试" --subtitle "截图与动图"
+python Revolution.RevCLI/rev.py --project &lt;工程&gt; --mode live capture --out results\anim.gif --frames 12 --interval 120 --report</code></pre></section><section id="s9"><h2>8. 验证口径</h2><p>2026-10-22 的验证：Python 自动化 19 项、RevMCP 13 项、Unity EditMode 24 项通过；真实 MCP stdio → Editor 文件桥，以及 stdio → 本机 HTTP → Windows Development Player 的“按钮 + GM + 断言 + 截图 + 归零”全链路已跑通。</p><p><strong>未</strong>声称 Android、IL2CPP、小游戏真机通过。需要哪个平台结论，就在那个平台单独跑。</p></section><section id="s10"><h2>9. 相关文档</h2><ul>
 <li><a href="Revolution自动化工具使用说明.html">Revolution 自动化工具（命令行）</a> —— 底层那双手怎么用</li>
 <li><a href="RevMCP架构解析.html">RevMCP 架构解析</a> —— 写给维护者：线程、工单生命周期、扩展选型</li>
 <li>仓库内：<code>Revolution.RevMCP/README.md</code>、<code>Revolution.RevCLI/README.md</code></li>
-</ul>
-</section>
-</main>
-<footer>Revolution · 2026-10-24<br><a href="../index.html">文档总入口</a> · <a href="RevMCP使用说明.md">Markdown 源文档</a></footer>
-</body></html>
+</ul></section></main><footer>Revolution · 2026-10-29 · <a href="RevMCP使用说明.md">Markdown 源文档</a></footer></body></html>
