@@ -14,7 +14,7 @@ main{max-width:1040px;margin:26px auto 70px;padding:0 20px}section,.toc{backgrou
 <body>
 <header class="hero"><div class="wrap"><div class="eyebrow">REVOLUTION · OFFICIAL ENGINEERING STANDARD</div><h1>官方编程架构规范</h1><p>框架门面解决常用能力，FSM 管整体流程，RevScope 管各阶段生灭，GM 留可验证业务入口。</p><p>基线：2026-10-16 · <a href="Revolution官方编程架构规范.md">Markdown 权威版</a></p></div></header>
 <main>
-<nav class="toc" aria-label="本文目录"><b>阅读顺序</b><br><a href="#principles">01 门面优先</a><a href="#flow">02 FSM × 游戏域</a><a href="#gm">03 业务 GM</a><a href="#agent">04 MCP 自动验收</a><a href="#checklist">05 交付检查</a></nav>
+<nav class="toc" aria-label="本文目录"><b>阅读顺序</b><br><a href="#principles">01 门面优先</a><a href="#flow">02 FSM × 游戏域</a><a href="#gm">03 业务 GM</a><a href="#agent">04 MCP 自动验收</a><a href="#checklist">05 交付检查</a><a href="#services">06 服务注册键</a></nav>
 <section id="principles"><h2>01 · 常用功能统一使用框架现有接口</h2><p>项目仅实现自己的登录协议、玩家数据、关卡规则、流程转移与接线；不重造框架已有的加载、回收、派发或计时。业务不直接调用 <code>Core/Implementation/Support</code> 内核。示意业务接口不是框架 API。</p><div class="table"><table><thead><tr><th>需求</th><th>框架现有入口</th><th>项目责任</th></tr></thead><tbody>
 <tr><td>启动、场景切换</td><td><code>RevInitialize</code>、<code>RevScene</code></td><td>场景选择、失败回退</td></tr>
 <tr><td>游戏阶段 / AI</td><td><code>RevLightFSM</code> / <code>RevLightStackFSM</code> / <code>RevHeavyFSM</code></td><td>状态、合法转移及宿主驱动</td></tr>
@@ -74,6 +74,22 @@ public static class GameFlowGmCommands
 <tr><td>异步取消/切场景</td><td>没有抢先关旧域或在失效域写数据；场景与流程状态对齐</td></tr>
 </tbody></table></div><p>保存环境/版本、输入命令、<code>Success/Message</code>、前后状态、回收报告、异常日志、断言结果。命令可注册不等于测试已通过；离线纯 C# 断言也不能证明 Unity PlayMode、真机、AB 加载或 MCP 连通。网络、音频、图形等另做集成或设备测试。</p></section>
 <section id="checklist"><h2>05 · 新业务模块交付检查</h2><ol><li>画出 Login/Lobby/Battle/Settlement/Exit 状态图，明确大厅是否保留、每态域/资源组、非法转移及取消去向；一个流程控制者驱动 FSM。</li><li>先选用现有门面；各 Timer/Event/Mono/服务/资源句柄都标明生存期及清理者；域服务显式归属，Logic 不替代所有资源 Release。</li><li>给关键路径留可查询、可触发、可验证拒绝的 GM 命令；真实权限、白名单和环境由项目控制，不能靠编辑器 HighRisk。</li><li>编译并跑相应流程 Demo/GM，查域关闭报告、重进 Play、异步取消；AB/热更/移动端另跑目标平台，记录实际结果与未执行项。</li><li>行为改动同步模块说明和业务测试证据；不要把技术方案、示例接口或尚未接通的 MCP 当成框架现成能力。</li></ol><div class="note good">这是一套<b>游戏业务编程约定</b>：项目实现业务规则与安全接线，不新增第二套框架，不宣称已有真实登录、业务 GM 命令或现成 AI 自动测试流水线。</div><p>进一步阅读：<a href="../状态机/状态机Demo示例讲解.html">状态机 Demo 讲解</a> · <a href="../资源加载系统/资源加载系统使用说明.html">资源加载</a> · <a href="../UI系统/UI系统使用说明.html">UI 使用说明</a>。</p></section>
+<section id="services"><h2>06 · 服务注册：接口做键还是类做键</h2>
+<p><code>RevServices.Register&lt;TService, TImpl&gt;()</code> 的两个泛型参数分别是<b>取用键</b>与<b>实现类</b>，不是固定的「接口 + 实现」：<code>TService</code> 是调用方 <code>GetRequired&lt;TService&gt;()</code> 用的键；<code>TImpl</code> 是容器真正 <code>new</code> 的类型，框架约束为 <code>TImpl : class, TService, new()</code>。因此 <code>Register&lt;X, X&gt;()</code> 是合法的“自注册”，唯一含义是<b>让容器创建并按规定释放</b>。</p>
+<div class="table"><table><thead><tr><th>重载</th><th>谁创建</th><th>注销时处置</th><th>适用</th></tr></thead><tbody>
+<tr><td><code>Register&lt;TService, TImpl&gt;()</code></td><td>容器（需公开无参构造）</td><td>容器创建的实例会 <code>Dispose</code></td><td>实现 <code>IDisposable</code>、需要收尾</td></tr>
+<tr><td><code>Register&lt;TService&gt;(instance)</code></td><td>调用方</td><td>只摘表，不 <code>Dispose</code></td><td>外部已托管实例</td></tr>
+<tr><td><code>Register&lt;TService&gt;(factory)</code></td><td>工厂</td><td>会 <code>Dispose</code></td><td>需要构造参数</td></tr>
+</tbody></table></div>
+<p><b>判据：按“以后会不会换实现”选。</b></p>
+<div class="table"><table><thead><tr><th>条件</th><th>选择</th><th>例子</th></tr></thead><tbody>
+<tr><td>多份实现 / 单测要替换 / 只暴露能力</td><td>接口做键</td><td><code>Register&lt;IBattleService, BattleService&gt;()</code>、<code>Register&lt;IScoreProgress, ScoreProgressStore&gt;()</code></td></tr>
+<tr><td>只有一份实现，且调用方要用具体成员</td><td>类做键</td><td><code>Register&lt;StoryProgress, StoryProgress&gt;()</code>、<code>Register&lt;GameAudioSettings, GameAudioSettings&gt;()</code></td></tr>
+<tr><td>接口没有成员，或只有 <code>Dispose</code></td><td>不要抽，直接用类</td><td>—</td></tr>
+</tbody></table></div>
+<div class="note">两种都合规；<b>不合规的是同一入口里风格混用却没有说明</b>。出现两种写法时，在注册处用一行注释写明理由（示例见 RevGame <code>GameBootstrap</code>）。</div>
+<div class="note"><code>Register&lt;TService, TImpl&gt;()</code> 是<b>懒创建</b>：不调用一次 <code>GetRequired</code> 就不会执行构造函数；依赖构造函数完成订阅或初始化的服务（图集回调、音量应用），必须在注册后立即取一次。<code>owner</code> 只解决“谁负责注销”，不等于“随域回收”。</div>
+</section>
 </main><footer>Revolution · 官方编程架构规范 · Markdown 为权威版，HTML 为可独立浏览版</footer>
 </body>
 </html>

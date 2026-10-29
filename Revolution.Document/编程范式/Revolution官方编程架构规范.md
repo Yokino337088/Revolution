@@ -122,4 +122,31 @@ public static class GameFlowGmCommands
 4. 注册测试命令前写下目标环境、白名单与权限；MCP 调用仅在项目已实现并验证安全适配器之后启用，不依赖 `HighRisk` 单独保护。
 5. 对照各模块《使用说明》与对应 Demo 执行编译、流程 Play、失败注入、域关闭报告；AB/热更/移动端变更另跑目标平台。区分实际通过与未执行，更新业务文档及测试证据。
 
+## 6. 服务注册：接口做键还是类做键
+
+`RevServices.Register<TService, TImpl>()` 的两个泛型参数分别是**取用键**与**实现类**，不是固定的「接口 + 实现」：
+
+- `TService`：调用方 `GetRequired<TService>()` 用的键；
+- `TImpl`：容器真正 `new` 的类型，框架约束 `TImpl : class, TService, new()`。
+
+因此 `Register<X, X>()` 是合法的“自注册”，唯一含义是**让容器创建并按规定释放**。
+
+| 重载 | 谁创建 | 注销时处置 | 适用 |
+|---|---|---|---|
+| `Register<TService, TImpl>()` | 容器（需公开无参构造） | 容器创建的实例会 `Dispose` | 实现 `IDisposable`、需要收尾 |
+| `Register<TService>(instance)` | 调用方 | 只摘表，不 `Dispose` | 外部已托管实例 |
+| `Register<TService>(factory)` | 工厂 | 会 `Dispose` | 需要构造参数 |
+
+**判据：按“以后会不会换实现”选。**
+
+| 条件 | 选择 | 例子 |
+|---|---|---|
+| 多份实现 / 单测要替换 / 只暴露能力 | 接口做键 | `Register<IBattleService, BattleService>()`、`Register<IScoreProgress, ScoreProgressStore>()` |
+| 只有一份实现，且调用方要用具体成员 | 类做键 | `Register<StoryProgress, StoryProgress>()`、`Register<GameAudioSettings, GameAudioSettings>()` |
+| 接口没有成员，或只有 `Dispose` | 不要抽，直接用类 | — |
+
+> 两种都合规；**不合规的是同一入口里风格混用却没有说明**。出现两种写法时，在注册处用一行注释写明理由（示例见 RevGame `GameBootstrap`）。
+
+> `Register<TService, TImpl>()` 是**懒创建**：不调用一次 `GetRequired` 就不会执行构造函数；依赖构造函数完成订阅或初始化的服务（图集回调、音量应用），必须在注册后立即取一次。`owner` 只解决“谁负责注销”，不等于“随域回收”。
+
 > 本文是游戏项目的**编程架构约定**，不表示框架已提供完整业务流程、真实登录、业务 GM 命令或已连通的 MCP 测试桥。需要项目方实现的是规则和安全接线，而不是第二套框架。
