@@ -158,7 +158,7 @@ td,th{overflow-wrap:anywhere;}section>p{overflow-wrap:anywhere;}
 <tr><td>gm.exec</td><td>执行 GM 指令：自动化演示/增加 2</td><td>显示实际注册指令的说明和完整参数</td></tr>
 <tr><td>runtime.screenshot</td><td>截取游戏画面作为证据</td><td>保存本次画面，配合业务数值断言验收</td></tr>
 <tr><td>rev_run</td><td>执行一份测试计划</td><td>按步骤操作、核对断言，最后执行清理</td></tr>
-</tbody></table></div><p>时间、来源、执行中/成功/失败/取消和耗时在每条记录底部。点击一条记录，查看“在做什么”“有什么用”“AI 说明的目的”、原命令、参数和结果摘要。有编辑器工单时，可点“工单”打开证据目录。</p></section><section id="s2"><h2>2. AI 的目的与接口用途怎样区分</h2><p>接口名称和 Description 能解释动作的用途，但不能知道 Agent 心里的想法。所以窗口明确区分两种来源：</p><ul>
+</tbody></table></div><p>时间、来源、执行中/成功/失败/取消和耗时在每条记录底部。点击一条记录，查看“在做什么”“有什么用”“AI 说明的目的”、原命令、参数和结果摘要。有编辑器工单时，可点“工单”打开证据目录。</p><p>运行时 GM 记录明确标注“游戏运行时 · GM 指令”，直接显示实际完整指令与参数。通过 Editor 的 gm.exec、runtime.call 或 MCP 的 rev_call 转发时，也按具体 GM 识别；“游戏运行时”和“GM 指令”筛选都可以找到这些记录。详情另外显示“执行环境”和“具体 GM 指令与参数”。结构化 arg0/args 原样以 JSON 展示，避免重拼引号改变中文、空格等参数；仅查询 GM 列表不标成执行指令。</p></section><section id="s2"><h2>2. AI 的目的与接口用途怎样区分</h2><p>接口名称和 Description 能解释动作的用途，但不能知道 Agent 心里的想法。所以窗口明确区分两种来源：</p><ul>
 <li>“有什么用”：来自确定的内置说明或接口注册的 Description。</li>
 <li>“AI 说明的目的”：来自 Agent 显式提供的 intent；没传时显示“Agent 没有提供目的说明”。</li>
 </ul><p>新版 <code>rev_call</code> 和动态工具可传外层 <code>intent</code>（最多 512 字符）：</p><pre><code class="language-text">{

@@ -123,5 +123,27 @@ namespace Revolution.Tests
             public override bool Tick() { Result = "完成"; return true; }
             public override void Dispose() { throw new InvalidOperationException("清理失败"); }
         }
+
+        [TestCase("editor", "gm.exec", "{\"command\":\"测试/加金币 3\"}", "测试/加金币 3")]
+        [TestCase("game", "runtime.call", "{\"runtimeAction\":\"gm.exec\",\"argumentsJson\":\"{\\\"command\\\":\\\"测试/设置名字 \\\\\\\"中文 空格\\\\\\\"\\\"}\"}", "测试/设置名字 \"中文 空格\"")]
+        [TestCase("mcp", "rev_call", "{\"target\":\"gm\",\"action\":\"测试/加金币\",\"arguments\":{\"arg0\":3}}", "测试/加金币")]
+        [TestCase("gm", "测试/加金币", "{\"arg0\":3}", "测试/加金币")]
+        public void RuntimeGMShowsExplicitEnvironmentAndActualCommand(string target, string action, string json, string expected)
+        {
+            var entry = new RevAutomationActivityEntry { target = target, action = action, argumentsJson = json };
+            Assert.That(RevMCPActivityDescription.TryGetRuntimeGM(entry, out string command), Is.True);
+            Assert.That(command, Does.Contain(expected));
+            Assert.That(RevMCPActivityDescription.Title(entry), Does.Contain("游戏运行时"));
+            Assert.That(RevMCPActivityDescription.Title(entry), Does.Contain(expected));
+            if (target == "gm" || action == "rev_call") { Assert.That(command, Does.Contain("\"arg0\":3")); }
+        }
+
+        [TestCase("runtime.capabilities")]
+        [TestCase("gm.list")]
+        public void DiscoveringGMCommandsIsNotMislabelledAsExecutingGM(string action)
+        {
+            var entry = new RevAutomationActivityEntry { target = "editor", action = action, argumentsJson = "{}" };
+            Assert.That(RevMCPActivityDescription.TryGetRuntimeGM(entry, out _), Is.False);
+        }
     }
 }
