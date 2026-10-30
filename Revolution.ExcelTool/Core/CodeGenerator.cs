@@ -120,7 +120,7 @@ namespace Revolution.ExcelTool.Core
                 sb.Append("        {\n");
                 sb.Append("            data = default;\n\n");
                 sb.Append("            // 列数比结构少 → 数据文件与结构不匹配，按坏行处理\n");
-                sb.Append("            if (cells.Length < ").Append(table.Fields.Count).Append(") return false;\n\n");
+                sb.Append("            if (cells.Length < ").Append(table.Fields.Count).Append(")\n            {\n                return false;\n            }\n\n");
 
                 for (int i = 0; i < table.Fields.Count; i++)
                 {
