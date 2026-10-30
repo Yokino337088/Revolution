@@ -47,6 +47,13 @@ namespace Revolution
                 ProfilerCategory category = i < 8 ? ProfilerCategory.Render : i < 12 ? ProfilerCategory.Memory : ProfilerCategory.Internal;
                 // 不存在的计数器保持Invalid；不同平台/Release构建不得把缺样伪装成零。
                 _recorders[i] = ProfilerRecorder.StartNew(category, Names[i], 1);
+                if (i == 1 && !_recorders[i].Valid)
+                {
+                    // 2022.3 Player的原生标记名为Batches Count，手册展示名为Total Batches Count。
+                    // 只在首选名称不存在时尝试已知别名；两者均缺失仍报告N/A。
+                    _recorders[i].Dispose();
+                    _recorders[i] = ProfilerRecorder.StartNew(category, "Batches Count", 1);
+                }
             }
             _previous = Time.realtimeSinceStartupAsDouble;
         }
