@@ -12,3 +12,5 @@
 - 不导出Profiler录制、不生成ZIP（RevGame约定）；HTML与必要截图/GIF交付，原始JSON和凭据只进忽略目录。
 
 完整手册：源仓库 `Revolution.Document/自动化工具/独立Player构建与性能自动化.md`（同名HTML）。
+
+构建发布检查：ab.build受copyToStreamingAssets配置控制，必须核对Player首包实际文件；项目剧情等待复用正式AdvanceStory等入口，不直接设置完成标记。旧Unity是否支持本机VS版本由IL2CPP实际BuildReport确认，不凭vswhere发现组件就宣布可用。

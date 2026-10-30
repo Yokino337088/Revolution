@@ -5,7 +5,8 @@
 - build.player支持显式backend、automation、frameTiming和工程外专用空目录；BuildReport与构建身份落盘，临时设置finally还原。
 - RevCLI/MCP新增Windows Player launch/status/stop，核对launchId/pid/sessionId，凭据隔离，不强杀任意PID。
 - RevRuntimeAutomation新增通用性能快照与固定时长begin/state/cancel，缺失指标-1，CPU/GPU口径分开，取消保留失败，不导出Profiler。
-- 文档与三个Skills补齐Player流程。Python CLI 31项、MCP 22项通过；新增运行时代码及构建代码通过工程外真实Unity程序集编译；实包证据另见后续验收记录。
+- 后续实包接入修复：长构建后等待新心跳、临时设置还原落盘、引擎生成Font材质识别、Batches Count原生名称兼容。
+- 文档与三个Skills补齐Player流程。Python CLI 32项、MCP 22项通过；新增运行时代码及构建代码通过工程外真实Unity程序集编译；实包证据另见后续验收记录。
 
 
 ## [未发布]

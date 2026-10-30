@@ -95,3 +95,15 @@ GPU只接收新时间戳且正有效值的FrameTiming，记录gpuSamples；无�
 Player HTTP使用127.0.0.1、随机token与session；业务在主线程执行。Windows IL2CPP必须实包验证裁剪、中文参数、JSON、截图与跨场景注册，不把Mono/Editor成功当IL2CPP通过。Android需另验HTTP支持、安装启动和端口转发；WebGL没有此HttpListener通道。
 
 真机验收必须使用真实图形Player，固定输入、画质与资源，分别报告开发包/非开发包、冷启动/稳态/热态、规则通过/性能预算。报告保留全部轮次、取消和失败原因。RevGame不生成ZIP、不导出Profiler录制或内存快照，机器证据放.codex/work。
+
+
+## 8. 本次接入发现的问题
+
+- 长AB构建的回执可能早于新心跳，连续计划下一步误判桥离线。RevClient现在对仍打开的编辑器有界等待最多15秒恢复心跳；等待不创建/重发工单，也不会另外启动batch Unity。
+- BuildPipeline会保存临时PlayerSettings，finally恢复内存值后还需SaveAssets落盘。默认值可能序列化为显式字典项，语义与原设置一致。
+- 字体导入器生成的Font.material与普通业务材质需要区别。校验只识别同一Font资产实际持有、使用GUI/Text Shader的材质；不能把Editor HideAndDontSave对象手工塞进Always Included。项目自定义材质仍须满足原Shader门禁。
+- Unity 2022.3 Player的总批次原生标记可能名为Batches Count；采样器支持该明确别名，两种名字均缺失仍报N/A。
+- RevGame实例关闭了AB自动首包复制，因此ab.build完成不等于资源已发布。Player构建前须由项目管线发布并核对StreamingAssets真实文件。
+- 本机VS2026被Unity 2022.3.15f1c1识别为UNKNOWN。vswhere发现VC组件不等于IL2CPP可用；需要实际BuildReport成功才能验收。
+
+Python自动化回归：CLI 32项、MCP 22项通过。运行时代码与构建适配通过工程外Unity程序集编译；独立包端到端记录在RevGame验收报告中，Mono结果不得替代IL2CPP、Android或长期热态验收。

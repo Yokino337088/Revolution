@@ -7,11 +7,18 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from revautomation.cli import parser, payload_of, validate_action
-from revautomation.client import RevError
+from revautomation.client import RevError, RevClient
 from revautomation import player
 
 
 class PlayerTests(unittest.TestCase):
+    def test_completed_build_waits_for_fresh_heartbeat_without_resubmission(self):
+        client = object.__new__(RevClient)
+        client.mode, client.timeout = 'live', 2
+        fresh = dict(sessionId='new')
+        with patch.object(client, 'endpoint', side_effect=[None, None, fresh]), patch.object(client, '_editor_open', return_value=True), patch('revautomation.client.time.sleep'):
+            self.assertEqual(client.ready_endpoint(), fresh)
+
     def test_build_cli_preserves_unicode_output_and_profile(self):
         args = parser().parse_args(['build', 'player', '--target', 'StandaloneWindows64', '--path', 'D:/测试包/a.exe',
                                    '--backend', 'il2cpp', '--automation', '--frame-timing'])
