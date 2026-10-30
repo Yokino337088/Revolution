@@ -108,6 +108,8 @@ namespace Revolution.Editor
                 PlayerSettings.SetScriptingBackend(group, before);
                 PlayerSettings.enableFrameTimingStats = timingBefore;
                 PlayerSettings.SetIl2CppCompilerConfiguration(group, compilerBefore);
+                // BuildPipeline会保存临时设置；只恢复内存值还不够，必须把还原后的设置落盘。
+                AssetDatabase.SaveAssets();
             }
         }
 
