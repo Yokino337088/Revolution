@@ -1,0 +1,185 @@
+# 更新日志
+
+## 2026-10-31 · 独立Player构建与运行时性能
+
+- build.player支持显式backend、automation、frameTiming和工程外专用空目录；BuildReport与构建身份落盘，临时设置finally还原。
+- RevCLI/MCP新增Windows Player launch/status/stop，核对launchId/pid/sessionId，凭据隔离，不强杀任意PID。
+- RevRuntimeAutomation新增通用性能快照与固定时长begin/state/cancel，缺失指标-1，CPU/GPU口径分开，取消保留失败，不导出Profiler。
+- 后续实包接入修复：长构建后等待新心跳、临时设置还原落盘、引擎生成Font材质识别、Batches Count原生名称兼容。
+- 文档与三个Skills补齐Player流程。Python CLI 32项、MCP 22项通过；新增运行时代码及构建代码通过工程外真实Unity程序集编译；实包证据另见后续验收记录。
+
+
+## [未发布]
+
+### RevMCP 调用链与活动窗口性能（2026-10-31）
+
+- 普通 Editor 调用不再反复发现运行时；能力说明短缓存（最多2秒，session/domainId/Play/暂停/编译/导入键约束，变更/失败失效），业务结果每次真实执行。Session保留跨重载工单，新增可选domainId绑定程序集代际，协议1兼容。CLI心跳原子替换短重读，稳定屏障按域代际重新计时；CLI会话操作不再绕行Unity。
+- 通用Unity增量：transform.get/set、gameobject.primitive、shader.list、material.inspect/create/clone/set；完整参数预检、Undo/Prefab override、源GUID和目标不覆盖契约。Shader目录区分supported与findable，编辑器私有可见名不可解析时明确拒绝。
+- 最终回归：CLI47项/MCP36项、真实隔离图形Unity编译无错误和EditMode101项通过；收尾补取消提交/65流清空/筛选详情回归，独立Unity Test Runner102项通过；紧凑模式真实stdio新动作10步+2清理通过。活动窗口500条日志真实截图及10帧GIF；窗口关/开各20次stdio median117.7ms/110.8ms，未测整帧GUI耗时与设备FPS，不作全功能等价承诺。
+- Runtime 工单读取5/20/50ms自适应退让，提交前检查取消；只查询同一ID，失败不重放POST。
+- 可选 `--compact-tools` 只暴露三个稳定MCP工具；`rev_discover`增加target/query/offset/limit，空参数保持完整兼容目录。
+- 普通查询保留JSON/活动日志，测试计划与本次截图按工单隔离生成HTML，避免扫描历史图像和覆盖旧报告。
+- 活动窗口每Poll共享256KiB/128行预算，复用缓冲与时间索引；缓存说明、筛选和行高，虚拟化视口控件，无变化不主动持续Repaint，OnGUI不读日志磁盘。
+- 补齐editor.activity诊断：复用游标，每次最多8批并在批间检查20ms软预算；返回pending/totalIsFinal/invalidLines/polls/scope。total仅当前受限视图，无积压不代表全历史，半行不计数，分页不承诺跨调用快照；避免首批128行被当完整总数。补充真实Unity106/106、Python CLI47/MCP36通过；未重测本次图形或耗时。
+- 同一真实RevGame编辑器，Server.call→Unity只读12次：mean1465.0ms→354.3ms、median1240.8ms→190.3ms；原底层客户端mean200.1ms。真实stdio另测20次mean475.6ms/median278.2ms，无同层改前stdio基线，不计算其加速倍数；不代表游戏或目标设备FPS。最终验证与能力增量见本轮HTML记录。
+
+### 测试报告命名与版式（2026-10-26）
+
+- 报告不再统一叫 `report.html`：改为 `<中文标题>_<YYYY-MM-DD>.html`，日期取数据产生当天，非法文件名字符替换为 `-`。新增 `revautomation/report.py::report_file_name`，`evidence`、`capture --report`、`run --report` 与 RevMCP 自动证据全部走它。
+- 报告样式改为项目既有的工程手册风（纸色底 + 绿金主色、顶栏 / hero / 章节卡片 / 表格 / 图墙），常量更名 `EVIDENCE_CSS` → `REPORT_CSS`。目的是和《战斗性能优化规则》这类文档放一起时是同一套视觉语言，不是两个项目。
+- 新增 `Skills/revolution-ai-automation/references/report.md`：命名、目录结构（正文在顶层，`画面/` 与 `证据/` 进子目录）、版式设计变量、内容清单、截图压缩口径（1600 宽 JPEG / 动图 ≤720）、证据打包规则与被退回的反例。
+- Skill 产出规矩同步：过程文件（markers/status/逐帧 CSV）必须合进一个证据 zip，不要把几十个散文件摊在报告目录里。
+- 回归：RevCLI Python 24 项（含新增 5 项命名与版式测试）通过；未重开 Unity，本次不涉及编辑器侧代码。
+
+### RevCLI 更名与桥接提速（2026-10-26）
+
+- `Revolution.Automation` 更名为 `Revolution.RevCLI`：目录、README/文档、工作流与全部引用同步；Python 包名 `revautomation` 不变（内部 import 名），发布分支沿用 `automation` 以免旧克隆失效。MCP 参数 `--automation-root` 更名 `--cli-root`，旧名保留为别名。
+- 轮询节奏调整：Editor 桥接 100ms → 20ms，Python 侧 5ms 起步自适应（20ms/50ms 退让），`commands.json` 按 mtime 缓存。
+  **实测结论与预期不符**：真实编辑器上 `editor.status` 各 20 次，改造前 mean 107.7ms / p50 111.4ms，改造后 mean 107.9ms / p50 111.6ms，**无可测差异**。原因是空闲编辑器 `EditorApplication.update` 本身约 110ms 才触发一次，轮询间隔不是约束项；假桥单独测 Python 侧往返 9.2ms，只说明该段不是瓶颈。不要把本次改动当作提速成果，端到端延迟仍由编辑器 tick 与动作自身耗时决定。
+- 修复读取回执与写入方原子替换的竞争：Python 读取 `response.json` 偶发 `PermissionError`（与 2026-10-20 boss-ai 作业失败同源），改为有限次重试读取，只重试读、绝不重发动作。
+- 新增 `batch.call`：一次请求顺序执行最多 64 个编辑器动作，省掉每步一次往返。真实编辑器实测 10 步：分 10 次调用 994ms，一次批量 111ms（约 9 倍），编辑器内部 10 步仅 4.5ms——耗时几乎全在一次往返上。每步仍走同一分发逻辑，参数校验与 confirm 规则不变；默认遇错即停（`stopOnError=false` 可继续），禁止嵌套。配套 `RevClient.batch(...)`。
+- 批量只收「同一帧内能同步完成」的动作：`environment` 为 live/play 的（`gm.*`、`ui.*`、`runtime.*`、`scenario.*`、`test.*`）以及 `editor.play/stop/refresh/menu`、构建类一律明确拒绝并说明原因，避免后续步骤读到旧状态。**游戏运行时测试继续用 pipeline 或计划 JSON**，那里才有等待、断言与 finally 清理。实测：安全动作 2/2 通过；混入 `editor.play`、`editor.refresh`、`ab.build` 均被拒并给出可执行的替代建议。
+- 覆盖核对：能力目录与工程特性合计 122 个 Editor 动作，CLI 清单 125 条（多出 `editor.launch`/`editor.wait`/`scenario.validate` 三个客户端动作），**编辑器有而 CLI 缺 0 条**，本次未新增编辑器能力。
+- 回归：CLI Python 19 项、RevMCP Python 13 项通过；未在本次重开 Unity 复测真实往返，端到端数字以实际编辑会话为准。
+
+### RevMCP 与 AI 自动化接口层（2026-10-22）
+
+- 新增 `Revolution.RevMCP` 标准库 Python MCP stdio 服务，统一发现/调用 Editor、真实 GM、运行时业务与显式 CLI/Python。提供 rev_discover/rev_call/rev_run、动态工具、精确业务断言、只读轮询、取消、finally 与截图 image 证据。
+- 新增开发态 `RevRuntimeAutomation` 注册门面、主线程队列和本机 HTTP。Editor 与独立开发版 Player 共用 UI/状态/日志/截图实现；按 owner 对称注销，参数与 HighRisk/confirm 校验，session/request id 防止变更重放。正式包默认不包含接口，WebGL HTTP 明确不支持。
+- Unity 菜单新增 `Revolution.Tools/AI/RevMCP 控制台`，查看运行状态、启停服务、复制连接配置。Automation 2.0 增强场景、对象/组件、资产/Importer、Prefab、项目设置、Console/编译、Test Runner、平台切换和真实 Player 构建；当前20个工具菜单映射完整，离线125/示例工程实时122动作。
+- 修复编译重载后队列恢复丢失、Windows 原子替换竞争；跨帧操作/测试只恢复等待不重跑；Test Framework 零测试/skip/inconclusive 不假通过。构建产物使用 Builds 唯一目录，避免 Library 输出被 Unity 拒绝。Editor 与 HTTP 共用忙标记，防止交叉变更。
+- 新增教学场景 RevAutomationDemo、一句话测试 Skill、面向新手注释、使用说明 MD/HTML 与脱敏验证记录。Python Automation 19项、RevMCP 13项、Unity EditMode 24项通过；实际 MCP→Editor 和 MCP→独立 Windows 开发版 Player 完成按钮+GM→计数3断言→PNG→归零；Windows BuildReport 0错误/0警告。未据此声称 Android、IL2CPP、小游戏真机或全部动作逐一集成通过。
+
+### 修复 RevGM 面板命令填入后不更新输入框
+
+- 命令从联想、分组、详情、枚举候选或历史填入时，先释放 IMGUI 的键盘控件焦点，避免仍聚焦的 `TextEditor` 把旧缓冲区写回输入字段；之后重新聚焦搜索框，便于继续输入参数。
+- 将同一修复同步到 RevGame 集成工程中的框架快照。待 Unity Editor 实际点击回归后再确认全部交互路径。
+
+### 通用自动化工具（2026-10-19）
+
+- 新增仓库 `Automation/` 的 Python 标准库 CLI、本机文件队列和 Editor 主线程桥接；覆盖现有编辑器菜单及主要窗口操作（AB 分包/校验/构建/体积/快照、导表、UI 生成、平台工具、可选热更与演示工具）。
+- 通用业务通过已有 `RevGM.Execute` 接入：支持操作、条件轮询、精确断言、等待、预热、循环、失败清理、超时取消、逐轮 JSONL 及 HTML/CSV/JSON 报告；不内置任何游戏业务逻辑。
+- 增加 editor launch、顺序 pipeline 与 finally 收尾、job 查询/取消；域重载不重放已开始的资产或业务操作；原有高危/覆盖约束用显式 confirm 参数表达。
+- 为原平台报告、link.xml、UI 生成和热更 Demo 增加非交互适配入口，保留既有窗口调用链；CLI 拷贝前检查递归清理目标路径。
+- 文档与示例：`Automation/README.md`、`Revolution.Document/自动化工具/Revolution自动化工具使用说明.md`（同名 HTML）；HTML 直接复用现有《导表工具使用说明》的内联样式、页头、目录、卡片与顶部流动条动画。编译检查使用真实 Unity 引用和 .NET 4.7.2 参数；本次未运行 PlayMode、业务场景或一万轮压测。
+
+### 音效会话复位修复（2026-10-17）
+
+- RevGame Play 验证发现 `ResetForNewSession` 使用 64 个声音槽位的循环索引清理仅 4 项的分类音量数组，进入 Play 即越界。改为按两个数组各自的长度分别复位；从 main 源码导出该修复到 RevGame 快照。
+
+### 运行稳定性修复（2026-10-16）
+
+- 修复静态审查的 **13 项严重问题 + 9 项潜在风险（F01–F13、R01–R09）**；完整对照与编译边界见仓库 `Revolution.Document/问题审查/Revolution框架问题修复记录_2026-10-16.md`（同名 HTML）。
+- 资源与配置表：预加载监听异常隔离、Object 预热与具体类型并发兼容、表加载失败必有终态、按原始租约归还、卸载作废旧请求、新 Play 清理静态缓存、AB 依赖释放检查代际、补齐 WebGL/小游戏网络分支导入。
+- UI 与声音：打开/关闭转场和实例化失败完整收尾、面板原始句柄防误释放；动画身份快照防重入越界，有限值校验与有界循环跳段防假死；池定期摘除已销毁借出对象；声音单名卸载回收 Pending 槽。
+- 基础模块：日志上报异常与递归保护、任务调度宿主重建保留等待队列、分别注册的续体异常隔离与预算校验、服务/状态机/序列通知隔离、服务创建期间容器释放的回滚、修正裁剪自检类型名。
+- 行为调整：`RevMono.Clear()` 仅清业务监听并保留框架驱动；状态/序列通知监听异常记录后继续派发；动画倍速负数/非有限数会抛参数异常。同步相关使用说明的 MD 与 HTML。
+- 编译：真实 Unity 引用的 Runtime 全源码和 WebGL/微信/抖音条件分支均为 0 错误；完整生成解决方案附加 .NET 4.7.2 参数为 0 错误。默认 4.7.1 受现有 Rider 包引用版本阻断；未执行测试、PlayMode、IL2CPP 或真机回归。
+
+### 新增
+
+- **`RevServices.Register<I, T>(owner: ..., eager: true)` 可选立即创建**：默认仍懒创建；只对类型对类型注册开放，供图集/引擎首次事件监听器在注册返回前完成构造和 `OnInit`。立即创建失败会撤销本次登记、保留原始异常，重复注册与 owner 注销语义不变；同时把 Tick 宿主安装失败纳入实例回滚。工程外直接链接真实源码的回归 9 项通过；Unity Play / AB / 真机未执行。同步服务定位器使用说明（md/html）和 Skill 坑位。
+- **包体大小预测编辑器窗口**：菜单 `Revolution.Tools/平台/包体大小预测`，Android APK 与 Windows 发布目录双页签。录入同一构建配置的实测产物作为基准，扫描 `Assets` 下的 StreamingAssets / Resources 原始文件变化，显示平台差异的粗估范围与数据口径；基准按工程存在本机 EditorPrefs，无基准不伪造总量。工具只读、不出包；代码、场景、导入配置、引擎版本变动需重新录入实测基准，最终大小仍以真实出包为准。
+- **`RevServices`：服务定位器的"一行注册、直接取、可注销"入口**（`Runtime/RevServiceLocator/Facade/RevServices.cs`）：
+  - 解决的痛点：原来的 `RevServiceLocator.Create()…Build()` 要自己写静态类 + `static readonly` 缓存容器 + 链式调用，而且 `Build()` 之后冻结、**没法注销单个服务**，注册过的服务会一直占着内存。
+  - 用法：`RevServices.Register<ISound, Sound>()`（一行；另有"已有实例"和"工厂"两个重载，都可带 `owner: this`）· `RevServices.GetRequired<ISound>()` / `Get` / `TryGet` / `IsRegistered` · `RevServices.Unregister<ISound>()` / `UnregisterAllOf(this)` / `UnregisterAll()` · `RevServices.Dump()`（谁注册了什么、谁还占着）。
+  - 语义：懒创建（第一次取用才 `new`，零反射）· 重复注册**当场报错**（不静默覆盖，换实现先 `Unregister`）· 注销时容器创建的实例 `Dispose`、业务传进来的实例**不碰** · 注销后再取会报错并提示"它曾被注销过" · 同一实例注册成多个类型时每帧只驱动 1 次、最后一个持有者注销才 `Dispose` · `OnInit` 失败回滚并 `Dispose`、注册保留可重试 · 个别 `Dispose` 抛错不影响其余（统一抛 `AggregateException`）。
+  - 每帧驱动：实现了 `RevITickable` 的服务**自动被驱动**（Support 层按需向 `RevMono` 挂回调；没有可 Tick 的服务就一帧都不多跑；单个 `OnTick` 抛错只记日志、不影响其它服务）；进 Play 自动复位（关闭 Domain Reload 时上一局的服务会被清掉）。
+  - 与 Builder 写法的关系：两套语义一致、可混用。**只有"同一个服务类型要每局 / 每个场景各一份（作用域）"或"单测另建隔离容器"才需要 `RevServiceLocator.Create()…Build()`**；`RevServices` 只管全局一份。原 Builder API 完全保留、行为不变。
+  - 取舍（已写进文档 5.6）：`RevServices` 必须能注销，所以不再是"装配后只读"；纪律改为"全局服务集中在启动入口注册、跟着模块 / 场景走的服务谁注册谁注销（`owner`）"，并靠重复注册报错 + `Dump()` 把关。
+  - 验证：工程外链接真实源码跑 55 条断言全过（含热路径 10 万次 0 字节分配）；**Unity 内编译与 Demo 场景未跑**（需要在 Unity 里刷新工程后确认）。
+  - 同时：`RevServiceLocator.Demo` 新增按钮 A~D 演示新入口；《服务定位器使用说明》（md + html）第一章起重写为以 `RevServices` 为主线，新增 3.5「注销」，坑 / 报错 / 速查卡 / 文件清单同步；文档里指向已删除 README 的死链一并清掉。
+- **安卓 / 微信小游戏 / 抖音小游戏 投产适配（一批）**：
+  - **`RevAppLifecycle`（新模块）**：前后台 / 焦点 / 退出事件（`Paused` / `Resumed` / `Quitting`）+ `IsBackground` / `LastBackgroundSeconds` / `PauseCount`。零配置自动就位（`RuntimeInitializeOnLoadMethod` 建隐藏宿主），并对移动端"Pause 与 Focus 同时到达"做状态去重（同一轮只派发一次）。
+  - **IL2CPP 裁剪保护**：新增框架侧 `link.xml`（保 UI 反射装配链与单例反射构造），并新增编辑器工具 **`Revolution.Tools/平台/生成 IL2CPP 裁剪保护 (link.xml)`** —— 扫描工程内所有 `RevUIPanel` / `RevUIPart` / `RevSingleton` 派生类，生成业务侧 `Assets/link.xml`（已存在手写文件时弹窗确认，不静默覆盖）。
+  - **WebGL / 小游戏自动禁用文件日志**：新增 `RevFileSink.SupportsBackgroundWriter`（WebGL 默认 false）—— 小游戏是单线程，`new Thread` 会直接抛异常，而原先的"目录可写探测"在虚拟文件系统上会误判为可用。
+  - **平台名三处对齐**：`RevABLoader.MainName` / `RevHotPlatform.Name` 补小游戏宏分支（统一归 `WebGL`）；`ABBuildSetting.GetPlatformName` 把 `XxxMiniGame` 构建目标也归一到 `WebGL`（按名字判断而非枚举，避免老引擎没有该枚举时编译不过），消除"产物目录名 ≠ 运行时主包名"造成的首屏 404。
+  - **AB 加载健壮性**：失败重试（`MaxAttempts` / `RetryDelayMs`）、超时兜底（`AttemptTimeoutSeconds` —— WebGL 上 `UnityWebRequest.timeout` 不生效，改为按帧轮询 + `Abort`）、**引擎缓存标识**（新增 `RevABLoader.BundleCacheKeyResolver` 钩子与 `RevBundleCacheKey` 类型；热更包从清单取 `unityHash` / `unityCrc` 注入，小游戏不再每次进游戏重下全部 AB）。
+  - **热更**：`Concurrency` 默认按平台（小游戏 2 / 其余 3）；小游戏 / WebGL 上禁止明文 http（不受 `AllowHttp` 影响）、并发 > 4 在配置期直接报错；`SetActiveBundleKeys` 与"切版本"同步（换版本必换 hash 表）。
+  - **首包体积审计**：新增编辑器工具 **`Revolution.Tools/平台/首包体积审计 (Resources)`** —— 列出所有 `Resources` 目录的文件数与体积（按体积排序，含最占地方的 10 个文件），供小游戏首包预算对照。
+  - **音效平台能力表**：新增 `RevSoundPlatform`（`AudioManagedByPlatform` / `NeedsUserGestureUnlock` / `Note`），把"首次播放需用户手势、AudioClip 必须 Decompress On Load、切后台打断需重播"三条小游戏约束写进代码而不是口口相传。
+  - **AB 打包选项**：新增 `deterministic`（默认开）与 `stripUnityVersion`（默认关；开了就要记住"换 Unity 版本先强制重打"），打包窗口同步暴露两个勾选框。
+  - **文档**：新增《应用生命周期 · 使用说明》（md + html）。`RevAppLifecycle` 暂未配 Demo 场景。
+- **代码裁剪（IL2CPP managed stripping）：主推关掉，另配三层护栏**（完整说明见新增文档《代码裁剪 · 使用说明》md & html）：
+  - **主推**：把 `Player Settings → Managed Stripping Level` 改成 `Disabled`（或至少 `Minimal`），然后重新出包。理由：代码裁剪省的是包体，赔的是"编辑器好好地、真机突然瘸"的不报错故障；而关掉的代价只有包体，**3 分钟就能自己测准**（出两包比差值）。
+  - **框架 `link.xml` 固定保住 Unity 原生模块**（万一要开裁剪时的护栏）：`PhysicsModule` / `Physics2DModule` / `UIModule` / `AnimationModule` / `AudioModule` / `ParticleSystemModule`。这些模块真实现都在引擎原生侧（C++），托管层只是 wrapper —— 业务没直接调就会被裁掉，而场景里挂的组件还好好留着，于是变成最难查的一类故障：**编辑器一切正常，真机上刚体变"空壳"（不报错就是不响应）、`Physics.Raycast` 恒返回 false、动画不动、没声音**。注释里同时列出了其它同类模块（NavMesh / Terrain / VFX / Timeline / TMP / Input System…）的加法。
+  - **新增 `RevStripGuard`（自检）**：进游戏（首个场景之前）逐个 `Type.GetType` 问引擎"这个类型还在吗"，缺了就用 `RevLog.Error` 报出【缺什么 + 什么症状 + 怎么修】，把"沉默的故障"变成"启动时一条明确的错误"。可手动调 `RevStripGuard.Check()`（出包配置变了 / 升级 Unity 后建议主动验一次）。★ 本文件刻意只用字符串查询、不直接引用被检查的类型 —— 直接引用会让裁剪器认为"有人用"，自检就永远通过了。
+  - **生成工具自动补全**：菜单「生成 IL2CPP 裁剪保护 (link.xml)」现在除业务类型外，还会**扫一遍工程源码**，把代码里用到的原生模块（NavMesh / Terrain / 粒子 / VFX / TMP / Input System…）自动写进 `Assets/link.xml`；只写"本工程真的加载得到"的程序集，避免 link.xml 引用不存在的程序集导致构建失败。
+- **导表工具（Unity 编辑器版）**：菜单 `Revolution.Tools/配置表/导表工具`（另有「快速导出」一步导完、CI 入口 `Revolution.Editor.ExcelTool.RevExcelCI.Export`）。Excel 规则与 WPF 版完全相同，生成的代码与数据逐字节一致（除生成时间）。相比 WPF 版：拖入 Excel 即读、Excel 开着也能读、保存后自动重读并标出改动的表；全量数据预览（运行时解析不了的单元格标色、错误一键定位到行）；输出目录默认进 Generation 程序集 / `<资源根目录>/Data`，并在导出前检查代码目录所属程序集与数据目录是否可被运行时读到；只写内容有变化的文件（仅数据变化时不触发脚本编译）；新增 / 删除表后自动生成资源映射，数据没有 AB 标记时提示并可一键标记；导出会移除上次导出过的表时先确认，旧数据文件可一键清理。输出设置存 `ProjectSettings/`（团队共享），Excel 来源存 `UserSettings/`（个人）。
+- **`ABMapGenerator`**：「仅生成映射」的唯一实现，打包窗口与导表工具共用。
+- **动作序列：易用性**
+  - 一行播放：`清单.Play(gameObject)` / `await 清单.PlayAsync(gameObject)`。
+  - 新增步骤：`.Tween`（随时间变化，可带起始值与缓动 `RevEase`）、`.If`（运行时分支）、`.Finally`（跑完 / 取消 / 出错都执行的收尾）、`.Log`、`.Publish(ctx => 事件)`、`.WaitTask<T>`（拿到任务结果）。
+  - Unity 现成步骤：`.MoveTo` / `.ScaleTo` / `.FadeTo` / `.SetActive`。
+  - 省略名字：`.Do(ctx => …)` / `.WaitUntil(ctx => …)`，日志里用"文件名:行号"定位。
+  - 上下文：`ctx.Require<T>()`（必需服务，取不到直接报错并说明怎么注册）、`ctx.SourceAs<T>()`、`ctx.SourceGameObject()` / `SourceTransform()`；服务按接口兜底查找（`Add(new Impl())` 后 `Get<IFoo>()` 也能取到）。
+  - `WaitUntil` 新增 `onTimeout`；`WaitTask` 新增 `cancelOnFailure`；`RevSequencePlayer.UseUnscaledTime`（暂停时也推进）；`runner.ActiveCount`。
+
+  - **配置表导出：新增「仅生成数据」模式（Unity 编辑器版 + WPF 版）**：只改了 Excel 数值、没动表结构时只重写数据 txt，一个代码文件都不碰 —— 导完不触发一次十几秒的脚本重编译。编辑器导出区新增「仅数据」按钮，▾ 菜单另有「全量生成代码和数据（强制重写全部文件）」与「仅生成数据文件（强制重写全部 txt）」；菜单新增「快速导出（仅数据，不生成代码）」；WPF 操作区改为 [仅生成数据] / [全量生成（代码+数据）] 两按钮（仅数据模式只需 TXT 数据目录）。
+
+  ### 修复
+
+- **动作序列**：
+  - 在步骤 / 回调 / await 续体里调用 `StopAll` / `Clear` / `Dispose` 会让 Tick 下标越界、已归还池的运行实例被继续推进 → Tick 改为按快照遍历，期间的取消统一在本次 Tick 末尾收尾。
+  - 在步骤里 `Stop` 自己后，同一帧剩下的步骤仍会执行、最终按"完成"结束 → 每进下一步前检查取消（并行 / 重复 / 分支内部同样）。
+  - `RunFinished` 订阅者抛异常时 `PlayAsync` 永不完成 → 各环节独立 try/catch，等待者在最后必然被唤醒。
+  - DEBUG 下步骤抛异常会一直留在活跃表里、每帧重复抛出并阻塞其它序列 → 统一为"记日志 + 按取消收尾"。
+  - 嵌套序列的 `ctx.Source` 被错误设成了父序列的上下文对象 → 新增 `Play(definition, context)` 重载，子序列沿用父序列的触发者 / 服务 / 事件总线。
+  - 场景里的全局驱动者随场景销毁后，全局引擎再也没人 Tick → 访问 `Default` 时自动补建；关闭域重载时静态状态每次进入播放模式复位。
+  - 同一个步骤实例被放进两条序列会互相覆盖状态槽 → `Build()` 时报错。
+  - 收尾步骤里的 `Parallel` 不会执行子步骤、某一步抛异常会跳过其余收尾 → 收尾每步执行后再推进一次，逐步隔离异常；收尾里放等待步骤在 `Build()` 时报错。
+  - 等待超时、异步任务失败、收尾 / 回调异常以前被静默吞掉 → 经 RevLog 输出（tag = `ActionSequence`），写明序列名与步骤。
+
+  - **计时器**：
+  - 到期回调里调用 `Restart()` 想"重新计时"，实际会被同帧回收（一次性 / 循环最后一次回调均中招）→ Restart 撤销待回收标记，重试类写法恢复可用。
+  - 全局暂停期间校准服务器时间会把暂停时长整个丢掉（恢复后 Server 域整体偏快，`At` 全部错位）→ 校准锚点改用暂停时也更新的实时读数（暂停冻结剩余时间读数的语义不变）。
+  - **服务定位器**：
+  - 作用域 `Dispose` 后仍挂在根容器的跟踪表里（长跑越积越多）→ 释放时自摘；根容器释放改为先摘列表再倒序逐个释放（防遍历中列表左移漏放）。
+  - `OnInit` 失败回滚只把实例从表里摘掉、不释放它 → 回滚时对容器拥有的实例补 `Dispose`（不吞原始异常）。
+  - 同一实例注册到多个服务类型会重复挂载（每帧 `OnTick` 跑两遍、释放时 `Dispose` 两遍）→ 重复实例只补类型映射不重复挂载。
+  - **公共 Mono**：
+  - `RemoveAllOf` 用跨相位累计值判断脏标记：只动 Update 相位也会把 LateUpdate / FixedUpdate 标脏，下一帧白白重建快照（破坏稳态零分配）→ 改按相位内计数。
+  - 进 Play 复位漏清 `Failed` 事件订阅：关闭域重载时上一局订阅的处理器跨局存活（对已销毁对象报错 / 引用泄漏）→ 复位一并放掉。
+  - **场景**：
+  - 发起加载抛异常（典型：buildIndex 越界直接抛而不是返回 null）后没有任何收尾，`IsLoading` 永久卡 true、之后所有请求被"拒绝并发"拦死 → 异常转统一失败收尾（State=Failed + OnLoadFailed），同步 / 异步两条路都兜住。
+  - 同步 `Load` 把旧场景名当"已进入的新场景"广播（同步切换帧末才生效）→ 直接广播目标名，`OnLoaded(name)` 的契约恢复成立。
+  - 退出 Play 时若正在异步加载，`IsLoading/State` 残留到下次运行（重进 Play 后一切加载被拦死且无日志）→ 补进 Play 复位。
+  - **输入**：
+  - `SetRepeat` 的 `delay = 0` 语义矛盾（注释承诺"0 = 不连发"，实现却当成"立即开始连发"）→ `delay ≤ 0` 才是关连发。
+  - 改键存档往返丢连发配置 → 文本格式新增 `repeat:延迟/间隔`，`SaveBindings ⇄ LoadBindings` 无损往返。
+  - 屏蔽 World 期间轴读数未归零（弹窗里角色照样移动）→ 轴一并归零；屏蔽中按下时间仍记录（缓冲不丢）。
+  - 冲突检测漏轴键 → `BindAxis` 使用的键与键位 / 轴键双向互查。
+  - `Failed` 事件订阅跨局残留（关闭域重载时打到已销毁对象）→ 复位放掉。
+  - 监听者回调里注销自己（如回调里 `OffAllOf`）会越界并炸到驱动的 Update → 倒序 + 实时计数遍历。
+  - **UI 系统**：
+  - 泛型面板 `RevUIPanel<TData>.Data` 永远是 null / 旧值（管理器走基类 object 通道，泛型 `SetData` 是方法隐藏调不到）→ 新增 `OnDataSet` 统一出口，泛型类同步强类型数据；`OnRefreshView`"只画 Data"恢复成立。
+  - 打开 / 关闭转场完成回调没有状态守卫：打开途中被关闭后仍执行"打开完成"（业务收到正在关闭 / 已回池的面板），关闭侧对称 → 全部完成回调加状态守卫。
+  - `ClosePart(false)` 关掉的 Part 再打开时不会重新出现（复用路径只刷新不激活）→ 复用前检查激活状态。
+  - 动画采样回调里停掉动画自己，会错删换位到同一槽的别的动画、并把已回池（甚至已复用）的运行对象提前"完成"再回收 → 收尾前双重确认存活与版本号。
+  - `ShutdownAll` / 场景卸载后到达的关闭完成回调会往空池塞死实例、资源引用泄漏 → 根已不在时只还资源引用。
+  - `TopOf` 只按打开顺序取，与 `CloseTopOf` 的"先画布后顺序"双标 → 对齐同一套规则（Split 三画布下返回真正的视觉最上层）。
+  - `RevUIAnim.RestoreBase` 永远停不掉正在播的动画（owner 传错对象）→ 改按句柄停。
+  - 注释失实两处：Canvas 渲染模式默认值表述修正为 Overlay（行为不变）；`LayerStep` 如实标注为未接入的预留参数。
+  - **日志**：
+  - 文件大小按字符数累计（UTF-16），中文日志实际能涨到上限约 3 倍才轮转 → 改按 UTF-8 字节统计。
+  - 主线程 Flush / Dispose 的兜底路径与后台线程并发写同一个 `StreamWriter`（交错 / 异常丢日志 / 误计通道故障）→ 写段整段互斥，并删掉 Flush 末尾裸调的二次刷缓冲。
+
+  ### 变更
+
+- **动作序列**：`OnCancel` / `OnCompleted` / `OnCancelled` 多次调用改为叠加（以前后一次覆盖前一次）；`RevSequenceDefinition.FinallySteps` 现在表示 `.Finally` 的步骤，取消收尾改名为 `CancelSteps`；触发者（Unity 对象）被销毁时序列自动取消（`runner.StopWhenSourceDestroyed = false` 可关闭）。
+
+  - **配置表装载改名：DataLoad → RevDataLoad**。目录与全部类型加 Rev 前缀：`RevDataTable` / `RevIDataTable` / `RevDataTableManager` / `RevDataFieldParser` / `RevDataTextFormat` / `RevDataTableLoadException`（文件与 meta 同步改名，guid 不变）。导表工具的生成模板已同步 —— 重新导出一次即无缝衔接；此前生成的旧容器文件里的 `: DataTable<` 写法仍可被编辑器识别（用于删除提示）。
+- **打包工具更名：LiteAB → RevAB**。菜单改为 `Revolution.Tools/资源/RevAB 打包工具`（与 `RevAB 分包浏览`）；日志 tag 改为 `RevAB`（静音过 `LiteAB` 的请改成 `RevLog.MuteTag("RevAB")`）；本机偏好键与快照目录（`Library/Revolution/RevAB/`）在首次使用时从旧名字自动迁移。
+- **ABTool 按职责拆成子目录**：`Core` / `Pipeline` / `CodeGen` / `Snapshot` / `Integration` / `Window`（`.meta` 随文件移动，GUID 不变；`ABCIBuild.Build` 的调用方式不变）。
+- **「分包」页签重做（对标 AssetBundle Browser）**：包树（`/` 分层、多选、搜索、F2 改名、Delete 删除、右键菜单、拖包调层级）+ 多列资源表（排序、标记来源、双击定位、拖到别的包 = 换包）+ 详情面板；从 Project 拖资源到空白处 = 以资源名新建包；包名统一小写，改名 / 删除后自动清理未使用的包名。
+- **「打包」页签重做**：目标平台可选（不必先切平台，本机偏好）、输出目录可一键打开、主按钮置顶；配置按分组折叠、选项中文化；切到「按目录自动分包」前先确认；打包结果显示产物体积与用时。
+- **检查类页签**：「检查」标题带问题数；共享资源 / 漏标资源可一键移进一个包，空包名一键清理；包名可点击跳转到「分包」页签；依赖分析改为下一帧带可取消进度条执行，不再卡住窗口；体积等数据按扫描结果缓存。
+
+## [0.1.0] - 2026-09-26
+
+### 新增
+
+- **运行期（13 个模块 / 121 个 `.cs`）**：资源加载、对象池、UI 系统、动作序列、状态机、音效系统、事件系统、GM 指令、配置表、服务定位器、异步任务、单例
+- **编辑器工具（17 个 `.cs`）**：LiteAB 打包工具（分包浏览 / 依赖 / 体积 / 漏标检查 + `ResMap` 与路径常量生成）、GM 指令面板
+- **文档**：每个模块的《使用说明》（手把手）与《架构解析》（设计论证），见仓库 `Revolution.Document/`
+- **安装方式**：`package` 分支（框架本体在根，可直接 clone / submodule 进工程 `Assets/`）、UPM git URL
