@@ -2,7 +2,9 @@
 
 ## 连接
 
-优先常驻 MCP stdio 服务，不为每个动作重新启动 Python。更新 Python 服务后重启该 MCP 会话；更新 Unity 桥后等编译完成、重新发现能力。安装路径和解释器由用户/项目配置决定，不改其他工具的登录凭据。
+编辑器操作优先 RevCLI 常驻服务：`connect` 一次（内含 `daemon start`），之后 `rev.py ...` 只做一次本机转发。服务发现 CLI 代码或动作清单更新后会自动退出，该次调用转本地执行，下次 `connect` 再起新服务。同一工程、只读 `editor.status`、15 轮交替取样的中位数：无常驻 329ms，常驻 201ms，`curl` 直连 `/call` 130ms；`rev.cmd` 390ms 和 `py -3.13` 启动器 278ms 反而更慢，不要用。数字是单机一次测量，换环境需用 `tests/benchmark_daemon.py` 复测。
+
+更新 Unity 桥后 `editor wait` 等编译完成、重新查契约。MCP 只用于游戏运行时 GM 与端到端测试，更新 Python 服务后重启该 MCP 会话。安装路径和解释器由用户/项目配置决定，不改其他工具的登录凭据。
 
 服务支持 `--compact-tools` 时可只暴露 `rev_discover`、`rev_call`、`rev_run` 三个稳定工具。此模式仅缩小 tools/list，不删除真实能力；先按关键词发现，拿返回的 ID、keys/inputSchema，再用 rev_call。旧版本不支持时省略该选项。
 

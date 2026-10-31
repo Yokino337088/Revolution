@@ -95,6 +95,8 @@ namespace Revolution.Editor
         public string command;
         public string configJson;
         public string userConfigJson;
+        public bool skipInvalid;
+        public bool refresh;
         public string baseline;
         public string outputDir;
         public string appVersion;

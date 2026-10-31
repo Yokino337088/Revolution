@@ -2,6 +2,10 @@
 
 2026-10-31 新增 [revolution-unity-editor](revolution-unity-editor/SKILL.md)：通过常驻 RevMCP / RevCLI 搭建场景、修改对象/组件、检查资产/Prefab，按需发现、同步批量、读回断言与 Undo/清理；配套 [提速与活动窗口教程](../Revolution.Document/自动化工具/RevMCP提速与活动窗口优化使用说明.html) 和 [通用 Unity 扩展](../Revolution.Document/自动化工具/RevCLI与RevMCP通用Unity扩展使用说明.html)。安装完整目录到项目 Agent skills，不额外安装参考 CLI 的第三方技能。
 
+2026-10-31 新增 [MCP 与 CLI 的 token 成本](revolution-ai-automation/references/token-cost.md)：框架本体工程实测全量 MCP 每轮 17,255、紧凑 MCP 325、CLI 无固定开销且结果约为 MCP 一半。
+
+2026-11-01 通道规则：**编辑器操作走 RevCLI，游戏运行时 GM 走 RevMCP**。[revolution-unity-editor](revolution-unity-editor/SKILL.md) 新增 [重启后重新连接](revolution-unity-editor/references/reconnect.md) 与 [全链路开发](revolution-unity-editor/references/fullchain.md)，覆盖写脚本挂载、一份 JSON 搭场景、动画、烘焙、导表、打 AB 和一键打整包。
+
 性能优化使用 [revolution-performance](revolution-performance/SKILL.md)：提炼RevGame截至2026-10-30的测量、规则/AI缓存、UI/反馈、GPU/透明绘制、图集/AB与生命周期实践。先建立固定输入基线，按瓶颈读取专题，保持规则与画质并验证完整结果；不承诺加载技能即可零GC或达到固定帧率。安装完整 `revolution-performance/` 目录到项目 `.codex/skills/`（或对应Agent目录）；普通业务开发继续配合 `revolution-framework`，实际测试使用已安装 `revolution-ai-automation` 能力。
 
 2026-10-28：加入 [RevGame真实工程架构/编程参考](revolution-framework/references/revgame-engineering.md)、[Unity编辑器实践](revolution-framework/references/revgame-editor-practice.md)、[AI开发闭环](revolution-framework/references/revgame-ai-workflow.md) 和 [自动化测试实践](revolution-ai-automation/references/revgame-testing.md)。AI写Revolution业务前须按职责读取 [RevGame工程](https://github.com/Yokino337088/RevGame) 的同类源码，记录参考版本与契约，再适配目标项目；Demo补模块用法，项目样本不替代当前API/用户规则。

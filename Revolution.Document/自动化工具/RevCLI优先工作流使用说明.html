@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RevCLI 优先工作流 · 使用说明</title>
+<style>
+:root{--accent:#2F6FED;--accent-soft:#EAF1FE;--page:#F4F6F9;--panel:#FFFFFF;--border:#E3E7ED;--text:#1F2329;--text-sub:#6B7280;--good:#12A150;--good-soft:#E8F8EF;--warn:#B7791F;--warn-soft:#FDF6E3;--code-bg:#1E2430;--code-fg:#D7DEEA;--radius:10px;}
+*{box-sizing:border-box;}body{margin:0;background:var(--page);color:var(--text);font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC","Segoe UI",system-ui,sans-serif;font-size:15.5px;line-height:1.85;}
+.hero{background:linear-gradient(135deg,#2F6FED 0%,#4A84F5 55%,#6E9BFF 100%);color:#fff;padding:46px 24px 40px;}.hero .wrap{max-width:1000px;margin:0 auto;}.hero .kicker{display:inline-block;font-size:12px;letter-spacing:.12em;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:3px 12px;margin-bottom:14px;}.hero h1{margin:0 0 12px;font-size:31px;line-height:1.35;}.hero p{margin:6px 0 0;font-size:14.5px;}.hero .meta{margin-top:16px;font-size:13px;opacity:.85;}
+main{max-width:1000px;margin:0 auto;padding:26px 24px 70px;}section{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:26px 28px;margin-bottom:20px;}h2{font-size:21px;margin:0 0 6px;display:flex;align-items:center;gap:10px;}h2 .num{min-width:30px;height:30px;line-height:30px;text-align:center;border-radius:9px;background:var(--accent);color:#fff;font-size:14px;font-weight:700;padding:0 8px;}h2+.lead{color:var(--text-sub);font-size:14px;margin:0 0 18px;padding-bottom:14px;border-bottom:1px solid var(--border);}h3{font-size:17px;margin:24px 0 8px;}p{margin:10px 0;}ul,ol{margin:10px 0;padding-left:24px;}li{margin:6px 0;}code{font-family:"Cascadia Mono",Consolas,monospace;font-size:13px;background:#EEF2F8;border:1px solid #E1E7F0;border-radius:4px;padding:1px 5px;color:#22304A;}
+.table-wrap{overflow-x:auto;margin:14px 0;}table{border-collapse:collapse;width:100%;font-size:13.5px;}th,td{border:1px solid var(--border);padding:10px 12px;text-align:left;vertical-align:top;}thead th{background:#F3F6FB;}tbody tr:nth-child(even){background:#FAFBFD;}td.r,th.r{text-align:right;white-space:nowrap;}tr.best td{background:var(--good-soft);font-weight:700;}
+pre{background:var(--code-bg);color:var(--code-fg);border-radius:8px;padding:15px 17px;overflow-x:auto;font-family:"Cascadia Mono",Consolas,monospace;font-size:12.5px;line-height:1.7;margin:14px 0;}.callout{border-radius:8px;padding:14px 16px;margin:14px 0;font-size:14.5px;border-left:4px solid var(--accent);background:var(--accent-soft);}.callout.warn{border-left-color:var(--warn);background:var(--warn-soft);}.callout.good{border-left-color:var(--good);background:var(--good-soft);}.callout .t{font-weight:700;display:block;margin-bottom:4px;}
+@media(max-width:760px){.hero h1{font-size:23px;}section{padding:18px 16px;}}
+</style></head><body>
+<header class="hero"><div class="wrap"><span class="kicker">REVOLUTION · REVCLI</span><h1>RevCLI 优先工作流</h1><p>编辑器操作、预制体、UI 面板、打包、Revolution 全链路走 CLI；游戏运行时 GM 才走 MCP。</p><p class="meta">2026-11-01 · Unity 2022.3 · Python 3.10+ 标准库 · 示例路径为相对路径</p></div></header>
+<main>
+
+<div class="callout"><span class="t">开工和重启后</span>用 <code>connect</code> 一条命令恢复，全链路能力见 <a href="RevCLI全链路开发与重启连接使用说明.html">全链路开发与重启连接</a>。本文只讲通道与耗时。</div>
+<section><h2><span class="num">一</span>分工规则</h2><p class="lead">编辑器里能做的事先用 CLI，Play 之后调 GM 才用 MCP。</p>
+<div class="table-wrap"><table><thead><tr><th>要做的事</th><th>走哪里</th><th>原因</th></tr></thead><tbody>
+<tr><td>场景、对象、组件、变换、RectTransform</td><td><b>RevCLI</b></td><td>编辑器同步操作，不需要常驻 MCP 握手</td></tr>
+<tr><td>UI 面板制作（13 种 UGUI 控件）</td><td><b>RevCLI</b></td><td><code>ui.create</code> + <code>rect.set</code>，Undo 完整</td></tr>
+<tr><td>Prefab 创建、实例化、修改、写回、解包</td><td><b>RevCLI</b></td><td><code>prefab.*</code></td></tr>
+<tr><td>资产、Importer、材质、Shader</td><td><b>RevCLI</b></td><td><code>asset.*</code>、<code>material.*</code>、<code>shader.list</code></td></tr>
+<tr><td>项目设置、构建设置、打包 Player</td><td><b>RevCLI</b></td><td><code>settings.*</code>、<code>build.*</code></td></tr>
+<tr><td>编译、Console、Test Runner</td><td><b>RevCLI</b></td><td><code>editor.compilation/console</code>、<code>test.*</code></td></tr>
+<tr><td>Revolution 全链路（AB、Excel、热更、平台资源）</td><td><b>RevCLI</b></td><td><code>ab.*</code>、<code>excel.*</code>、<code>hot.*</code>、<code>platform.*</code></td></tr>
+<tr><td>游戏运行时 GM、运行时业务、带断言的端到端测试</td><td><b>RevMCP</b></td><td>需要本局动态注册表、跨帧等待、<code>finally</code> 清理和证据报告</td></tr>
+</tbody></table></div>
+<p>CLI 在 Play 时也能调 <code>gm.exec</code>，但没有计划编排、断言和自动报告，所以正式的运行时测试仍交给 <code>rev_run</code>。</p></section>
+
+<section><h2><span class="num">二</span>调用时间</h2><p class="lead">常驻服务 + 快速路径：启动一次，之后每条命令只做一次本机转发。</p>
+<h3>做了什么</h3>
+<ol><li><b>常驻服务</b>：<code>daemon start</code> 起本机后台进程，之后每条命令只做一次 HTTP 转发。服务端复用 argparse 解析器和与 Unity 的连接。</li>
+<li><b>快速路径</b>：<code>rev.py</code> 在导入 argparse 与整个 <code>cli</code> 模块之前先判断能否转发，常驻服务在运行时跳过约 200ms 的导入。判断不确定时（未知选项、<code>--help</code>、本地专属命令）原样走完整 CLI，语义不变。</li>
+<li><b>不转发的命令</b>：<code>daemon</code>、<code>doctor</code>、<code>gif</code>、<code>evidence</code>、<code>editor launch</code>、<code>pipeline --validate</code> 和 <code>--mode batch</code>，避免常驻服务成为 Unity 的父进程或抢工程锁。</li></ol>
+<h3>实测</h3>
+<p>同一工程、只读 <code>editor.status</code>、15 轮交替取样。</p>
+<div class="table-wrap"><table><thead><tr><th>方式</th><th class="r">中位数</th><th class="r">P95</th></tr></thead><tbody>
+<tr><td>无常驻：<code>python rev.py --no-daemon</code></td><td class="r">329 ms</td><td class="r">406 ms</td></tr>
+<tr class="best"><td>常驻 + 快速路径：<code>python rev.py</code></td><td class="r">201 ms</td><td class="r">434 ms</td></tr>
+<tr><td>常驻 + <code>rev.cmd</code></td><td class="r">390 ms</td><td class="r">608 ms</td></tr>
+<tr><td>常驻 + <code>py -3.13</code> 启动器</td><td class="r">278 ms</td><td class="r">853 ms</td></tr>
+<tr><td>直连 <code>curl.exe → /call</code>（不起 Python）</td><td class="r">130 ms</td><td class="r">270 ms</td></tr>
+</tbody></table></div>
+<div class="callout warn"><span class="t">不要用 rev.cmd 或 py 启动器</span>两者分别多出约 190ms 和 77ms 的壳启动成本，比无常驻的直调还慢。直接用解释器路径调用 <code>python rev.py</code>。数字来自本机一次测量，换机器或 Unity 负载会变。</div>
+<h3>多步操作合并成一次往返</h3>
+<div class="table-wrap"><table><thead><tr><th>方式</th><th>适用</th><th>说明</th></tr></thead><tbody>
+<tr><td><code>call batch.call</code></td><td>互不依赖的同步动作</td><td>一次最多 64 步，默认遇错即停。实测 10 步约 111ms，拆成 10 次约 994ms</td></tr>
+<tr><td><code>pipeline &lt;文件&gt;</code></td><td>有顺序依赖、需要引用前一步结果或 <code>finally</code> 清理</td><td>失败后仍执行 <code>finally</code></td></tr>
+</tbody></table></div>
+<p><code>batch.call</code> 不接受 Play、编译、构建、测试和 <code>gm.*</code>/<code>ui.dump</code> 等依赖帧推进的动作。</p></section>
+
+<section><h2><span class="num">三</span>使用流程</h2><p class="lead">每个工作会话启动一次常驻服务。</p>
+<pre>$py   = '&lt;Python 解释器路径&gt;'      # py -3.13 -c "import sys;print(sys.executable)"
+$rev  = 'Revolution.RevCLI/rev.py'
+$proj = '&lt;Unity 工程绝对路径&gt;'
+
+&amp; $py $rev --project $proj connect                    # 含打开 Unity 和 daemon start；可重复执行
+&amp; $py $rev --project $proj --mode live editor status  # 之后都走常驻服务
+&amp; $py $rev --project $proj daemon status
+&amp; $py $rev --project $proj daemon stop</pre>
+<ul><li>始终显式传 <code>--project</code>。已有 Unity 编辑器在运行时只用 <code>--mode live</code>，不另开 batch。</li>
+<li>参数含中文或复杂对象时用 <code>call &lt;动作&gt; --json &lt;文件&gt;</code>，避免 PowerShell 转义破坏数据。</li>
+<li>常驻服务发现 CLI 代码或清单更新后会自动退出，该次调用转本地执行，再跑一次 <code>connect</code> 即可。改了 Unity 桥后 <code>editor wait</code> 等编译完成。</li>
+<li>没有启动常驻服务时命令仍可用，只是每次多付约 130ms。</li></ul></section>
+
+<section><h2><span class="num">四</span>新增的制作能力</h2><p class="lead">UI 面板与 Prefab 全流程。</p>
+<h3>UI 面板</h3>
+<div class="table-wrap"><table><thead><tr><th>动作</th><th>参数</th><th>要点</th></tr></thead><tbody>
+<tr><td><code>ui.create</code></td><td><code>kind</code>（Canvas/EventSystem/Panel/Image/RawImage/Text/Button/Toggle/Slider/Scrollbar/Dropdown/InputField/ScrollView）、<code>name</code>、<code>parent</code>、<code>scene</code></td><td>除 Canvas、EventSystem 外必须在 Canvas 之下；Text 是内置 <code>UnityEngine.UI.Text</code>；支持 Undo</td></tr>
+<tr><td><code>rect.get</code></td><td><code>id</code> 或 <code>objectPath</code>、<code>scene</code></td><td>返回锚点、轴心、位置、尺寸、偏移、本地矩形、所属 Canvas</td></tr>
+<tr><td><code>rect.set</code></td><td>同上，加 <code>anchorMin/anchorMax/pivot/anchoredPosition/sizeDelta/offsetMin/offsetMax</code></td><td><code>offsetMin/offsetMax</code> 与 <code>anchoredPosition/sizeDelta</code> 二选一；只写给出的字段</td></tr>
+</tbody></table></div>
+<div class="callout"><span class="t">单独改锚点会让矩形位置变化</span>要保持位置，同时给出偏移。</div>
+<h3>Prefab</h3>
+<div class="table-wrap"><table><thead><tr><th>动作</th><th>说明</th></tr></thead><tbody>
+<tr><td><code>prefab.create</code></td><td>场景对象保存为新 Prefab，不覆盖已有资产</td></tr>
+<tr><td><code>prefab.instantiate</code></td><td>实例化到指定场景和父节点</td></tr>
+<tr><td><code>prefab.inspect</code> / <code>prefab.modify</code></td><td>不打开窗口，直接读写子节点或组件属性并保存</td></tr>
+<tr><td><code>prefab.apply</code></td><td>把实例的全部覆盖写回 Prefab 资产并保存。只允许 <code>Assets</code> 下的 Prefab；写盘不可 Undo</td></tr>
+<tr><td><code>prefab.unpack</code></td><td>解除实例与资产的关联，不可 Undo。<code>unpackMode=root</code>（默认，仅最外层）或 <code>completely</code>（含嵌套）</td></tr>
+</tbody></table></div>
+<div class="callout warn"><span class="t">不可撤销</span><code>prefab.apply</code> 和 <code>prefab.unpack</code> 调用前确认用户授权。</div>
+<h3>示例：带按钮的面板存成 Prefab</h3>
+<pre>&amp; $py $rev --project $proj --mode live ui create --kind Canvas --name MainCanvas
+&amp; $py $rev --project $proj --mode live ui create --kind Panel  --name Panel --parent &lt;Canvas 的 id&gt;
+&amp; $py $rev --project $proj --mode live ui create --kind Button --name BtnOk --parent &lt;Panel 的 id&gt;
+&amp; $py $rev --project $proj --mode live rect set --id &lt;Panel 的 id&gt; --set anchorMin=[0,0] --set anchorMax=[1,1] --set offsetMin=[0,0] --set offsetMax=[0,0]
+&amp; $py $rev --project $proj --mode live rect get --id &lt;Panel 的 id&gt;
+&amp; $py $rev --project $proj --mode live prefab create --id &lt;Panel 的 id&gt; --path Assets/UI/Panel.prefab</pre>
+<p>对象 <code>id</code> 来自上一条命令的返回，只在当次域有效；域重载后重新获取。</p></section>
+
+<section><h2><span class="num">五</span>给 AI 的路由规则</h2><p class="lead">对应 <code>Skills/revolution-unity-editor</code>。</p>
+<ul><li>先用 <code>commands --action &lt;动作&gt;</code> 或 <code>commands --live</code> 查真实契约，再调用。</li>
+<li>修改前先 inspect/get，修改后用同一查询读回断言。</li>
+<li>编译、测试和构建用显式等待：<code>editor.wait</code>、<code>test.result</code>、<code>build.player</code> 的真实 BuildReport。</li>
+<li>只在需要运行时 GM、本局业务状态、跨帧断言或证据报告时切到 RevMCP（<code>rev_run</code>）。</li>
+<li>CLI 与 MCP 共用同一个 Unity 桥和同一份参数契约。</li></ul></section>
+
+<section><h2><span class="num">六</span>验证与已知情况</h2><p class="lead">只写实际跑过的结果。</p>
+<div class="table-wrap"><table><thead><tr><th>项</th><th>结果</th></tr></thead><tbody>
+<tr><td>Unity EditMode 全量（<code>Revolution.Automation.EditorTests</code>）</td><td>146 项，其中制作动作 40 项；最后一次通过 146、失败 0</td></tr>
+<tr><td>实际注册动作（<code>commands --live</code>）</td><td>138 个 Editor 动作；<code>commands.json</code> 共 141 项，含 3 个 Python 侧动作</td></tr>
+<tr><td>复测耗时</td><td><code>python Revolution.RevCLI/tests/benchmark_daemon.py --project &lt;工程&gt; --samples 15 --output &lt;文件&gt;</code></td></tr>
+</tbody></table></div>
+<div class="callout warn"><span class="t">全量测试不稳定一次</span>三次运行分别是 3 项、1 项、0 项失败。失败原因都是 Unity 在测试期间重写 <code>Assembly-CSharp.csproj</code> 时的 <code>IOException: Sharing violation</code>，被测试框架当作未处理日志。这是编辑器自身的写入竞争，与动作逻辑无关；CI 遇到时先 <code>editor.wait</code> 等编译与导入静止再跑。</div>
+<p>以上为 2026-11-01 上午的阶段数字。全链路在隔离工程上的最新结果见 <a href="RevCLI全链路开发与重启连接使用说明.html">全链路文档</a>。</p></section>
+
+<section><h2><span class="num">七</span>边界</h2><p class="lead"></p>
+<ul><li>不提供任意 C# 或 shell 执行。</li><li><code>batch.call</code> 不能包含 Play、编译、构建、测试和运行时动作。</li><li>常驻服务只监听本机，请求带令牌头，空闲超时自动退出。</li><li>清单里存在的动作不等于旧编辑器已安装；以目标工程的 <code>commands --live</code> 为准。</li></ul></section>
+</main></body></html>

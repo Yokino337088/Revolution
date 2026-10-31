@@ -26,7 +26,7 @@ namespace Revolution.Editor
 
         private static SceneInfo DescribeScene(Scene scene) => new SceneInfo { path = scene.path, name = scene.name, handle = scene.handle,
             roots = scene.rootCount, loaded = scene.isLoaded, dirty = scene.isDirty, active = scene == SceneManager.GetActiveScene() };
-        private static Scene FindScene(string path)
+        internal static Scene FindScene(string path)
         {
             if (string.IsNullOrEmpty(path)) { return SceneManager.GetActiveScene(); }
             var scene = SceneManager.GetSceneByPath(path);
@@ -237,7 +237,7 @@ namespace Revolution.Editor
             }
         }
 
-        private static Transform Parent(string id)
+        internal static Transform Parent(string id)
         {
             if (string.IsNullOrEmpty(id)) { return null; }
             return RevAutomationEditorModel.GameObject(new RevAutomationEditorOptions { id = id }).transform;
