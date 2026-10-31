@@ -1,45 +1,852 @@
-<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>独立Player构建与性能自动化</title><style>
-:root{--ink:#25352f;--muted:#65736b;--green:#326956;--gold:#a76e2d;--line:#dce3da;--paper:#f6f7f2}
-*{box-sizing:border-box}html{scroll-behavior:smooth}
-body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.85 "Microsoft YaHei","PingFang SC",sans-serif}
-.topbar{height:70px;border-bottom:1px solid var(--line);padding:0 5vw;display:flex;align-items:center;justify-content:space-between;background:#fbfcf8}
-.brand{font-weight:800;letter-spacing:2px}
-.brand i{font-style:normal;background:var(--green);color:#fff;display:inline-grid;place-items:center;width:32px;height:32px;border-radius:10px;margin-right:10px}
-.tag{font:12px/1.6 Consolas,monospace;letter-spacing:1px;color:var(--muted)}
-.hero{background:linear-gradient(135deg,#fefdf5,#e6efe1);border-bottom:1px solid var(--line);padding:44px 5vw 34px}
-.wrap{max-width:1120px;margin:0 auto}
-.eyebrow{color:var(--green);font:12px/1.5 Consolas,monospace;letter-spacing:2px}
-.hero h1{font-size:clamp(26px,3vw,40px);line-height:1.3;margin:14px 0 10px;letter-spacing:-1px}
-.hero p{margin:0;color:var(--muted)}
-.stamp{font:12px Consolas,monospace;margin-top:16px;color:#7b867b}
-main{max-width:1120px;margin:0 auto;padding:26px 5vw 60px}
-.chapter{background:#fffefa;border:1px solid var(--line);border-radius:16px;margin-bottom:20px;padding:26px 28px}
-.chapter h2{font-size:21px;margin:0 0 16px;letter-spacing:-.3px}
-.table-scroll{overflow:auto;margin:16px -4px;border:1px solid var(--line);border-radius:10px}
-table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.7}
-th{text-align:left;background:#edf2e9;font-weight:700;color:#375441}
-td,th{padding:10px 12px;border-bottom:1px solid #e4e9e0;vertical-align:top;overflow-wrap:anywhere}
-tr:last-child td{border-bottom:0}td:first-child{font-weight:600;min-width:96px}
-.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
-figure{margin:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
-figure img{display:block;width:100%;height:auto}
-figcaption{padding:8px 11px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);overflow-wrap:anywhere}
-.legend{padding:12px 16px;background:#f8eedb;border-left:3px solid #b08b4e;border-radius:8px;font-size:13px;color:#705936;margin-bottom:18px}
-code{font:13px/1.65 Consolas,monospace;background:#eef1e9;border:1px solid #e1e5dc;border-radius:4px;padding:1px 4px;overflow-wrap:anywhere}
-footer{border-top:1px solid var(--line);padding:22px 5vw;color:var(--muted);font-size:13px;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
-@media(max-width:640px){.hero{padding:30px 20px}main{padding:18px 16px 40px}.chapter{padding:20px}}
-pre{overflow:auto;padding:18px;background:#edf2e9}pre code{border:0}h2{margin-top:36px}</style><body><div class="topbar"><b>Revolution · 自动化工具</b><span>2026-10-31</span></div><main><article class="chapter"><h1>独立Player构建与性能自动化</h1><p>2026-10-31。适用于Unity 2022.3、Windows x64；CLI/MCP负责构建与调度，游戏内面板只消费同一份运行时采样。本文的手机/WebGL部分是边界说明，不代表已经支持或验收。</p><h2>1. 两种测试包</h2><p>开发诊断包：IL2CPP + development=true，关闭Script Debugging、Deep Profiling与自动连接Profiler，用于完整指标和功能回归。</p><p>性能验收包：IL2CPP + development=false + automation=true + frameTiming=true。本次构建通过extraScriptingDefines加入REV_AUTOMATION，不修改项目永久宏。它是受控内部测试包，不是公开发行包。项目自己的GM、隔离接线、调试面板也必须允许REV_AUTOMATION；只给框架加宏不会让项目的UNITY_EDITOR代码进入Player。</p><p>正式发行：automation=false、development=false，且项目永久宏不含REV_AUTOMATION。发布前核对实际能力不存在，不能只靠面板隐藏。</p><h2>2. AI/CLI打包到指定路径</h2><p>使用Python 3.10+。已有编辑器使用live，不启动第二个Unity争用工程。先确认目标平台支持、Windows IL2CPP模块、Visual C++工具链、启用场景与真实AB资源均就绪。</p><pre><code>py -3.13 Revolution.RevCLI/rev.py --project D:/Game --mode live --timeout 3600 build player --target StandaloneWindows64 --path D:/Builds/Game/20261031-01/Game.exe --backend il2cpp --automation --frame-timing</code></pre><p>开发诊断包再加 --development。backend支持current/mono/il2cpp。target须与活动平台一致，否则先调用build.target并等待重载完成。build.player不负责生成项目AB，项目构建管线须在Player之前完成依赖校验和AB构建。</p><p>输出必须是专用空目录下的完整路径。允许工程外目录，拒绝覆盖旧包、目录链接及工程Assets/Packages/ProjectSettings/Library/Temp等目录。不要为重试删除用户旧包，另选新目录。</p><p>返回真实BuildReport：result、errors、warnings、seconds、bytes、backend、buildId。仅Succeeded且errors=0为成功；输出旁写rev-build.json，包含构建身份、不含凭据。backend、Frame Timing Stats、IL2CPP编译配置在finally恢复；编辑器崩溃时不承诺finally执行，应核对项目设置后继续。</p><p>MCP调用：</p><pre><code>{&quot;target&quot;:&quot;editor&quot;,&quot;action&quot;:&quot;build.player&quot;,&quot;arguments&quot;:{&quot;target&quot;:&quot;StandaloneWindows64&quot;,&quot;path&quot;:&quot;D:/Builds/Game/20261031-01/Game.exe&quot;,&quot;backend&quot;:&quot;il2cpp&quot;,&quot;development&quot;:false,&quot;automation&quot;:true,&quot;frameTiming&quot;:true},&quot;intent&quot;:&quot;构建独立IL2CPP性能测试包&quot;}</code></pre><p>构建耗时可能数分钟，客户端使用足够timeout。超时不代表构建没有发生，应读取同一工单和BuildReport，不盲目重复构建。</p><h2>3. 启动、连接、退出</h2><pre><code>py -3.13 Revolution.RevCLI/rev.py player launch --executable D:/Builds/Game/20261031-01/Game.exe --directory D:/Evidence/Game/session-01 --port 18766
-py -3.13 Revolution.RevMCP/rev_mcp.py --runtime-endpoint D:/Evidence/Game/session-01/runtime.json --reports D:/Evidence/Game/mcp serve
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>独立 Player 构建与性能自动化 · 使用说明（新手版）</title>
+<style>
+/* ============================================================
+   Revolution 文档 · 公共样式
+   —— 与 assets/docs.css 同一套视觉语言（配色 / 字体 / 组件）。
+   ★ 本套文档刻意「自包含」：样式内联在 <head> 里，不依赖外部文件 ——
+     因为外链样式在「单独打开 / IDE 预览（虚拟根）/ 单文件分享」时解析不到，
+     页面会退化成一坨无样式 HTML（详见仓库提交说明）。
+   兼容类名：hero / toc / callout(good|warn|bad) / plain / table-wrap / card / cheat / cmp / flow / pre
+   ============================================================ */
+:root{
+  --accent:#2F6FED; --accent-soft:#EAF1FE;
+  --page:#F4F6F9; --panel:#FFFFFF; --border:#E3E7ED;
+  --text:#1F2329; --text-sub:#6B7280;
+  --good:#12A150; --good-soft:#E8F8EF;
+  --warn:#B7791F; --warn-soft:#FDF6E3;
+  --bad:#D93F31;  --bad-soft:#FDECEA;
+  --code-bg:#1E2430; --code-fg:#D7DEEA;
+  --radius:10px;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0; background:var(--page); color:var(--text);
+  font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC","Segoe UI",system-ui,sans-serif;
+  font-size:15.5px; line-height:1.85; -webkit-font-smoothing:antialiased;
+}
+.hero{background:linear-gradient(135deg,#2F6FED 0%,#4A84F5 55%,#6E9BFF 100%);color:#fff;padding:46px 24px 40px;position:relative;overflow:hidden;}
+.hero .wrap{max-width:1000px;margin:0 auto;position:relative;z-index:2;}
+.hero .kicker{display:inline-block;font-size:12px;letter-spacing:.12em;background:rgba(255,255,255,.18);
+  border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:3px 12px;margin-bottom:14px;}
+.hero h1{margin:0 0 12px;font-size:31px;line-height:1.35;font-weight:700;}
+.hero p{margin:6px 0 0;color:rgba(255,255,255,.94);font-size:14.5px;}
+.hero code{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.35);color:#fff;}
+.hero .meta{margin-top:16px;font-size:13px;color:rgba(255,255,255,.85);}
+.hero .deco{position:absolute;left:0;right:0;bottom:0;height:3px;
+  background:repeating-linear-gradient(90deg,rgba(255,255,255,.85) 0 26px,transparent 26px 52px);
+  animation:march 1.1s linear infinite;opacity:.75;z-index:1;}
+
+main{max-width:1000px;margin:0 auto;padding:26px 24px 70px;}
+section{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:26px 28px;margin-bottom:20px;}
+h2{font-size:21px;margin:0 0 6px;display:flex;align-items:center;gap:10px;}
+h2 .num{flex:0 0 auto;min-width:30px;height:30px;line-height:30px;text-align:center;border-radius:9px;
+  background:var(--accent);color:#fff;font-size:14px;font-weight:700;padding:0 8px;}
+h2 + .lead{color:var(--text-sub);font-size:14px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid var(--border);}
+h3{font-size:17px;margin:28px 0 10px;}
+h3:first-of-type{margin-top:6px;}
+h4{font-size:15px;margin:20px 0 8px;color:#2B3444;}
+p{margin:10px 0;}
+ul,ol{margin:10px 0;padding-left:24px;}
+li{margin:6px 0;}
+a{color:var(--accent);text-decoration:none;}
+a:hover{text-decoration:underline;}
+code{font-family:"Cascadia Mono",Consolas,"Courier New",monospace;font-size:13px;
+  background:#EEF2F8;border:1px solid #E1E7F0;border-radius:4px;padding:1px 5px;color:#22304A;}
+
+.toc{background:#FBFCFE;}
+.toc ol{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:4px 22px;}
+.toc a{display:block;padding:6px 10px;border-radius:6px;color:var(--text);font-size:14px;}
+.toc a:hover{background:var(--accent-soft);color:var(--accent);text-decoration:none;}
+
+.table-wrap{overflow-x:auto;margin:14px 0;}
+table{border-collapse:collapse;width:100%;font-size:13.5px;}
+th,td{border:1px solid var(--border);padding:10px 12px;text-align:left;vertical-align:top;}
+thead th{background:#F3F6FB;font-weight:700;}
+tbody tr:nth-child(even){background:#FAFBFD;}
+tbody tr:hover{background:#F1F6FF;}
+td.c,th.c{text-align:center;white-space:nowrap;}
+
+.plain{border-radius:10px;padding:14px 16px;margin:14px 0;font-size:14.5px;background:#F7F9FC;border:1px solid #E4E9F2;}
+.plain .tag{display:inline-block;font-size:11.5px;background:#5B6B84;color:#fff;border-radius:999px;padding:1px 9px;margin-right:8px;vertical-align:2px;}
+.plain p:first-child{margin-top:0;}
+.plain p:last-child{margin-bottom:0;}
+
+.callout{border-radius:8px;padding:14px 16px;margin:14px 0;font-size:14.5px;
+  border-left:4px solid var(--accent);background:var(--accent-soft);}
+.callout.good{border-left-color:var(--good);background:var(--good-soft);}
+.callout.warn{border-left-color:var(--warn);background:var(--warn-soft);}
+.callout.bad{border-left-color:var(--bad);background:var(--bad-soft);}
+.callout p:first-child{margin-top:0;}
+.callout p:last-child{margin-bottom:0;}
+.callout .t{font-weight:700;display:block;margin-bottom:4px;}
+
+pre{background:var(--code-bg);color:var(--code-fg);border-radius:8px;padding:15px 17px;overflow-x:auto;
+  font-family:"Cascadia Mono",Consolas,"Courier New",monospace;font-size:12.5px;line-height:1.7;margin:14px 0;}
+pre .c{color:#7D8CA6;}
+pre .k{color:#8FB8FF;}
+pre .s{color:#A5D6A7;}
+pre .n{color:#FFB86C;}
+pre b{color:#FFD479;font-weight:700;}
+
+.card{border:1px solid var(--border);border-radius:10px;background:#FBFCFE;padding:16px 18px;margin:16px 0;}
+.card > .h{font-weight:700;font-size:15.5px;margin-bottom:4px;}
+.card > .when{font-size:13.5px;color:var(--text-sub);margin-bottom:10px;}
+.card pre{margin:10px 0;}
+.card .note{font-size:13px;color:var(--text-sub);margin-top:8px;}
+
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0;}
+.cmp > div{border-radius:9px;padding:12px 14px;font-size:13.5px;border:1px solid;}
+.cmp .no{background:var(--bad-soft);border-color:#F3C9C3;}
+.cmp .yes{background:var(--good-soft);border-color:#BFE9D2;}
+.cmp .h{font-weight:700;margin-bottom:6px;}
+.cmp pre{margin:6px 0 0;font-size:12px;}
+
+.flow{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:16px 0;}
+.flow .n{border:1.5px solid var(--border);background:#fff;border-radius:8px;padding:7px 12px;font-size:13px;}
+.flow .n.on{border-color:var(--accent);background:var(--accent-soft);}
+.flow .n.wait{border-color:#EBCF8A;background:var(--warn-soft);}
+.flow .ar{color:var(--accent);font-weight:700;}
+
+.cheat{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;margin:14px 0;}
+.cheat div{border:1px solid var(--border);border-radius:8px;background:#fff;padding:9px 12px;font-size:13px;}
+.cheat div b{display:block;font-size:12.5px;color:var(--text-sub);font-weight:400;margin-bottom:2px;}
+
+footer{max-width:1000px;margin:0 auto;padding:0 24px 60px;color:var(--text-sub);font-size:13px;}
+
+@keyframes march{to{background-position:28px 0;}}
+
+/* ---------- 本文档额外组件（只增不改，保持同一视觉语言） ---------- */
+.reveal{transition:opacity .5s ease,transform .5s ease;}
+html.js .reveal{opacity:0;transform:translateY(14px);}
+html.js .reveal.in{opacity:1;transform:none;}
+pre{position:relative;}
+.copy{position:absolute;top:8px;right:8px;font:12px/1 "Cascadia Mono",Consolas,monospace;
+  color:#9FB0C8;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);
+  border-radius:6px;padding:5px 9px;cursor:pointer;opacity:0;transition:opacity .18s,background .18s,color .18s;}
+pre:hover .copy,.copy:focus-visible{opacity:1;}
+.copy:hover{background:rgba(255,255,255,.18);color:#fff;}
+.copy.ok{color:#A5D6A7;border-color:rgba(165,214,167,.55);}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--good);margin-right:6px;animation:pulse 1.6s ease-in-out infinite;}
+.dot.w{background:var(--warn);animation-name:pulsew;}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(18,161,80,.45);}50%{box-shadow:0 0 0 5px rgba(18,161,80,0);}}
+@keyframes pulsew{0%,100%{box-shadow:0 0 0 0 rgba(183,121,31,.45);}50%{box-shadow:0 0 0 5px rgba(183,121,31,0);}}
+.stepbar{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0;}
+.stepbar .s{border:1px solid var(--border);border-radius:10px;background:#fff;padding:12px 13px;font-size:13.5px;
+  transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease;}
+.stepbar .s:hover{transform:translateY(-3px);box-shadow:0 6px 16px rgba(47,111,237,.14);border-color:#C9DAFB;}
+.stepbar .s .i{display:block;font:700 12px/1 "Cascadia Mono",Consolas,monospace;color:var(--accent);
+  background:var(--accent-soft);border-radius:6px;padding:5px 7px;margin-bottom:8px;width:max-content;}
+.stepbar .s .d{color:var(--text-sub);font-size:12.5px;margin-top:4px;}
+
+@media (max-width:760px){
+  .hero h1{font-size:23px;}
+  section{padding:18px 16px;}
+  .cmp{grid-template-columns:1fr;}
+}
+@media (prefers-reduced-motion:reduce){
+  .hero .deco{animation:none !important;}
+  .dot{animation:none !important;}
+  .reveal{transition:none !important;}
+  html.js .reveal{opacity:1;transform:none;}
+  .stepbar .s:hover{transform:none;box-shadow:none;}
+}
+@media print{
+  body{background:#fff;font-size:12px;}
+  .hero{background:#fff;color:#000;border-bottom:2px solid #000;}
+  .hero .kicker,.hero .meta{color:#333;}
+  section{break-inside:avoid;border:0;padding:0;margin-bottom:20px;}
+  pre{background:#F5F5F5;color:#000;border:1px solid #CCC;}
+  .toc{display:none;}
+  .copy{display:none;}
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="kicker">使用说明 · 从零到第一次真机采样</span>
+    <h1>独立 Player 构建与性能自动化</h1>
+    <p>这份文档只回答一个问题：<b>怎么让 AI / 命令行把项目打成一个独立 exe，跑起来量真实帧率？</b>（不用手点 Build Settings，也不用靠肉眼判断卡不卡）</p>
+    <p class="meta">读完你能做到：一条命令出性能测试包 · 知道两种包差在哪 · 启动 / 探活 / 收尾各用哪个命令 · 看懂 FPS 与 DrawCall 的统计口径 · 避开 6 个新手坑</p>
+  </div>
+  <div class="deco"></div>
+</header>
+
+<main>
+
+  <nav class="toc reveal">
+    <ol>
+      <li><a href="#s0">〇、它是干什么的（30 秒）</a></li>
+      <li><a href="#s1">一、三步跑通（可粘贴）</a></li>
+      <li><a href="#s2">二、两种包，别打错</a></li>
+      <li><a href="#s3">三、让 AI / 命令行帮你打包</a></li>
+      <li><a href="#s4">四、启动 · 探活 · 收尾</a></li>
+      <li><a href="#s5">五、采样 API（就这几个）</a></li>
+      <li><a href="#s6">六、指标怎么读</a></li>
+      <li><a href="#s7">七、新手最容易踩的 6 个坑</a></li>
+      <li><a href="#s8">八、谁负责什么 + 平台边界</a></li>
+      <li><a href="#s9">九、这次接入踩到的 6 个问题</a></li>
+      <li><a href="#s10">十、相关文档</a></li>
+    </ol>
+  </nav>
+
+  <section id="s0" class="reveal">
+    <h2><span class="num">〇</span>它是干什么的</h2>
+    <p class="lead">先花 30 秒建立直觉，再动手。</p>
+
+    <div class="callout good">
+      <span class="t">只记 1 件事就能干活（真的）</span>
+      <p>编辑器里跑得快，<b>不代表真机不卡</b>。所以"打包 → 启动 → 采样 → 判定"被拆成下面几步，每步都能被脚本和 AI 直接调。</p>
+<pre><span class="c"># 1. 打一个性能测试包（IL2CPP、非开发包、带自动化开关）</span>
+py -3.13 Revolution.RevCLI/rev.py <span class="k">build player</span> --target StandaloneWindows64 \
+  --path D:/Builds/Game/<b>20261031-01</b>/Game.exe --backend il2cpp --automation --frame-timing
+
+<span class="c"># 2. 启动它，并开一个 AI 能连进来的会话</span>
+py -3.13 Revolution.RevCLI/rev.py <span class="k">player launch</span> --executable D:/Builds/Game/20261031-01/Game.exe \
+  --directory D:/Evidence/Game/session-01 --port 18766
+
+<span class="c"># 3. 让它采 10 秒帧数据，再按 runId 核对结果（见第五节）</span>
+<span class="c">#    runtime.performance.begin → state → cancel</span></pre>
+    </div>
+
+    <div class="plain">
+      <span class="tag">人话</span>
+      <b>它 = 把"打个包、跑起来、量一下"这三件手工活变成接口。</b>
+      <p>构建与调度走 CLI / MCP；游戏内面板只是<b>消费者</b>——它读的是同一份运行时采样，不存在"面板显示 60 帧、报告写 55 帧"两套数。</p>
+    </div>
+
+    <div class="stepbar">
+      <div class="s"><span class="i">BUILD</span>构建真实包<div class="d">IL2CPP + 非开发包，回执是真实 BuildReport</div></div>
+      <div class="s"><span class="i">LAUNCH</span>拉起独立进程<div class="d">拿到 endpoint / pid / sessionId 等身份</div></div>
+      <div class="s"><span class="i">SAMPLE</span>有界采样<div class="d">begin 只接单，state 才是结论</div></div>
+      <div class="s"><span class="i">VERIFY</span>按 runId 核对<div class="d">completed + success + frames&gt;0 + errors=0</div></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:38%">它替你解决的问题</th><th>怎么做的</th></tr></thead>
+        <tbody>
+          <tr><td>编辑器 60 帧，真机掉到 30 帧</td><td>只认<b>真实图形 Player</b> 的数据；Mono / Editor 成功不能当 IL2CPP 通过</td></tr>
+          <tr><td>手点 Build Settings 容易漏开关</td><td>一条命令固定 development / automation / frameTiming 组合</td></tr>
+          <tr><td>"刚才那 10 秒到底多少帧"说不清</td><td><code>begin</code> 返回唯一 <code>runId</code>，结论按同一 runId 核</td></tr>
+          <tr><td>AI 抢了编辑器，工程被锁</td><td>复用<b>已有编辑器</b>（live 模式），不另起第二个 Unity</td></tr>
+          <tr><td>跑完没人收尾，环境越来越脏</td><td><code>finally</code> 恢复构建设置 + 协作取消采样</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <span class="t">适用范围先说清楚</span>
+      本文针对 <b>Unity 2022.3 + Windows x64</b>。手机（Android）与 WebGL 只在第八节讲边界，<b>不代表已经支持或验收</b>。
+    </div>
+  </section>
+
+  <section id="s1" class="reveal">
+    <h2><span class="num">一</span>三步跑通（可粘贴）</h2>
+    <p class="lead">Python 3.10+；已有编辑器用 live 模式，别开第二个 Unity 争用工程。</p>
+
+    <div class="card">
+      <div class="h">第 1 步 · 打性能验收包</div>
+      <div class="when">耗时可能几分钟，客户端 timeout 要给够（示例 3600 秒）。</div>
+<pre>py -3.13 Revolution.RevCLI/rev.py --project D:/Game --mode live --timeout 3600 \
+  build player --target StandaloneWindows64 \
+  --path D:/Builds/Game/20261031-01/Game.exe \
+  --backend il2cpp --automation --frame-timing</pre>
+      <div class="note">路径必须是<b>专用空目录下的完整路径</b>，每次换新的（<code>20261031-01</code> → <code>-02</code>）。</div>
+    </div>
+
+    <div class="card">
+      <div class="h">第 2 步 · 启动并开会话</div>
+      <div class="when">会话目录也每次用新的空目录。</div>
+<pre>py -3.13 Revolution.RevCLI/rev.py player launch \
+  --executable D:/Builds/Game/20261031-01/Game.exe \
+  --directory D:/Evidence/Game/session-01 --port 18766
+
+<span class="c"># 想让 AI（MCP）连进去，把会话的 runtime.json 指给 MCP 服务</span>
+py -3.13 Revolution.RevMCP/rev_mcp.py \
+  --runtime-endpoint D:/Evidence/Game/session-01/runtime.json \
+  --reports D:/Evidence/Game/mcp serve</pre>
+    </div>
+
+    <div class="card">
+      <div class="h">第 3 步 · 采样 + 收尾</div>
+      <div class="when">先 begin 接单，再 state 核对，最后 finally 里 cancel / disable。</div>
+<pre><span class="c"># 采 10 秒，预热 2 秒（参数上限：seconds 1~600，warmup 0~60）</span>
+{"target":"game","action":"runtime.performance.begin","arguments":{"seconds":10,"warmup":2}}
+
+<span class="c"># 只读查询：用 status=completed 做有界等待，别 sleep 猜</span>
+{"target":"game","action":"runtime.performance.state","arguments":{}}
+
+<span class="c"># 协作取消（保留 cancelled 状态），再关掉采样器释放 Recorder</span>
+{"target":"game","action":"runtime.performance.cancel","arguments":{}}
+{"target":"game","action":"runtime.performance.disable","arguments":{}}</pre>
+    </div>
+
+    <div class="flow">
+      <span class="n on">build player</span><span class="ar">→</span>
+      <span class="n on">player launch</span><span class="ar">→</span>
+      <span class="n wait"><span class="dot w"></span>performance.begin</span><span class="ar">→</span>
+      <span class="n">state 轮询</span><span class="ar">→</span>
+      <span class="n">finally 收尾</span>
+    </div>
+
+    <div class="callout">
+      <span class="t">超时不等于"没构建"</span>
+      构建超时后<b>不要盲目重跑</b>：构建可能已经发生。正确做法是读同一工单和 BuildReport，再决定下一步。
+    </div>
+  </section>
+
+  <section id="s2" class="reveal">
+    <h2><span class="num">二</span>两种包，别打错</h2>
+    <p class="lead">同一套命令，两个开关组合，用途完全不同。</p>
+
+    <div class="cmp">
+      <div class="yes">
+        <div class="h">开发诊断包（自己排查用）</div>
+        <p style="margin:4px 0"><code>IL2CPP</code> + <code>development=true</code></p>
+        <p style="margin:4px 0">关闭 Script Debugging / Deep Profiling / 自动连 Profiler。</p>
+        <p style="margin:4px 0">要<b>完整指标</b>和功能回归时用它。</p>
+      </div>
+      <div class="yes">
+        <div class="h">性能验收包（出报告用）</div>
+        <p style="margin:4px 0"><code>IL2CPP</code> + <code>development=false</code><br>+ <code>automation=true</code> + <code>frameTiming=true</code></p>
+        <p style="margin:4px 0">接近线上的性能表现，<b>受控内部测试包</b>，不是公开发行包。</p>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <span class="t">REV_AUTOMATION 是"这一单的临时宏"，不是项目永久宏</span>
+      本次构建通过 <code>extraScriptingDefines</code> 把 <code>REV_AUTOMATION</code> 加进去，<b>不改项目永久宏</b>。
+      但注意：项目自己的 GM、隔离接线、调试面板<b>也必须允许</b> <code>REV_AUTOMATION</code> —— 只给框架加宏，并不会让项目里 <code>UNITY_EDITOR</code> 包起来的代码进 Player。
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:22%">包类型</th><th style="width:42%">开关</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td><b>开发诊断</b></td><td><code>development=true</code></td><td>完整指标 + 功能回归（加 <code>--development</code>）</td></tr>
+          <tr><td><b>性能验收</b></td><td><code>development=false</code> / <code>automation=true</code> / <code>frameTiming=true</code></td><td>出性能报告、对接自动化断言</td></tr>
+          <tr><td><b>正式发行</b></td><td><code>automation=false</code> / <code>development=false</code>，且永久宏<b>不含</b> <code>REV_AUTOMATION</code></td><td>对外发布</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout bad">
+      <span class="t">发行前要核对"能力真的不存在"，不能只把面板藏起来</span>
+      面板隐藏 ≠ 自动化能力没了。发布检查要看<b>实际能力</b>是否已从包里消失（宏、注册入口、HTTP 桥）。
+    </div>
+  </section>
+
+  <section id="s3" class="reveal">
+    <h2><span class="num">三</span>让 AI / 命令行帮你打包</h2>
+    <p class="lead">CLI 和 MCP 走同一条构建链，参数一一对应。</p>
+
+    <h3>打包前先自检这 5 项</h3>
+    <div class="cheat">
+      <div><b>目标平台</b>目标平台受支持，且与<b>当前活动平台一致</b></div>
+      <div><b>IL2CPP 模块</b>Windows IL2CPP 模块已装</div>
+      <div><b>C++ 工具链</b>Visual C++ 工具链可用</div>
+      <div><b>场景</b>启用场景配置正确</div>
+      <div><b>AB 资源</b>真实 AssetBundle 已就绪</div>
+    </div>
+
+    <div class="callout warn">
+      <span class="t">build.player 不负责生成 AB</span>
+      项目构建管线必须<b>在 Player 之前</b>完成依赖校验和 AB 构建。另外：完成 <code>ab.build</code> 不等于资源已发布 —— 有些实例关掉了 AB 自动首包复制，打包前要核对 StreamingAssets 里真有文件。
+    </div>
+
+    <h3>参数速查</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:26%">参数</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>--path</code></td><td>专用空目录下的<b>完整路径</b>（含文件名）。允许工程外目录</td></tr>
+          <tr><td><code>--backend</code></td><td><code>current</code> / <code>mono</code> / <code>il2cpp</code>；测性能一定要 <code>il2cpp</code></td></tr>
+          <tr><td><code>--automation</code></td><td>本次构建加 <code>REV_AUTOMATION</code>，开自动化桥</td></tr>
+          <tr><td><code>--frame-timing</code></td><td>开帧时序统计（非开发包想拿 GPU 数据必须开）</td></tr>
+          <tr><td><code>--development</code></td><td>只有打<b>开发诊断包</b>时才加</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout bad">
+      <span class="t">会被直接拒绝的路径</span>
+      覆盖旧包 · 目录链接 · 工程内 <code>Assets</code> / <code>Packages</code> / <code>ProjectSettings</code> / <code>Library</code> / <code>Temp</code>。
+      重试时<b>不要删用户旧包</b>，另选新目录。
+    </div>
+
+    <h3>MCP 调用长这样</h3>
+<pre>{
+  "target": "editor",
+  "action": "build.player",
+  "arguments": {
+    "target": "StandaloneWindows64",
+    "path": "D:/Builds/Game/20261031-01/Game.exe",
+    "backend": "il2cpp",
+    "development": false,
+    "automation": true,
+    "frameTiming": true
+  },
+  "intent": "构建独立IL2CPP性能测试包"
+}</pre>
+
+    <h3>怎么算"打包成功"</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:30%">回执字段</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td><code>result</code> / <code>errors</code> / <code>warnings</code></td><td>只有 <b>Succeeded 且 errors=0</b> 才算成功</td></tr>
+          <tr><td><code>seconds</code> / <code>bytes</code></td><td>真实耗时与产物大小</td></tr>
+          <tr><td><code>backend</code> / <code>buildId</code></td><td>构建身份，报告里要和采样结果对上</td></tr>
+          <tr><td><code>rev-build.json</code></td><td>写在产物旁边，含构建身份，<b>不含凭据</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <span class="t">设置会自动还原，但崩溃时不保证</span>
+      <code>backend</code>、Frame Timing Stats、IL2CPP 编译配置都在 <code>finally</code> 里恢复。
+      编辑器崩溃时 <code>finally</code> 不保证执行 —— 继续之前先核对项目设置。
+    </div>
+
+    <div class="callout warn">
+      <span class="t">target 和活动平台不一致怎么办</span>
+      先调 <code>build.target</code> 切换平台，<b>等域重载完成</b>再打 Player。别在重载中直接构建。
+    </div>
+  </section>
+
+  <section id="s4" class="reveal">
+    <h2><span class="num">四</span>启动 · 探活 · 收尾</h2>
+    <p class="lead">一个会话 = 一个独立进程 + 一个空目录 + 一个端口。</p>
+
+<pre><span class="c"># 启动</span>
+py -3.13 Revolution.RevCLI/rev.py player launch \
+  --executable D:/Builds/Game/20261031-01/Game.exe \
+  --directory D:/Evidence/Game/session-01 --port 18766
+
+<span class="c"># 看状态</span>
 py -3.13 Revolution.RevCLI/rev.py player status --directory D:/Evidence/Game/session-01
-py -3.13 Revolution.RevCLI/rev.py player stop --directory D:/Evidence/Game/session-01</code></pre><p>launcher首版只支持本机Windows exe。directory每次用新的空目录。可通过--arguments传JSON字符串数组，例如窗口宽高；不允许覆盖保留的自动化、日志参数或使用batchmode/nographics测渲染。</p><p>launch返回endpointPath、pid、sessionId、launchId、buildId等身份，不返回token。runtime.json含本机凭据，只放忽略目录，不入库、不粘贴到报告。启动失败只终止本次创建的子进程；stop通过校验过的HTTP会话调用runtime.quit，不接收任意PID强杀。stopped表示已接受退出且运行时桥已清除本次endpoint；进程最终退出仍需由宿主观察，崩溃不能当正常收尾。</p><p>MCP也可直接rev_call target=cli，action=player.launch/player.status/player.stop。launch参数为executable、directory、可选port、arguments、timeout；后两项只需directory。启动后用返回endpoint建立独立Player的MCP会话，不把Editor会话误当Player。多个实例用不同端口和会话目录。</p><h2>4. 必须展示真实调用过程</h2><p>每次连接先rev_discover，确认运行实例、能力和GM。然后rev_call查询runtime.identity、业务状态与隔离状态。使用rev_run执行带断言和finally的计划。向用户展示实际工具名、关键参数、目的和结果；未执行的步骤标未执行，不把直接CLI/Hub调用冒充MCP工具。</p><p>GM仍使用完整注册名称和discover返回的参数schema。运行时桥调用玩家同一业务入口；接受请求不是完成。编译/域重载或切换Player会话后重新发现。Editor的build.*、scene.*、game.perf.*等Editor专用接口不会自动出现在Player中。</p><h2>5. 性能采样API</h2><p>RevRuntimeAutomation.EnablePerformance启动轻量采样；PerformanceSnapshot返回最近最多2048帧的窗口快照；DisablePerformance释放Recorder。面板建议每0.5秒读取一次，关闭时停止文字更新；正式测量期间隐藏面板。采样器不会修改VSync、帧率上限、分辨率或游戏难度。</p><p>runtime.performance.enable / snapshot / disable 对应上述功能。</p><p>runtime.performance.begin接收seconds（1～600）和warmup（0～60，默认0），返回唯一runId。runtime.performance.state是只读查询，可用于有界until；runtime.performance.cancel协作取消并保留cancelled状态。begin只接受作业，最终必须核对同一runId、status=completed、success=true、frames&gt;0、seconds达到请求、errors=0、cancelled=false，再另做业务负载和资源回收断言。</p><pre><code>{
-  &quot;name&quot;:&quot;独立Player十秒采样&quot;,
-  &quot;steps&quot;:[
-    {&quot;target&quot;:&quot;game&quot;,&quot;action&quot;:&quot;runtime.identity&quot;,&quot;arguments&quot;:{},&quot;expect&quot;:[{&quot;path&quot;:&quot;/data/editor&quot;,&quot;equals&quot;:false},{&quot;path&quot;:&quot;/data/backend&quot;,&quot;equals&quot;:&quot;IL2CPP&quot;}]},
-    {&quot;target&quot;:&quot;game&quot;,&quot;action&quot;:&quot;runtime.performance.begin&quot;,&quot;arguments&quot;:{&quot;seconds&quot;:10,&quot;warmup&quot;:2}},
-    {&quot;target&quot;:&quot;game&quot;,&quot;action&quot;:&quot;runtime.performance.state&quot;,&quot;arguments&quot;:{},&quot;until&quot;:{&quot;path&quot;:&quot;/data/status&quot;,&quot;equals&quot;:&quot;completed&quot;,&quot;timeoutSeconds&quot;:30,&quot;intervalSeconds&quot;:1},&quot;expect&quot;:[{&quot;path&quot;:&quot;/data/success&quot;,&quot;equals&quot;:true},{&quot;path&quot;:&quot;/data/errors&quot;,&quot;equals&quot;:0}]}
+
+<span class="c"># 退出</span>
+py -3.13 Revolution.RevCLI/rev.py player stop --directory D:/Evidence/Game/session-01</pre>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:26%">返回的身份</th><th>用来干什么</th></tr></thead>
+        <tbody>
+          <tr><td><code>endpointPath</code></td><td>AI 连这个 Player 会话的入口</td></tr>
+          <tr><td><code>pid</code> / <code>sessionId</code></td><td>进程与会话身份（对报告、对日志）</td></tr>
+          <tr><td><code>launchId</code> / <code>buildId</code></td><td>这次启动跑的是哪个包，可追溯</td></tr>
+          <tr><td><b>token</b></td><td><b>不返回</b>（只在 <code>runtime.json</code> 里，属本机凭据）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout bad">
+      <span class="t">runtime.json 含本机凭据</span>
+      只放在<b>被忽略的目录</b>；<b>不要入库</b>，<b>不要粘贴进报告或聊天记录</b>。
+    </div>
+
+    <h3>能传什么、不能传什么</h3>
+    <div class="cmp">
+      <div class="yes">
+        <div class="h">可以</div>
+        <p style="margin:4px 0"><code>--arguments</code> 传 JSON 字符串数组，例如窗口宽高。</p>
+        <p style="margin:4px 0">多实例：<b>不同端口 + 不同会话目录</b>。</p>
+      </div>
+      <div class="no">
+        <div class="h">不行</div>
+        <p style="margin:4px 0">覆盖保留的自动化 / 日志参数。</p>
+        <p style="margin:4px 0">用 <code>batchmode</code> / <code>nographics</code> 测渲染。</p>
+      </div>
+    </div>
+
+    <div class="plain">
+      <span class="tag">人话</span>
+      <b>launcher 首版只支持本机 Windows exe。</b>
+      <p>启动失败时只终止<b>本次创建的子进程</b>，不会误杀别人的进程。</p>
+    </div>
+
+    <div class="callout warn">
+      <span class="t">stop 是"礼貌退出"，不是强杀</span>
+      stop 通过<b>校验过的 HTTP 会话</b>调用 <code>runtime.quit</code>，不接收任意 PID 强杀。
+      <code>stopped</code> 只表示"已接受退出且运行时桥清掉了本次 endpoint"；进程最终退出仍需宿主观察 —— <b>崩溃不能当正常收尾</b>。
+    </div>
+
+    <h3>AI 侧（MCP）怎么调</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:34%">工具</th><th>关键参数</th></tr></thead>
+        <tbody>
+          <tr><td><code>rev_call target=cli</code><br>action=<code>player.launch</code></td><td><code>executable</code> / <code>directory</code> / 可选 <code>port</code> / <code>arguments</code> / <code>timeout</code></td></tr>
+          <tr><td><code>player.status</code> / <code>player.stop</code></td><td>只需要 <code>directory</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout bad">
+      <span class="t">最容易犯的错：把 Editor 会话当成 Player 会话</span>
+      启动后要用<b>返回的 endpoint</b> 建立独立 Player 的 MCP 会话。Editor 的 <code>build.*</code> / <code>scene.*</code> / <code>game.perf.*</code> 等 Editor 专用接口<b>不会自动出现在 Player 里</b>。
+    </div>
+
+    <h3>调用过程要能复盘</h3>
+    <ol>
+      <li>每次连接先 <code>rev_discover</code>：确认运行实例、能力、GM 列表。</li>
+      <li>再 <code>rev_call</code> 查 <code>runtime.identity</code>、业务状态、隔离状态。</li>
+      <li>用 <code>rev_run</code> 执行带 <code>expect</code> 和 <code>finally</code> 的计划。</li>
+      <li>向用户展示<b>实际工具名、关键参数、目的、结果</b>；没执行的步骤明确标"未执行"，不要把直接 CLI/Hub 调用冒充成 MCP 工具。</li>
+    </ol>
+
+    <div class="plain">
+      <span class="tag">纪律</span>
+      GM 用<b>完整注册名</b>和 <code>discover</code> 返回的参数 schema；运行时桥走的是<b>玩家同一业务入口</b> —— <b>接受请求 ≠ 完成</b>。编译 / 域重载 / 切换 Player 会话之后，重新 discover。
+    </div>
+  </section>
+
+  <section id="s5" class="reveal">
+    <h2><span class="num">五</span>采样 API（就这几个）</h2>
+    <p class="lead">三层：开关 → 快照 → 有界测量。日常只需要认识后两个。</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:34%">接口</th><th>作用</th></tr></thead>
+        <tbody>
+          <tr><td><code>RevRuntimeAutomation.EnablePerformance</code><br>↔ <code>runtime.performance.enable</code></td><td>启动轻量采样</td></tr>
+          <tr><td><code>PerformanceSnapshot</code><br>↔ <code>runtime.performance.snapshot</code></td><td>返回最近<b>最多 2048 帧</b>的窗口快照</td></tr>
+          <tr><td><code>RevRuntimeAutomation.DisablePerformance</code><br>↔ <code>runtime.performance.disable</code></td><td>释放 Recorder</td></tr>
+          <tr><td><code>runtime.performance.begin</code></td><td>接单：传入 <code>seconds</code>（1~600）与 <code>warmup</code>（0~60，默认 0），返回唯一 <code>runId</code></td></tr>
+          <tr><td><code>runtime.performance.state</code></td><td>只读查询，可用于有界 <code>until</code></td></tr>
+          <tr><td><code>runtime.performance.cancel</code></td><td>协作取消，保留 <code>cancelled</code> 状态</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout good">
+      <span class="t">采样器不会偷偷改你的画质</span>
+      它不改 VSync、不改帧率上限、不改分辨率、不改游戏难度。数据怎么来就是怎么来。
+    </div>
+
+    <div class="plain">
+      <span class="tag">面板</span>
+      建议每 <b>0.5 秒</b>读一次快照；面板关掉就停文字更新。<b>正式测量期间请隐藏面板</b> —— 查询和面板本身有开销，要做"开 / 关"对照才干净。
+    </div>
+
+    <h3>标准一份计划（可直接挪去改）</h3>
+<pre>{
+  "name": "独立Player十秒采样",
+  "steps": [
+    {"target":"game","action":"runtime.identity","arguments":{},
+     "expect":[{"path":"/data/editor","equals":false},
+               {"path":"/data/backend","equals":"IL2CPP"}]},
+
+    {"target":"game","action":"runtime.performance.begin","arguments":{"seconds":10,"warmup":2}},
+
+    {"target":"game","action":"runtime.performance.state","arguments":{},
+     "until":{"path":"/data/status","equals":"completed","timeoutSeconds":30,"intervalSeconds":1},
+     "expect":[{"path":"/data/success","equals":true},
+               {"path":"/data/errors","equals":0}]}
   ],
-  &quot;finally&quot;:[
-    {&quot;target&quot;:&quot;game&quot;,&quot;action&quot;:&quot;runtime.performance.cancel&quot;,&quot;arguments&quot;:{}},
-    {&quot;target&quot;:&quot;game&quot;,&quot;action&quot;:&quot;runtime.performance.disable&quot;,&quot;arguments&quot;:{}}
+  "finally": [
+    {"target":"game","action":"runtime.performance.cancel","arguments":{}},
+    {"target":"game","action":"runtime.performance.disable","arguments":{}}
   ]
-}</code></pre><p>这是采样链路示例，不包含游戏造局或业务清理；正式计划必须在此前接项目隔离与固定负载，在finally接项目回首页/复位。截图与GIF在计时窗口外采集。</p><h2>6. 指标口径</h2><p>FPS=窗口帧数/墙钟秒，保留P50/P95/P99/max与超过12.5/16.67/33.33ms的比例。CPU、渲染线程、GPU并行，不能相加，也不从整帧扣EditorLoop计算所谓真实FPS。</p><p>Draw Calls/Total Batches/SetPass/三角形/顶点使用ProfilerRecorder。动态/静态合批/Instancing详细计数在Release中可能不可用。每项有available、value、unit；缺样=-1，不是0。主/渲染线程从纳秒转换为毫秒；内存字段为字节，非进程全部内存。GC Allocated In Frame的0值不能在没有有效性探针时用来承诺全局零GC。</p><p>GPU只接收新时间戳且正有效值的FrameTiming，记录gpuSamples；无样本保留-1。Frame Timing Stats在非开发包须启用。窗口焦点、分辨率、设备/API、构建ID、VSync和帧率上限随结果记录；unfocusedFrames非0应单独分析，不把后台样本与前台样本混成优化收益。</p><p>固定测量每秒预留1000帧容量，超过容量明确失败，不截断。采样循环不排序、不写CSV/JSON、不录制Profiler；结果只在窗口外汇总。查询/面板本身有开销，需独立做开启与关闭对照。</p><h2>7. 接入职责与平台边界</h2><p>框架提供构建、运行时桥、进程身份、通用计数器与有界测量。项目负责存档隔离、真实业务造局、规则断言、UI/资源预算和正式流程清理。不要把项目GameFlow或81棋夹具搬进框架。</p><p>Player HTTP使用127.0.0.1、随机token与session；业务在主线程执行。Windows IL2CPP必须实包验证裁剪、中文参数、JSON、截图与跨场景注册，不把Mono/Editor成功当IL2CPP通过。Android需另验HTTP支持、安装启动和端口转发；WebGL没有此HttpListener通道。</p><p>真机验收必须使用真实图形Player，固定输入、画质与资源，分别报告开发包/非开发包、冷启动/稳态/热态、规则通过/性能预算。报告保留全部轮次、取消和失败原因。RevGame不生成ZIP、不导出Profiler录制或内存快照，机器证据放.codex/work。</p><h2>8. 本次接入发现的问题</h2><p>- 长AB构建的回执可能早于新心跳，连续计划下一步误判桥离线。RevClient现在对仍打开的编辑器有界等待最多15秒恢复心跳；等待不创建/重发工单，也不会另外启动batch Unity。 - BuildPipeline会保存临时PlayerSettings，finally恢复内存值后还需SaveAssets落盘。默认值可能序列化为显式字典项，语义与原设置一致。 - 字体导入器生成的Font.material与普通业务材质需要区别。校验只识别同一Font资产实际持有、使用GUI/Text Shader的材质；不能把Editor HideAndDontSave对象手工塞进Always Included。项目自定义材质仍须满足原Shader门禁。 - Unity 2022.3 Player的总批次原生标记可能名为Batches Count；采样器支持该明确别名，两种名字均缺失仍报N/A。 - RevGame实例关闭了AB自动首包复制，因此ab.build完成不等于资源已发布。Player构建前须由项目管线发布并核对StreamingAssets真实文件。 - 本机VS2026被Unity 2022.3.15f1c1识别为UNKNOWN。vswhere发现VC组件不等于IL2CPP可用；需要实际BuildReport成功才能验收。</p><p>Python自动化回归：CLI 32项、MCP 22项通过。运行时代码与构建适配通过工程外Unity程序集编译；独立包端到端记录在RevGame验收报告中，Mono结果不得替代IL2CPP、Android或长期热态验收。</p></article></main></body></html>
+}</pre>
+
+    <h3>判定清单：这 6 条全过才算真跑完</h3>
+    <div class="cheat">
+      <div><b>1 同一 runId</b>核对的是 begin 返回的那个，不是别的</div>
+      <div><b>2 status=completed</b>不是 cancelled，也不是还在 running</div>
+      <div><b>3 success=true</b>失败原因要去 errors 里找</div>
+      <div><b>4 frames&gt;0</b>一帧没采到等于没测</div>
+      <div><b>5 seconds 达标</b>实际时长达到请求值</div>
+      <div><b>6 errors=0 且 cancelled=false</b>最后再补业务负载与资源回收断言</div>
+    </div>
+
+    <div class="callout warn">
+      <span class="t">这只是"采样链路"示例，不是完整验收</span>
+      正式计划要在它<b>之前</b>接项目隔离与固定负载，在 <code>finally</code> 里接项目回首页 / 复位。
+      截图和 GIF 在<b>计时窗口之外</b>采集。
+    </div>
+  </section>
+
+  <section id="s6" class="reveal">
+    <h2><span class="num">六</span>指标怎么读</h2>
+    <p class="lead">每个数字都有明确口径，别自己发明算法。</p>
+
+    <h3>FPS</h3>
+    <div class="plain">
+      <span class="tag">口径</span>
+      <b>FPS = 窗口帧数 ÷ 墙钟秒。</b>
+      <p>同时保留 P50 / P95 / P99 / max，以及超过 <b>12.5ms / 16.67ms / 33.33ms</b> 的帧占比 —— 平均值好看不代表不卡。</p>
+    </div>
+
+    <div class="callout bad">
+      <span class="t">CPU、渲染线程、GPU 是并行的，不能相加</span>
+      也不要在整帧耗时里扣掉 <code>EditorLoop</code> 去算"真实 FPS"。那是两套东西。
+    </div>
+
+    <h3>渲染计数</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:30%">指标</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>Draw Calls / Total Batches / SetPass</td><td>来自 <code>ProfilerRecorder</code></td></tr>
+          <tr><td>三角形 / 顶点</td><td>同上；每项带 <code>available</code> / <code>value</code> / <code>unit</code></td></tr>
+          <tr><td>动态 / 静态合批 / Instancing 明细</td><td>Release 包里<b>可能不可用</b>，别当 0 看</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <span class="t">缺样本是 -1，不是 0</span>
+      0 是"采到了且真的为 0"，-1 是"没采到"。主 / 渲染线程的纳秒已换算成毫秒；内存字段单位是<b>字节</b>，且不是进程全部内存。
+    </div>
+
+    <div class="callout">
+      <span class="t">"GC Allocated In Frame = 0"要谨慎</span>
+      没有有效性探针时，这个 0 不能用来承诺"全局零 GC"。
+    </div>
+
+    <h3>GPU 数据</h3>
+    <div class="plain">
+      <span class="tag">规则</span>
+      只接收<b>新时间戳且值为正</b>的 FrameTiming，记录 <code>gpuSamples</code>；没有有效样本保持 <b>-1</b>。
+      非开发包必须启用 <b>Frame Timing Stats</b>（构建时 <code>--frame-timing</code> 就是干这个的）。
+    </div>
+
+    <h3>每次结果必须一起记的环境信息</h3>
+    <div class="cheat">
+      <div><b>构建身份</b>buildId、backend</div>
+      <div><b>设备与接口</b>设备 / 图形 API</div>
+      <div><b>显示</b>分辨率、窗口焦点</div>
+      <div><b>限制</b>VSync、帧率上限</div>
+      <div><b>失焦帧数</b>unfocusedFrames 非 0 必须单独分析</div>
+      <div><b>结论口径</b>后台样本不能混进前台样本当"优化收益"</div>
+    </div>
+
+    <h3>采样窗口的硬约束</h3>
+    <ul>
+      <li>固定测量每秒预留 <b>1000 帧</b>容量；超过容量<b>明确失败</b>，不截断。</li>
+      <li>采样循环内<b>不排序</b>、<b>不写 CSV / JSON</b>、<b>不录 Profiler</b>。</li>
+      <li>汇总只在窗口<b>之外</b>做，避免把统计开销算进被测帧。</li>
+    </ul>
+  </section>
+
+  <section id="s7" class="reveal">
+    <h2><span class="num">七</span>新手最容易踩的 6 个坑</h2>
+    <p class="lead">每一条都对应一个真实故障。</p>
+
+    <div class="callout bad">
+      <span class="t">1. 拿 Mono 或 Editor 的成绩当 IL2CPP 通过</span>
+      IL2CPP 会裁剪代码。实包必须验证：裁剪后功能还在、中文参数正常、JSON 能序列化、截图能出、跨场景注册没丢。<b>Windows IL2CPP 必须用真包验证</b>。
+    </div>
+
+    <div class="callout bad">
+      <span class="t">2. 在同一个输出目录反复打包</span>
+      覆盖旧包会被直接拒绝，重试也别删旧包（那可能是上一轮的证据）。<b>每次新建一个带日期序号的目录。</b>
+    </div>
+
+    <div class="callout warn">
+      <span class="t">3. 以为 begin 返回了就是测完了</span>
+      <code>begin</code> <b>只接受作业</b>。必须回到 <code>state</code> 核对同一个 <code>runId</code> 的状态与数据，再做业务断言。
+    </div>
+
+    <div class="callout warn">
+      <span class="t">4. 把 -1 当成 0，把"不可用"当成"没问题"</span>
+      缺样本是 <code>-1</code>；Release 包里部分合批明细本来就不可用。<b>报告里要写"无数据"，不能写"0"。</b>
+    </div>
+
+    <div class="callout warn">
+      <span class="t">5. 用 batchmode / nographics 测渲染性能</span>
+      这样测出来的不是真机画面。要用<b>真实图形 Player</b>，固定分辨率、画质、输入与资源。
+    </div>
+
+    <div class="callout bad">
+      <span class="t">6. 把 runtime.json 提交或贴进报告</span>
+      它含本机凭据（token / endpoint）。只放被忽略目录，未执行与失败的步骤照实记录，但凭据不外泄。
+    </div>
+  </section>
+
+  <section id="s8" class="reveal">
+    <h2><span class="num">八</span>谁负责什么 + 平台边界</h2>
+    <p class="lead">框架只做通用能力，业务的事别塞进来。</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:50%">框架负责</th><th>项目负责</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>
+              构建 · 运行时桥<br>
+              进程与会话身份<br>
+              通用计数器<br>
+              有界测量
+            </td>
+            <td>
+              存档隔离<br>
+              真实业务造局<br>
+              规则断言<br>
+              UI / 资源预算<br>
+              正式流程清理
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <span class="t">边界纪律</span>
+      不要把项目的 GameFlow 或 81 棋夹具搬进框架。框架给的是<b>管道</b>，不是某个项目的玩法。
+    </div>
+
+    <h3>平台边界</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:22%">平台</th><th>现状</th></tr></thead>
+        <tbody>
+          <tr><td><b>Windows x64</b></td><td>主战场。Player HTTP 走 <code>127.0.0.1</code> + 随机 token + session，业务在主线程执行</td></tr>
+          <tr><td><b>Android</b></td><td>需另验：HTTP 支持、安装启动、端口转发。<b>尚未验收</b></td></tr>
+          <tr><td><b>WebGL</b></td><td><b>没有</b>这条 HttpListener 通道，不适用</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>真机验收的最低要求</h3>
+    <ul>
+      <li>必须是<b>真实图形 Player</b>，固定输入、画质与资源。</li>
+      <li>开发包 / 非开发包分开报；冷启动 / 稳态 / 热态分开报；规则通过 / 性能预算分开报。</li>
+      <li>报告保留<b>全部轮次、取消和失败原因</b>，不许只留好看的那次。</li>
+      <li>RevGame 不生成 ZIP、不导出 Profiler 录制或内存快照；机器证据放 <code>.codex/work</code>。</li>
+    </ul>
+  </section>
+
+  <section id="s9" class="reveal">
+    <h2><span class="num">九</span>这次接入踩到的 6 个问题</h2>
+    <p class="lead">写在这不是为了记功，是为了你下次别再踩。</p>
+
+    <div class="card">
+      <div class="h">① 长 AB 构建后，回执比心跳先到</div>
+      <div class="when">症状：连续计划里下一步误判"桥离线"。</div>
+      <p style="margin:6px 0">现在 RevClient 对<b>仍打开的编辑器</b>做最多 15 秒的有界等待恢复心跳；等待期间不创建、不重发工单，也不会另起一个 batch Unity。</p>
+    </div>
+
+    <div class="card">
+      <div class="h">② 构建后设置只恢复在内存里</div>
+      <div class="when">症状：构建结束、Unity 一重启，PlayerSettings 又变回去了。</div>
+      <p style="margin:6px 0">BuildPipeline 会保存临时 PlayerSettings，<code>finally</code> 恢复内存值之后<b>还需要 SaveAssets 落盘</b>。默认值可能被序列化成显式字典项，语义与原设置一致。</p>
+    </div>
+
+    <div class="card">
+      <div class="h">③ 字体材质被误判</div>
+      <div class="when">症状：构建校验报错，或字体在包里变成方块。</div>
+      <p style="margin:6px 0">字体导入器生成的 <code>Font.material</code> 与普通业务材质要区别对待：校验只认<b>同一个 Font 资产实际持有、并使用 GUI/Text Shader</b> 的材质。不能把 Editor 里 <code>HideAndDontSave</code> 的对象手工塞进 Always Included；项目自定义材质仍须满足原 Shader 门禁。</p>
+    </div>
+
+    <div class="card">
+      <div class="h">④ 总批次计数器的名字不一样</div>
+      <div class="when">症状：采样里总批次一直 N/A。</div>
+      <p style="margin:6px 0">Unity 2022.3 Player 里原生标记可能叫 <code>Batches Count</code>。采样器支持这个明确别名；两种名字都缺失时仍然报 <b>N/A</b>（不会编一个数）。</p>
+    </div>
+
+    <div class="card">
+      <div class="h">⑤ ab.build 完成 ≠ 资源已发布</div>
+      <div class="when">症状：包构建成功，进游戏发现资源缺失。</div>
+      <p style="margin:6px 0">有些实例关掉了 AB 自动首包复制，所以 Player 构建前必须由项目管线<b>发布并核对 StreamingAssets 里的真实文件</b>。</p>
+    </div>
+
+    <div class="card">
+      <div class="h">⑥ VS2026 被识别成 UNKNOWN</div>
+      <div class="when">症状：vswhere 能看到 VC 组件，但 IL2CPP 编译失败。</div>
+      <p style="margin:6px 0">本机 VS2026 在 Unity 2022.3.15f1c1 下被识别为 <code>UNKNOWN</code>。<b>vswhere 发现 VC 组件不等于 IL2CPP 可用</b>，要真的 BuildReport 成功才算。</p>
+    </div>
+
+    <div class="callout good">
+      <span class="t">回归结果</span>
+      Python 自动化：<b>CLI 32 项、MCP 22 项通过</b>；运行时代码与构建适配通过工程外 Unity 程序集编译。
+      独立包端到端记录在 RevGame 验收报告中 —— <b>Mono 结果不得替代 IL2CPP、Android 或长期热态验收</b>。
+    </div>
+  </section>
+
+  <section id="s10" class="reveal">
+    <h2><span class="num">十</span>相关文档</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:38%">文档</th><th>什么时候看</th></tr></thead>
+        <tbody>
+          <tr><td>《Revolution 自动化工具 · 使用说明》</td><td>想知道 CLI / MCP 的整体分工与通用参数</td></tr>
+          <tr><td>《RevMCP 使用说明》</td><td>要自己接 MCP、配会话与报告目录</td></tr>
+          <tr><td>《AI 如何调用游戏 GM 指令 · 原理讲解》</td><td>不清楚 GM 完整名、参数 schema 从哪来</td></tr>
+          <tr><td>《RevMCP 架构解析》</td><td>想搞明白运行时桥为什么走"玩家同一业务入口"</td></tr>
+          <tr><td>《应用生命周期 · 使用说明》</td><td>Player 切后台 / 失焦会影响采样口径时</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+
+
+</main>
+
+<footer>
+  本模块位置：<code>Revolution.RevCLI</code>（构建 / 启动调度）+ <code>Revolution.RevMCP</code>（AI 调用面）+ 运行时自动化桥（<code>RevRuntimeAutomation</code>）。
+  版本：2026-10-31 · 适用 Unity 2022.3 / Windows x64。
+</footer>
+
+<script>
+(function(){
+  document.documentElement.classList.add('js');
+
+  /* 段落进入动画（尊重 reduced-motion；无 JS 时内容直接可见） */
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var items = document.querySelectorAll('.reveal');
+  if (reduce || !('IntersectionObserver' in window)) {
+    for (var i = 0; i < items.length; i++) items[i].classList.add('in');
+  } else {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.06 });
+    for (var j = 0; j < items.length; j++) io.observe(items[j]);
+  }
+
+  /* 代码块一键复制 */
+  var pres = document.querySelectorAll('pre');
+  for (var k = 0; k < pres.length; k++) {
+    (function(pre){
+      var btn = document.createElement('button');
+      btn.className = 'copy';
+      btn.type = 'button';
+      btn.textContent = '复制';
+      btn.addEventListener('click', function(){
+        var txt = (pre.querySelector('code') || pre).innerText;
+        var done = function(){
+          btn.textContent = '已复制';
+          btn.classList.add('ok');
+          setTimeout(function(){ btn.textContent = '复制'; btn.classList.remove('ok'); }, 1400);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(txt).then(done, function(){});
+        } else {
+          var ta = document.createElement('textarea');
+          ta.value = txt; document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); done(); } catch (e) {}
+          document.body.removeChild(ta);
+        }
+      });
+      pre.appendChild(btn);
+    })(pres[k]);
+  }
+})();
+</script>
+
+</body>
+</html>
