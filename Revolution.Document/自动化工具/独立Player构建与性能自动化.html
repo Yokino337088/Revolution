@@ -206,11 +206,11 @@ pre:hover .copy,.copy:focus-visible{opacity:1;}
       <p>编辑器里跑得快，<b>不代表真机不卡</b>。所以"打包 → 启动 → 采样 → 判定"被拆成下面几步，每步都能被脚本和 AI 直接调。</p>
 <pre><span class="c"># 1. 打一个性能测试包（IL2CPP、非开发包、带自动化开关）</span>
 py -3.13 Revolution.RevCLI/rev.py <span class="k">build player</span> --target StandaloneWindows64 \
-  --path D:/Builds/Game/<b>20261031-01</b>/Game.exe --backend il2cpp --automation --frame-timing
+  --path Builds/<b>20261031-01</b>/Game.exe --backend il2cpp --automation --frame-timing
 
 <span class="c"># 2. 启动它，并开一个 AI 能连进来的会话</span>
-py -3.13 Revolution.RevCLI/rev.py <span class="k">player launch</span> --executable D:/Builds/Game/20261031-01/Game.exe \
-  --directory D:/Evidence/Game/session-01 --port 18766
+py -3.13 Revolution.RevCLI/rev.py <span class="k">player launch</span> --executable Builds/20261031-01/Game.exe \
+  --directory Evidence/Game/session-01 --port 18766
 
 <span class="c"># 3. 让它采 10 秒帧数据，再按 runId 核对结果（见第五节）</span>
 <span class="c">#    runtime.performance.begin → state → cancel</span></pre>
@@ -252,27 +252,32 @@ py -3.13 Revolution.RevCLI/rev.py <span class="k">player launch</span> --executa
     <h2><span class="num">一</span>三步跑通（可粘贴）</h2>
     <p class="lead">Python 3.10+；已有编辑器用 live 模式，别开第二个 Unity 争用工程。</p>
 
+    <div class="plain">
+      <span class="tag">路径约定</span>
+      <b>示例里全是相对路径</b>（按你执行命令时的当前目录解析）：先在<b>工程根目录</b>下执行，产物目录、会话目录、证据目录都建在自己的工作目录里。换成你的目录即可 —— 文档不写死任何人的机器路径。
+    </div>
+
     <div class="card">
       <div class="h">第 1 步 · 打性能验收包</div>
       <div class="when">耗时可能几分钟，客户端 timeout 要给够（示例 3600 秒）。</div>
-<pre>py -3.13 Revolution.RevCLI/rev.py --project D:/Game --mode live --timeout 3600 \
+<pre>py -3.13 Revolution.RevCLI/rev.py --project . --mode live --timeout 3600 \
   build player --target StandaloneWindows64 \
-  --path D:/Builds/Game/20261031-01/Game.exe \
+  --path Builds/20261031-01/Game.exe \
   --backend il2cpp --automation --frame-timing</pre>
-      <div class="note">路径必须是<b>专用空目录下的完整路径</b>，每次换新的（<code>20261031-01</code> → <code>-02</code>）。</div>
+      <div class="note">路径要落到<b>每次新建的专用空目录</b>里（<code>20261031-01</code> → <code>-02</code>），别复用上一轮的目录。</div>
     </div>
 
     <div class="card">
       <div class="h">第 2 步 · 启动并开会话</div>
       <div class="when">会话目录也每次用新的空目录。</div>
 <pre>py -3.13 Revolution.RevCLI/rev.py player launch \
-  --executable D:/Builds/Game/20261031-01/Game.exe \
-  --directory D:/Evidence/Game/session-01 --port 18766
+  --executable Builds/20261031-01/Game.exe \
+  --directory Evidence/Game/session-01 --port 18766
 
 <span class="c"># 想让 AI（MCP）连进去，把会话的 runtime.json 指给 MCP 服务</span>
 py -3.13 Revolution.RevMCP/rev_mcp.py \
-  --runtime-endpoint D:/Evidence/Game/session-01/runtime.json \
-  --reports D:/Evidence/Game/mcp serve</pre>
+  --runtime-endpoint Evidence/Game/session-01/runtime.json \
+  --reports Evidence/Game/mcp serve</pre>
     </div>
 
     <div class="card">
@@ -367,7 +372,7 @@ py -3.13 Revolution.RevMCP/rev_mcp.py \
       <table>
         <thead><tr><th style="width:26%">参数</th><th>说明</th></tr></thead>
         <tbody>
-          <tr><td><code>--path</code></td><td>专用空目录下的<b>完整路径</b>（含文件名）。允许工程外目录</td></tr>
+          <tr><td><code>--path</code></td><td>专用空目录下的 exe 文件名（相对路径按当前目录解析，也可指向工程外目录）</td></tr>
           <tr><td><code>--backend</code></td><td><code>current</code> / <code>mono</code> / <code>il2cpp</code>；测性能一定要 <code>il2cpp</code></td></tr>
           <tr><td><code>--automation</code></td><td>本次构建加 <code>REV_AUTOMATION</code>，开自动化桥</td></tr>
           <tr><td><code>--frame-timing</code></td><td>开帧时序统计（非开发包想拿 GPU 数据必须开）</td></tr>
@@ -388,7 +393,7 @@ py -3.13 Revolution.RevMCP/rev_mcp.py \
   "action": "build.player",
   "arguments": {
     "target": "StandaloneWindows64",
-    "path": "D:/Builds/Game/20261031-01/Game.exe",
+    "path": "Builds/20261031-01/Game.exe",
     "backend": "il2cpp",
     "development": false,
     "automation": true,
@@ -428,14 +433,14 @@ py -3.13 Revolution.RevMCP/rev_mcp.py \
 
 <pre><span class="c"># 启动</span>
 py -3.13 Revolution.RevCLI/rev.py player launch \
-  --executable D:/Builds/Game/20261031-01/Game.exe \
-  --directory D:/Evidence/Game/session-01 --port 18766
+  --executable Builds/20261031-01/Game.exe \
+  --directory Evidence/Game/session-01 --port 18766
 
 <span class="c"># 看状态</span>
-py -3.13 Revolution.RevCLI/rev.py player status --directory D:/Evidence/Game/session-01
+py -3.13 Revolution.RevCLI/rev.py player status --directory Evidence/Game/session-01
 
 <span class="c"># 退出</span>
-py -3.13 Revolution.RevCLI/rev.py player stop --directory D:/Evidence/Game/session-01</pre>
+py -3.13 Revolution.RevCLI/rev.py player stop --directory Evidence/Game/session-01</pre>
 
     <div class="table-wrap">
       <table>
