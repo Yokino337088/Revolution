@@ -65,7 +65,7 @@ intent 只用于说明，不进入业务 arguments，不改变权限，也不会
 
 Agent 请求、Unity Editor 实际执行、游戏运行时、GM、外部 CLI、计划断言分别显示。一次跨层调用可能出现数条相关记录，这是同一次请求的不同执行层；每层自己的开始与完成使用同一 id 合并。HTTP 接单、单条调用成功和计划断言通过是不同结果。
 
-界面每 250ms 读取增量文件，最多显示最近 500 条。日志在 `Library/RevolutionAutomation/activity`，Python 和 Unity 使用不同文件，不会竞争写同一个流。每个流最多保留四个约 2MiB 的分段；窗口只读最近 64 个流文件。旧进程留下的文件可以在证据不再需要时自行清理。常见 token、password、Authorization 等字段和截图 base64 不进入日志摘要；业务私密内容仍应避免放进自由文本。
+界面每 250ms 检查增量文件，最多显示最近 500 条；无变化时不主动持续 Repaint。整次刷新共享 256KiB / 128 行读取预算，积压分批处理；标题、用途、搜索文本与行高缓存，只绘制视口内控件，OnGUI 不读磁盘。详见 [提速与活动窗口优化](RevMCP提速与活动窗口优化使用说明.html)。日志在 `Library/RevolutionAutomation/activity`，Python 和 Unity 使用不同文件，不会竞争写同一个流。每个流最多保留四个约 2MiB 的分段；窗口只读最近 64 个流文件。旧进程留下的文件可以在证据不再需要时自行清理。常见 token、password、Authorization 等字段和截图 base64 不进入日志摘要；业务私密内容仍应避免放进自由文本。
 
 脚本重载或重新打开窗口后重新读取本地账本。纯独立 Player 的 Unity 日志在 persistentDataPath 的 RevolutionAutomation/activity；MCP 使用 `--project` 时 Agent 调用记录会同时落入该工程的活动目录。Unity 窗口不主动扫描任意远程设备的文件。
 
@@ -76,7 +76,7 @@ python Revolution.RevCLI/rev.py --project <工程绝对路径> --mode live call 
 python Revolution.RevMCP/rev_mcp.py --project <工程绝对路径> call editor editor.status --intent "确认本工程编译完毕"
 ```
 
-`editor.activity` 返回 entries 和 summaries（中文 operation、purpose、agentIntent）。窗口自刷新不通过 MCP，所以不会出现“查看日志又不断生成查看日志”的循环。
+`editor.activity` 返回 entries 和 summaries（中文 operation、purpose、agentIntent），另返回 `pending`、`totalIsFinal`、`invalidLines`、`polls` 和 `scope`。诊断复用读取进度，单次最多补齐 8 批，批次间检查 20ms 软预算（不含筛选/摘要，不是主线程硬期限）；每批仍最多 256KiB / 128 行。`pending=true` 时有预算积压，只读重查会继续原游标；不得把当前 total 当完整数量。`totalIsFinal=true` 只表示本次观察的受限视图已无预算积压且未记录读取错误，不代表全部历史或写入器已停止：最多最近 64 流、每个新流尾部 256KiB、最近 500 条，半行/无效行不计入总数。分页是当前实时视图，不承诺跨调用稳定快照。窗口自刷新不通过 MCP，所以不会出现“查看日志又不断生成查看日志”的循环。
 
 ## 4. 连接设置更简单了
 

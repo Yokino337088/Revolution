@@ -65,6 +65,7 @@ namespace Revolution.Editor
         public int protocol = 1;
         public int pid;
         public string sessionId;
+        public string domainId;
         public string project;
         public string unityVersion;
         public double heartbeatUnix;

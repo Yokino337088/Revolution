@@ -21,6 +21,8 @@ namespace Revolution.Editor
         public string target, mode = "Single", text;
         public int offset, limit = 200, index, port = 18766;
         public string runtimeAction, argumentsJson;
+        public string space = "local";
+        public float[] position, eulerAngles, localScale;
         public bool additive, includeInactive = true, worldPositionStays = true;
         public bool submit, development;
         public string[] folders, testNames, categories, assemblies;

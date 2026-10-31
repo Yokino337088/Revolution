@@ -11,6 +11,18 @@
 
 ## [未发布]
 
+### RevMCP 调用链与活动窗口性能（2026-10-31）
+
+- 普通 Editor 调用不再反复发现运行时；能力说明短缓存（最多2秒，session/domainId/Play/暂停/编译/导入键约束，变更/失败失效），业务结果每次真实执行。Session保留跨重载工单，新增可选domainId绑定程序集代际，协议1兼容。CLI心跳原子替换短重读，稳定屏障按域代际重新计时；CLI会话操作不再绕行Unity。
+- 通用Unity增量：transform.get/set、gameobject.primitive、shader.list、material.inspect/create/clone/set；完整参数预检、Undo/Prefab override、源GUID和目标不覆盖契约。Shader目录区分supported与findable，编辑器私有可见名不可解析时明确拒绝。
+- 最终回归：CLI47项/MCP36项、真实隔离图形Unity编译无错误和EditMode101项通过；收尾补取消提交/65流清空/筛选详情回归，独立Unity Test Runner102项通过；紧凑模式真实stdio新动作10步+2清理通过。活动窗口500条日志真实截图及10帧GIF；窗口关/开各20次stdio median117.7ms/110.8ms，未测整帧GUI耗时与设备FPS，不作全功能等价承诺。
+- Runtime 工单读取5/20/50ms自适应退让，提交前检查取消；只查询同一ID，失败不重放POST。
+- 可选 `--compact-tools` 只暴露三个稳定MCP工具；`rev_discover`增加target/query/offset/limit，空参数保持完整兼容目录。
+- 普通查询保留JSON/活动日志，测试计划与本次截图按工单隔离生成HTML，避免扫描历史图像和覆盖旧报告。
+- 活动窗口每Poll共享256KiB/128行预算，复用缓冲与时间索引；缓存说明、筛选和行高，虚拟化视口控件，无变化不主动持续Repaint，OnGUI不读日志磁盘。
+- 补齐editor.activity诊断：复用游标，每次最多8批并在批间检查20ms软预算；返回pending/totalIsFinal/invalidLines/polls/scope。total仅当前受限视图，无积压不代表全历史，半行不计数，分页不承诺跨调用快照；避免首批128行被当完整总数。补充真实Unity106/106、Python CLI47/MCP36通过；未重测本次图形或耗时。
+- 同一真实RevGame编辑器，Server.call→Unity只读12次：mean1465.0ms→354.3ms、median1240.8ms→190.3ms；原底层客户端mean200.1ms。真实stdio另测20次mean475.6ms/median278.2ms，无同层改前stdio基线，不计算其加速倍数；不代表游戏或目标设备FPS。最终验证与能力增量见本轮HTML记录。
+
 ### 测试报告命名与版式（2026-10-26）
 
 - 报告不再统一叫 `report.html`：改为 `<中文标题>_<YYYY-MM-DD>.html`，日期取数据产生当天，非法文件名字符替换为 `-`。新增 `revautomation/report.py::report_file_name`，`evidence`、`capture --report`、`run --report` 与 RevMCP 自动证据全部走它。

@@ -2,6 +2,8 @@
 
 Python 3.10+ 标准库 CLI，通过 Unity 主线程桥调用编辑器、GM 和测试。新增场景/对象/组件/资产/Importer/Prefab/项目设置、Console/编译、Test Runner、Player 构建、运行时 UI/截图，以及流程引用、断言、有界轮询和 finally 清理。
 
+2026-10-31 增量：`transform.get/set`、`gameobject.primitive`、`shader.list`、`material.inspect/create/clone/set`，完整参数预检、Undo/Prefab与GUID约束；MCP按需发现与紧凑目录，活动窗口预算/缓存/虚拟化。日常先让AI通过常驻MCP操作，CLI用于AI执行、CI和排障。新教程：[通用Unity扩展](../Revolution.Document/自动化工具/RevCLI与RevMCP通用Unity扩展使用说明.html)、[提速与窗口](../Revolution.Document/自动化工具/RevMCP提速与活动窗口优化使用说明.html)；Skill：`Skills/revolution-unity-editor/`。
+
 > **关于名字**：本目录原名 `Revolution.Automation`，因为"automation"容易和游戏内的自动化玩法混在一起，现改名为 `Revolution.RevCLI`。
 > 目录、文档、工作流和参数（`--cli-root`）都已同步；Python 包名仍是 `revautomation`，那是内部 import 名，不影响对外使用。
 > 发布分支沿用 `automation` 名称，避免已经克隆过的人失效。

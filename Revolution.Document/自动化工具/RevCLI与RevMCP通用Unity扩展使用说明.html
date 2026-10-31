@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RevCLI 与 RevMCP 通用 Unity 扩展 · 使用说明</title>
+<style>
+/* Revolution 公共内联样式，沿用 Revolution.RevCLI/README.html。 */
+:root{--accent:#2F6FED;--accent-soft:#EAF1FE;--page:#F4F6F9;--panel:#FFFFFF;--border:#E3E7ED;--text:#1F2329;--text-sub:#6B7280;--good:#12A150;--good-soft:#E8F8EF;--warn:#B7791F;--warn-soft:#FDF6E3;--bad:#D93F31;--bad-soft:#FDECEA;--code-bg:#1E2430;--code-fg:#D7DEEA;--radius:10px;}
+*{box-sizing:border-box;}html{scroll-behavior:smooth;}body{margin:0;background:var(--page);color:var(--text);font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC","Segoe UI",system-ui,sans-serif;font-size:15.5px;line-height:1.85;-webkit-font-smoothing:antialiased;}
+.hero{background:linear-gradient(135deg,#2F6FED 0%,#4A84F5 55%,#6E9BFF 100%);color:#fff;padding:46px 24px 40px;position:relative;overflow:hidden;}.hero .wrap{max-width:1000px;margin:0 auto;position:relative;z-index:2;}.hero .kicker{display:inline-block;font-size:12px;letter-spacing:.12em;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:3px 12px;margin-bottom:14px;}.hero h1{margin:0 0 12px;font-size:31px;line-height:1.35;font-weight:700;}.hero p{margin:6px 0 0;color:rgba(255,255,255,.94);font-size:14.5px;}.hero code{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.35);color:#fff;}.hero .meta{margin-top:16px;font-size:13px;color:rgba(255,255,255,.85);}.hero .deco{position:absolute;left:0;right:0;bottom:0;height:3px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.85) 0 26px,transparent 26px 52px);animation:march 1.1s linear infinite;opacity:.75;z-index:1;}
+main{max-width:1000px;margin:0 auto;padding:26px 24px 70px;}section{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:26px 28px;margin-bottom:20px;}h2{font-size:21px;margin:0 0 6px;display:flex;align-items:center;gap:10px;}h2 .num{flex:0 0 auto;min-width:30px;height:30px;line-height:30px;text-align:center;border-radius:9px;background:var(--accent);color:#fff;font-size:14px;font-weight:700;padding:0 8px;}h2+.lead{color:var(--text-sub);font-size:14px;margin:0 0 20px;padding-bottom:14px;border-bottom:1px solid var(--border);}h3{font-size:17px;margin:28px 0 10px;}h3:first-of-type{margin-top:6px;}h4{font-size:15px;margin:20px 0 8px;color:#2B3444;}p{margin:10px 0;}ul,ol{margin:10px 0;padding-left:24px;}li{margin:6px 0;}a{color:var(--accent);text-decoration:none;}a:hover{text-decoration:underline;}code{font-family:"Cascadia Mono",Consolas,"Courier New",monospace;font-size:13px;background:#EEF2F8;border:1px solid #E1E7F0;border-radius:4px;padding:1px 5px;color:#22304A;}
+.toc{background:#FBFCFE;}.toc ol{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:4px 22px;}.toc a{display:block;padding:6px 10px;border-radius:6px;color:var(--text);font-size:14px;}.toc a:hover{background:var(--accent-soft);color:var(--accent);text-decoration:none;}.table-wrap{overflow-x:auto;margin:14px 0;}table{border-collapse:collapse;width:100%;font-size:13.5px;}th,td{border:1px solid var(--border);padding:10px 12px;text-align:left;vertical-align:top;}thead th{background:#F3F6FB;font-weight:700;}tbody tr:nth-child(even){background:#FAFBFD;}tbody tr:hover{background:#F1F6FF;}td.c,th.c{text-align:center;white-space:nowrap;}
+.plain{border-radius:10px;padding:14px 16px;margin:14px 0;font-size:14.5px;background:#F7F9FC;border:1px solid #E4E9F2;}.plain .tag{display:inline-block;font-size:11.5px;background:#5B6B84;color:#fff;border-radius:999px;padding:1px 9px;margin-right:8px;vertical-align:2px;}.plain p:first-child{margin-top:0;}.plain p:last-child{margin-bottom:0;}.callout{border-radius:8px;padding:14px 16px;margin:14px 0;font-size:14.5px;border-left:4px solid var(--accent);background:var(--accent-soft);}.callout.good{border-left-color:var(--good);background:var(--good-soft);}.callout.warn{border-left-color:var(--warn);background:var(--warn-soft);}.callout.bad{border-left-color:var(--bad);background:var(--bad-soft);}.callout p:first-child{margin-top:0;}.callout p:last-child{margin-bottom:0;}.callout .t{font-weight:700;display:block;margin-bottom:4px;}
+pre{background:var(--code-bg);color:var(--code-fg);border-radius:8px;padding:15px 17px;overflow-x:auto;font-family:"Cascadia Mono",Consolas,"Courier New",monospace;font-size:12.5px;line-height:1.7;margin:14px 0;}pre .c{color:#7D8CA6;}pre .k{color:#8FB8FF;}pre .s{color:#A5D6A7;}pre .n{color:#FFB86C;}pre b{color:#FFD479;font-weight:700;}.card{border:1px solid var(--border);border-radius:10px;background:#FBFCFE;padding:16px 18px;margin:16px 0;}.card>.h{font-weight:700;font-size:15.5px;margin-bottom:4px;}.card>.when{font-size:13.5px;color:var(--text-sub);margin-bottom:10px;}.card pre{margin:10px 0;}.card .note{font-size:13px;color:var(--text-sub);margin-top:8px;}.cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0;}.cmp>div{border-radius:9px;padding:12px 14px;font-size:13.5px;border:1px solid;}.cmp .no{background:var(--bad-soft);border-color:#F3C9C3;}.cmp .yes{background:var(--good-soft);border-color:#BFE9D2;}.cmp .h{font-weight:700;margin-bottom:6px;}.cmp pre{margin:6px 0 0;font-size:12px;}.flow{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:16px 0;}.flow .n{border:1.5px solid var(--border);background:#fff;border-radius:8px;padding:7px 12px;font-size:13px;}.flow .n.on{border-color:var(--accent);background:var(--accent-soft);}.flow .n.wait{border-color:#EBCF8A;background:var(--warn-soft);}.flow .ar{color:var(--accent);font-weight:700;}.cheat{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;margin:14px 0;}.cheat div{border:1px solid var(--border);border-radius:8px;background:#fff;padding:9px 12px;font-size:13px;}.cheat div b{display:block;font-size:12.5px;color:var(--text-sub);font-weight:400;margin-bottom:2px;}footer{max-width:1000px;margin:0 auto;padding:0 24px 60px;color:var(--text-sub);font-size:13px;}
+@keyframes march{to{background-position:28px 0;}}@media(max-width:760px){.hero h1{font-size:23px;}section{padding:18px 16px;}.cmp{grid-template-columns:1fr;}}@media(prefers-reduced-motion:reduce){.hero .deco{animation:none!important;}html{scroll-behavior:auto;}}@media print{body{background:#fff;font-size:12px;}.hero{background:#fff;color:#000;border-bottom:2px solid #000;}.hero .kicker,.hero .meta{color:#333;}section{break-inside:avoid;border:0;padding:0;margin-bottom:20px;}pre{background:#F5F5F5;color:#000;border:1px solid #CCC;}.toc{display:none;}}
+</style></head><body>
+<header class="hero"><div class="wrap"><span class="kicker">REVOLUTION · UNITY EDITOR</span><h1>RevCLI 与 RevMCP 通用 Unity 扩展</h1><p>让 AI 搭场景、调变换、查 Shader、改材质；同一真实入口，同一参数契约。</p><p class="meta">2026-10-31 · Unity 2022.3 · 相对路径示例 · 检查后修改，再读回验证</p></div><div class="deco"></div></header>
+<main><nav class="toc"><ol><li><a href="#s0">〇　先用一句话</a></li><li><a href="#s1">一　现有与新增能力</a></li><li><a href="#s2">二　原始体与三维变换</a></li><li><a href="#s3">三　Shader 和材质</a></li><li><a href="#s4">四　AI 正确操作流程</a></li><li><a href="#s5">五　CLI、MCP 与 Skill</a></li><li><a href="#s6">六　参考工具与边界</a></li></ol></nav>
+<section id="s0"><h2><span class="num">〇</span>先用一句话</h2><p class="lead">先配常驻 RevMCP，让 AI 查询真实接口；CLI 命令是 AI/CI 参考，不是新手作业。</p>
+<div class="plain"><span class="tag">搭建场景</span>“在指定场景里创建 Cube，设置世界位置和局部缩放，读回确认正确。不要覆盖我的场景，临时对象做完清理。”</div>
+<div class="plain"><span class="tag">调整材质</span>“查这份材质真实 Shader 属性，克隆一份再改颜色；保留原件和 GUID，给我读回结果及实际画面。不存在的属性请明确报错。”</div>
+<p>这两件事都走 Unity 正常 API、Undo/Prefab 规则与资产保存链，不是改 YAML，也不是让 AI 随意执行 C#。</p></section>
+<section id="s1"><h2><span class="num">一</span>现有与新增能力</h2><p class="lead">不是推倒旧工具。原有编辑器、游戏、资源与测试入口保留，再补高频缺项。</p>
+<div class="table-wrap"><table><thead><tr><th>领域</th><th>覆盖</th><th>本轮变化</th></tr></thead><tbody>
+<tr><td>场景 / 层级</td><td>list/open/new/save/close/active/hierarchy</td><td>保留，未保存内容保护不变。</td></tr>
+<tr><td>对象 / 组件</td><td>查找、创建、复制、父子关系、序列化读写、类型发现、增删组件</td><td>新增 <code>gameobject.primitive</code>、<code>transform.get/set</code>。</td></tr>
+<tr><td>资产 / Importer / Prefab</td><td>资产查询、创建、复制、移动、删除、导入配置；Prefab 创建、实例化、读写</td><td>保留 GUID、序列化与目标不覆盖约束。</td></tr>
+<tr><td>Shader / 材质</td><td>真实 Shader 发现与材质类型化属性操作</td><td>新增 <code>shader.list</code>、<code>material.inspect/create/clone/set</code>。</td></tr>
+<tr><td>设置 / Console / 测试 / 构建</td><td>项目设置、编译诊断、Test Runner、平台切换、Player 构建</td><td>保留最终结果、零测试失败、真实 BuildReport。</td></tr>
+<tr><td>游戏 / GM / UI / 性能</td><td>本局注册、EventSystem UI、截图、断言、清理、Player 会话与采样</td><td>沿用原链；本轮不是玩法或目标设备性能升级。</td></tr>
+<tr><td>AI 工具层</td><td>统一发现/调用/计划、显式外部 CLI</td><td>短能力缓存、按需目录与紧凑模式；活动窗口虚拟化。</td></tr>
+</tbody></table></div><p>新增动作先由 Unity 注册，CLI 清单与参数类型同步，MCP 自动暴露。清单存在不等于旧编辑器已安装；以目标工程的实时 capabilities 为准。</p></section>
+<section id="s2"><h2><span class="num">二</span>原始体与三维变换</h2><p class="lead">不再让 AI 猜 m_LocalPosition 等序列化字段，直接表达 Unity 坐标语义。</p>
+<div class="table-wrap"><table><thead><tr><th>动作</th><th>参数</th><th>结果 / 拒绝边界</th></tr></thead><tbody>
+<tr><td>gameobject.primitive</td><td>type、name；可选 parent、scene</td><td>Cube/Sphere/Capsule/Cylinder/Plane/Quad 六种公开名称；真实 Mesh/Renderer/Collider、Undo。父节点与场景不一致、非法类型或缺名字先拒绝。</td></tr>
+<tr><td>transform.get</td><td>id 或 objectPath；可选 scene</td><td>世界/局部位置、Euler、Quaternion、局部缩放、lossyScale、父节点和目标身份。</td></tr>
+<tr><td>transform.set</td><td>id/objectPath/scene、space、position、eulerAngles、localScale</td><td>space=local/world；position/eulerAngles 三项有限数字；localScale 始终局部。所有参数预检，支持 Undo、Prefab override 和场景 dirty。</td></tr>
+</tbody></table></div>
+<pre>{
+  "target": "editor",
+  "action": "gameobject.primitive",
+  "arguments": {"type": "Cube", "name": "PreviewCube"}
+}</pre>
+<pre>{
+  "target": "editor",
+  "action": "transform.set",
+  "arguments": {
+    "id": "&lt;创建结果里的当次ID&gt;",
+    "space": "world",
+    "position": [1, 2, 3],
+    "eulerAngles": [0, 45, 0],
+    "localScale": [1, 1, 1]
+  }
+}</pre>
+<div class="callout warn"><span class="t">局部缩放不等于世界缩放</span>父节点有缩放时，世界位置需逆变换。零缩放父节点不可逆，直接拒绝；不靠写出 NaN 或“看起来差不多”完成操作。单次参数中有坏字段，不能先改其它字段。</div>
+<p>根 Prefab 实例 Transform 的位置/旋转是 Unity 的默认 override。验收时要按该语义检查实际 PropertyModifications；排除默认 override 的查询不能证明修改没被记录。Undo 支持对象变换，但不代表磁盘资产创建可以撤销。</p></section>
+<section id="s3"><h2><span class="num">三</span>Shader 和材质</h2><p class="lead">先查声明，再按类型改。错误拼写、错误纹理或未知关键字不能把材质改到一半。</p>
+<div class="table-wrap"><table><thead><tr><th>动作</th><th>参数</th><th>用途</th></tr></thead><tbody>
+<tr><td>shader.list</td><td>query、offset、limit（1..500）</td><td>查询资产与当前已加载 Shader 名、路径、supported 与 findable。创建/切换材质选 findable=true；可见的编辑器私有名称不一定能被 Shader.Find 解析，不声称列全未加载内置 Shader。</td></tr>
+<tr><td>material.inspect</td><td>path</td><td>Shader、类型化属性、关键字、renderQueue；只读 Assets/Packages 中现存 .mat。</td></tr>
+<tr><td>material.create</td><td>path、shader</td><td>按真实 Shader 名创建新的 .mat；父目录需存在，不覆盖。</td></tr>
+<tr><td>material.clone</td><td>path、destination</td><td>克隆到新 .mat，源资产与其 GUID 不变，不覆盖目标。</td></tr>
+<tr><td>material.set</td><td>path；可选 shader、properties、renderQueue、enableKeywords、disableKeywords</td><td>候选材质完整预检后修改原件并保存，支持 Undo，空修改拒绝。</td></tr>
+</tbody></table></div>
+<div class="cheat"><div><b>Float / Range</b>有限数字，Single 范围</div><div><b>Int</b>Int32 整数，不接受小数或 bool</div><div><b>Color / Vector</b>四项有限数字数组</div><div><b>Texture</b>资产路径或 null，纹理维度须匹配</div></div>
+<pre>{
+  "target": "editor",
+  "action": "material.set",
+  "arguments": {
+    "path": "Assets/Materials/Preview.mat",
+    "properties": {"_Color": [0.2, 0.6, 1.0, 1.0]},
+    "renderQueue": -1
+  }
+}</pre><p>例子只适用于声明了 <code>_Color</code> 的 Shader。实际属性名从 inspect 读取。renderQueue 为 -1..5000，-1 继承 Shader；关键字必须存在于该 Shader 的局部 keywordSpace，同一关键字不能同时启用和禁用。</p>
+<div class="cmp"><div class="no"><div class="h">不正确</div>逐个改源材质 → 最后才发现纹理类型错误 → 源件已部分污染；用 Renderer.material 无意克隆一堆材质。</div><div class="yes"><div class="h">当前做法</div>所有试写在候选副本 → 预检名称、类型、维度、关键字、队列及输出预算 → 一次提交源件 → 保存并读回。</div></div>
+<p>材质创建/克隆是磁盘资产操作，不承诺 Undo；临时资产应通过已授权的 asset.delete 清理。Shader.isSupported 与属性读回不能替代目标平台编译或真实画面验证。</p></section>
+<section id="s4"><h2><span class="num">四</span>AI 正确操作流程</h2><p class="lead">省往返，不省身份、权限和后置验证。</p>
+<div class="flow"><span class="n on">记录现场</span><span class="ar">→</span><span class="n">发现接口</span><span class="ar">→</span><span class="n">查询预检</span><span class="ar">→</span><span class="n">受控修改</span><span class="ar">→</span><span class="n">读回 / 清理</span></div>
+<ol><li>明确 --project；记录 scene.list、dirty、Play、选择。不替换未保存场景，不改用户包源/编辑器版本。</li><li>新版 rev_discover 支持 target/query/offset/limit，旧版使用空参数。每次返回的对象 ID 有会话寿命，重载后重新查。</li><li>先 get/inspect 判断目标、类型、属性和可写性，再用精确参数操作。资产用相对 Assets 路径，禁止越界、目录链接写入和已有目标覆盖。</li><li>同步步骤可 batch；编译、Play、构建、测试及运行时跨帧保留顺序计划等待。失败不重放变更。</li><li>读回值、数量、身份、GUID、保存状态；实际测试加断言和 finally。临时件清理，永久编辑保留。</li><li>视觉要求交真实截图/动态 GIF。纯规则测试明确视觉未执行，不能把 transform.set 成功写成“画面正确”。</li></ol></section>
+<section id="s5"><h2><span class="num">五</span>CLI、MCP 与 Skill</h2><p class="lead">同一 Unity 入口可以由 CLI 与 MCP 调用，复杂参数优先 JSON，别让 shell 改坏中文或数组。</p>
+<p>从仓库根目录，供 AI/CI 使用：</p>
+<pre>python Revolution.RevCLI/rev.py --project RevolutionFrameWork_Unity --mode live call transform.set --json transform.json
+python Revolution.RevMCP/rev_mcp.py --project RevolutionFrameWork_Unity call editor material.inspect --json material.json
+python Revolution.RevMCP/rev_mcp.py --project RevolutionFrameWork_Unity --compact-tools serve</pre>
+<p>参数文件就是对应动作的 arguments 对象，不包外层 target/action。MCP 调用则使用上面的完整对象。</p>
+<p>新增框架 Skill：<code>Skills/revolution-unity-editor/</code>。复制完整目录到项目 Agent 的 skills 目录，例如 <code>.codebuddy/skills/</code> 或 <code>.codex/skills/</code>。<b>它负责通用编辑器操作</b>；玩法架构继续用 revolution-framework，游戏业务测试用 revolution-ai-automation，性能归因用 revolution-performance。</p>
+<p>Skill 包含按任务选动作、三维对象与材质配方、Prefab 默认 override、按需发现和少往返、Undo/清理及边界。不安装参考工具的二进制，不改用户 Agent 的认证配置。</p></section>
+<section id="s6"><h2><span class="num">六</span>参考工具与边界</h2><p class="lead">参考强项是明确命令、可组合批量、工作流技能和广泛编辑器覆盖；这里采用设计思路，不整包复制。</p>
+<p>本轮保留现有业务测试、AB/导表、运行时与 Player 能力，并补三维对象和材质/Shader两个高频操作域。没有为了“看起来一样强大”开放任意 C# 或 shell 执行，也没有把未验证功能写成完成。</p>
+<div class="table-wrap"><table><thead><tr><th>状态</th><th>领域</th></tr></thead><tbody><tr><td>现有覆盖</td><td>场景、对象/组件、资产/Importer、Prefab、设置、Console、测试、构建、UGUI、GM、Player。</td></tr><tr><td>本轮新增</td><td>原始体、local/world变换；Shader发现、材质读取/创建/克隆/类型化修改；低延迟目录与窗口优化。</td></tr><tr><td>未扩展/未宣称等价</td><td>任意脚本执行、Terrain/Tilemap、动画/Timeline编辑器、第三方插件全集、Android设备控制等。</td></tr><tr><td>验收边界</td><td>Python回归、Unity编译/Test Runner、实际MCP与窗口采样分别报告；属性与规则通过不等于全部场景画面或目标设备通过。</td></tr></tbody></table></div>
+<p>最终覆盖、首次失败与修正见 <a href="验证记录/RevMCP提速与Unity扩展验证_2026-10-31.html">本轮验证记录</a>。调用速度与窗口使用方式见 <a href="RevMCP提速与活动窗口优化使用说明.html">提速与活动窗口优化</a>；完整基础接口见 <a href="Revolution自动化工具使用说明.html">自动化工具使用说明</a>。</p></section>
+</main><footer>Revolution · 2026-10-31 · <a href="../index.html">文档总入口</a></footer></body></html>

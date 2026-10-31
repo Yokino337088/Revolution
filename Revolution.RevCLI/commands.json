@@ -728,6 +728,27 @@
       "environment": "edit"
     },
     {
+      "id": "gameobject.primitive",
+      "keys": ["type", "name", "parent", "scene"],
+      "description": "创建 Cube/Sphere/Capsule/Cylinder/Plane/Quad 原始体，保留网格、Collider 和 Undo",
+      "environment": "edit",
+      "readOnly": false
+    },
+    {
+      "id": "transform.get",
+      "keys": ["id", "objectPath", "scene"],
+      "description": "读取对象的世界与局部位置、旋转、缩放和父节点身份",
+      "environment": "either",
+      "readOnly": true
+    },
+    {
+      "id": "transform.set",
+      "keys": ["id", "objectPath", "scene", "space", "position", "eulerAngles", "localScale"],
+      "description": "修改三维变换并支持 Undo；space 为 local/world，localScale 始终是局部缩放",
+      "environment": "edit",
+      "readOnly": false
+    },
+    {
       "id": "gameobject.inspect",
       "keys": [
         "id",
@@ -947,6 +968,41 @@
       ],
       "description": "创建指定 ScriptableObject 类型的 .asset",
       "environment": "edit"
+    },
+    {
+      "id": "shader.list",
+      "keys": ["query", "offset", "limit"],
+      "description": "分页查询资产与当前已加载 Shader 的真实名称、路径和支持状态，不宣称列全未加载内置 Shader",
+      "environment": "either",
+      "readOnly": true
+    },
+    {
+      "id": "material.create",
+      "keys": ["path", "shader"],
+      "description": "按真实 Shader 名创建新 .mat；拒绝覆盖，磁盘资产创建不属于 Undo",
+      "environment": "edit",
+      "readOnly": false
+    },
+    {
+      "id": "material.inspect",
+      "keys": ["path"],
+      "description": "读取材质 Shader 声明的属性名、类型与当前值、关键字和渲染队列",
+      "environment": "either",
+      "readOnly": true
+    },
+    {
+      "id": "material.set",
+      "keys": ["path", "shader", "properties", "renderQueue", "enableKeywords", "disableKeywords"],
+      "description": "完整预检后修改材质 Shader 属性、关键字与队列，支持 Undo；properties 为名称到 typed 值的对象",
+      "environment": "edit",
+      "readOnly": false
+    },
+    {
+      "id": "material.clone",
+      "keys": ["path", "destination"],
+      "description": "克隆材质到新 .mat，保留源与其 GUID、拒绝覆盖；磁盘资产创建不属于 Undo",
+      "environment": "edit",
+      "readOnly": false
     },
     {
       "id": "asset.importer",
@@ -1206,6 +1262,15 @@
     "type": "string",
     "name": "string",
     "parent": "string",
+    "space": "string",
+    "position": "array",
+    "eulerAngles": "array",
+    "localScale": "array",
+    "shader": "string",
+    "properties": "object",
+    "renderQueue": "int",
+    "enableKeywords": "string[]",
+    "disableKeywords": "string[]",
     "property": "string",
     "value": "string",
     "severity": "string",

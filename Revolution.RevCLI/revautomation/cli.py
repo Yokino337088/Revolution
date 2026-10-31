@@ -240,6 +240,95 @@ def validate_action(action, payload, allow_refs=False):
                 required = {"property", "value"} if key == "changes" else {"path"}
                 if required - set(item):
                     raise RevError(f"{key} 元素缺少 {sorted(required - set(item))}。")
+    def unresolved(value):
+        if allow_refs and isinstance(value, dict) and "$ref" in value:
+            list(pipelines.references(value))
+            return True
+        return False
+    if action == "transform.set":
+        if not any(key in payload for key in ("position", "eulerAngles", "localScale")):
+            raise RevError("transform.set 需要 position、eulerAngles 或 localScale 至少一项。")
+        space = payload.get("space", "local")
+        if not unresolved(space) and space not in ("local", "world"):
+            raise RevError("space 必须为 local 或 world。")
+        for key in ("position", "eulerAngles", "localScale"):
+            if key not in payload or unresolved(payload[key]):
+                continue
+            vector = payload[key]
+            if not isinstance(vector, list) or len(vector) != 3:
+                raise RevError(f"{key} 必须是三个有限数字组成的数组。")
+            for coordinate in vector:
+                if unresolved(coordinate):
+                    continue
+                if type(coordinate) not in (int, float) or abs(coordinate) > 3.4028234663852886e38 or not math.isfinite(coordinate):
+                    raise RevError(f"{key} 必须为 Single 范围内的有限数字。")
+    if action == "gameobject.primitive":
+        primitive = payload.get("type")
+        if not unresolved(primitive) and primitive not in ("Cube", "Sphere", "Capsule", "Cylinder", "Plane", "Quad"):
+            raise RevError("type 必须为 Cube/Sphere/Capsule/Cylinder/Plane/Quad。")
+        name = payload.get("name")
+        if not unresolved(name) and (not isinstance(name, str) or not name.strip()):
+            raise RevError("gameobject.primitive 需要非空 name。")
+    if action.startswith("material."):
+        fields = ("path", "destination") if action == "material.clone" else ("path",)
+        for field in fields:
+            path = payload.get(field)
+            if unresolved(path):
+                continue
+            write = action in ("material.create", "material.set") or field == "destination"
+            roots = ("Assets/",) if write else ("Assets/", "Packages/")
+            if not isinstance(path, str) or not path.startswith(roots) or "\\" in path or any(part in (".", "..") for part in path.split("/")) or not path.lower().endswith(".mat"):
+                raise RevError(f"{field} 必须是规范的 {'Assets' if write else 'Assets/Packages'} 下 .mat 路径。")
+        if action == "material.create" or "shader" in payload:
+            shader = payload.get("shader")
+            if not unresolved(shader) and (not isinstance(shader, str) or not shader.strip()):
+                raise RevError("shader 必须是非空真实 Shader 名称。")
+    if action == "shader.list":
+        for field, default in (("offset", 0), ("limit", 200)):
+            value = payload.get(field, default)
+            if not unresolved(value) and (type(value) is not int or value < (0 if field == "offset" else 1) or (field == "limit" and value > 500)):
+                raise RevError("Shader 查询 offset >= 0，limit 为 1..500。")
+    if action == "material.set":
+        properties = payload.get("properties", {})
+        if not unresolved(properties):
+            if not isinstance(properties, dict) or len(properties) > 512:
+                raise RevError("properties 必须是最多 512 项的名称到 typed 值对象。")
+            for name, value in properties.items():
+                if not isinstance(name, str) or not name.strip() or len(name) > 128:
+                    raise RevError("材质属性名必须是 1..128 字符的非空字符串。")
+                if unresolved(value):
+                    continue
+                if isinstance(value, list):
+                    if len(value) != 4:
+                        raise RevError("Color/Vector 需要四个有限数字。")
+                    coordinates = value
+                elif type(value) in (int, float):
+                    coordinates = [value]
+                elif value is None:
+                    continue
+                elif isinstance(value, str):
+                    if not value.startswith(("Assets/", "Packages/")) or "\\" in value or any(part in (".", "..") for part in value.split("/")):
+                        raise RevError("纹理引用需要规范的 Assets/Packages 资产路径，清空使用 null。")
+                    continue
+                else:
+                    raise RevError("材质属性值只能是数字、四维数组、纹理资产路径或 null。")
+                for coordinate in coordinates:
+                    if unresolved(coordinate):
+                        continue
+                    if type(coordinate) not in (int, float) or abs(coordinate) > 3.4028234663852886e38 or not math.isfinite(coordinate):
+                        raise RevError("材质数值必须为 Single 范围内的有限数字。")
+        for field in ("enableKeywords", "disableKeywords"):
+            names = payload.get(field, [])
+            if not unresolved(names) and (not isinstance(names, list) or len(names) > 256 or any(not isinstance(name, str) or not name.strip() or len(name) > 128 for name in names)):
+                raise RevError(f"{field} 需要最多 256 个非空关键字，每个最多 128 字符。")
+        enable, disable = payload.get("enableKeywords", []), payload.get("disableKeywords", [])
+        if not unresolved(enable) and not unresolved(disable) and set(enable) & set(disable):
+            raise RevError("同一个关键字不能同时启用和禁用。")
+        queue = payload.get("renderQueue", -1)
+        if not unresolved(queue) and (type(queue) is not int or not -1 <= queue <= 5000):
+            raise RevError("renderQueue 必须是 -1..5000 整数。")
+        if not properties and "shader" not in payload and "renderQueue" not in payload and not enable and not disable:
+            raise RevError("material.set 需要至少一项修改。")
     for key, group in (("configJson", action.split(".")[0]), ("userConfigJson", "excelUser")):
         if key not in payload:
             continue

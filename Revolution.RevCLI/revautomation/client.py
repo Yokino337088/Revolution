@@ -113,8 +113,8 @@ class RevClient:
 
     def endpoint(self):
         try:
-            value = read_json(self.root / "endpoint.json")
-            if Path(value.get("project", "")).resolve() != self.project:
+            value = read_json_settled(self.root / "endpoint.json", attempts=3, delay=.002)
+            if not isinstance(value, dict) or Path(value.get("project", "")).resolve() != self.project:
                 return None
             # Long builds block Unity's main thread; a stale heartbeat is not permission
             # to launch another editor. PID and UnityLockfile are checked below too.
@@ -123,6 +123,8 @@ class RevClient:
             return None
 
     def call(self, action, payload=None, confirm=False, progress=None, cancel=None):
+        if cancel is not None and cancel.is_set():
+            raise RevCancelled("请求在提交前已取消，未执行任何动作")
         if action == "editor.wait":
             return self.wait_ready()
         request_id = uuid.uuid4().hex
@@ -149,6 +151,8 @@ class RevClient:
         process = None
         atomic_json(request_path, request)
         try:
+            if cancel is not None and cancel.is_set():
+                raise RevCancelled("请求发布前已取消，未提交到编辑器")
             if mode == "live":
                 atomic_json(self.root / "inbox" / (request_id + ".json"), request)
             else:
@@ -213,7 +217,8 @@ class RevClient:
     def batch(self, steps, stop_on_error=True, confirm=False):
         """一次请求执行多个动作，省掉"每步一次往返"。
 
-        实测单次往返约 110ms 且几乎全花在编辑器 tick 上，所以批量是唯一有效的提速方式。
+        批量减少编辑器 tick 往返；完整 MCP 链路还需避免重复发现与无关证据生成。
+        本方法不缓存业务结果，也不把跨帧操作压成同帧执行。
         steps 形如 [{"action": "editor.status"}, {"action": "ab.config"}]，
         每步可单独带 payloadJson 与 confirm；默认遇错即停，避免后续步骤依赖错误状态。
         """
@@ -258,8 +263,9 @@ class RevClient:
             endpoint = self.endpoint()
             ready = endpoint and not any(endpoint.get(k) for k in ("batchMode", "compiling", "updating", "activeRequest"))
             if ready:
-                if stable is None or session != endpoint.get("sessionId"):
-                    stable, session = time.monotonic(), endpoint.get("sessionId")
+                ready_key = (endpoint.get("sessionId"), endpoint.get("domainId"))
+                if stable is None or session != ready_key:
+                    stable, session = time.monotonic(), ready_key
                     first_heartbeat = endpoint.get("heartbeatUnix")
                 # 至少跨过两个心跳，避免 refresh 回执早于实际开始编译。
                 if time.monotonic() - stable >= 2 and endpoint.get("heartbeatUnix", 0) > first_heartbeat:
