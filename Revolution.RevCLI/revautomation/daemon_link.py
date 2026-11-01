@@ -20,7 +20,7 @@ LOG_NAME = "cli-daemon.log"
 MAX_BODY = 1 << 20
 # 这些命令不需要 Unity，或必须留在调用方进程里（job 要在长调用期间也能响应取消、player 会拉起独立进程）。
 # connect 要拉起 Unity 和服务本身，ship 跨越数十分钟且要逐步汇报，都不能塞进一次转发。
-LOCAL_ONLY_FAMILIES = frozenset({"daemon", "gif", "report", "evidence", "player", "job", "doctor", "commands", "connect", "ship"})
+LOCAL_ONLY_FAMILIES = frozenset({"daemon", "gif", "report", "evidence", "player", "job", "doctor", "commands", "connect", "ship", "game"})
 STALE_STATUS = 426
 
 

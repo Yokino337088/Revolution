@@ -156,6 +156,27 @@ ship --target StandaloneWindows64 --excel full --player <空目录>/Game.exe --b
 
 失败即停，返回每步的结果和耗时，`failedStep` 指出第几步。**绝不自动重试**：构建超时不代表没有执行。开始前所有场景必须已保存。单步最长等 4 小时。
 
-## 交给 MCP 的边界
+## 调游戏运行时（GM、UI、状态）
 
-Play 中的 GM、本局业务状态、跨帧断言和证据报告走 RevMCP `rev_run`。CLI 的 `editor play` + `transform.get` 这类读回只够做冒烟确认，不能替代业务验收。
+编辑器 Play 和独立 Player 用同一组 `game` 命令，直连运行时自动化 HTTP 服务。
+
+```text
+editor play
+runtime start                          显式开启；默认不开，避免手动调试时多开端口
+game gms --query <关键词>               查本局 GM 的真实名称和参数，不要猜
+game gm <名称> <参数1> <参数2>          高危 GM 加 --confirm
+game call ui.click --set objectPath="Canvas/Start"
+game call runtime.state                读回确认
+game call runtime.logs                 失败时看原因
+editor stop                            服务随 Play 关闭，凭据自动删除
+```
+
+独立 Player：先 `player launch --executable <exe> --directory <新空目录>`，之后每条 `game` 命令加 `--session <该目录>`。Player 要用 `ship --development --automation` 打出的开发版。
+
+纪律：
+- 只有 `success: true` 才算成功；期间出现 Unity Error 也判失败。
+- 报“结果未知，不要重放”时，GM 可能已经生效，先读回状态再决定，不要重发。
+- 报“会话已更换”说明游戏重启过，之前的对象 id 全部作废。
+- 一次 `game` 命令的时间主要是 Python 启动，游戏往返约 40ms；连续调很多次用同一进程里的 `revautomation.game.GameClient`。
+
+需要一份计划带断言、等待、finally 清理并自动出证据报告时，可选 RevMCP 的 `rev_run`，见 [RevCLI 与 RevMCP 怎么选](../../../Revolution.Document/自动化工具/RevCLI与RevMCP怎么选.md)。

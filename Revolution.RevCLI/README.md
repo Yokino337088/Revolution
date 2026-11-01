@@ -4,9 +4,11 @@ Python 3.10+ 标准库 CLI，通过 Unity 主线程桥调用编辑器、GM 和�
 
 2026-10-31 增量：`transform.get/set`、`gameobject.primitive`、`shader.list`、`material.inspect/create/clone/set`，完整参数预检、Undo/Prefab与GUID约束；MCP按需发现与紧凑目录，活动窗口预算/缓存/虚拟化。新教程：[通用Unity扩展](../Revolution.Document/自动化工具/RevCLI与RevMCP通用Unity扩展使用说明.html)、[提速与窗口](../Revolution.Document/自动化工具/RevMCP提速与活动窗口优化使用说明.html)；Skill：`Skills/revolution-unity-editor/`。
 
+2026-11-01 运行时：`runtime start` 后用 `game gm` / `game call` / `game gms` 直连游戏调 GM、点 UI，编辑器 Play 与独立 Player（`--session`）通用。怎么在 CLI 和 MCP 之间选，见 [RevCLI 与 RevMCP 怎么选](../Revolution.Document/自动化工具/RevCLI与RevMCP怎么选.md)。
+
 2026-11-01 全链路：`connect` 重启恢复、`scene.compose` 一份 JSON 搭场景、`script.create/attach` 写脚本挂载、`scene.capture` 看画面、动画、烘焙、包管理、Excel 预览、AB 问题清单、`ship` 一键打整包。详见 [全链路开发与重启连接](../Revolution.Document/自动化工具/RevCLI全链路开发与重启连接使用说明.html)；Skill 配方在 `Skills/revolution-unity-editor/references/`。
 
-2026-11-01 增量：编辑器操作（场景/UI 面板/Prefab/资产/构建/打包/AB/Excel/热更）默认走 RevCLI，游戏运行时 GM 与端到端测试才走 RevMCP。新增 `ui.create`、`rect.get/set`、`prefab.apply/unpack`；`daemon start` 后调用中位数约 201ms（无常驻 329ms）。用解释器路径直调 `rev.py`，不要用 `rev.cmd` 或 `py` 启动器。详见 [CLI 优先工作流](../Revolution.Document/自动化工具/RevCLI优先工作流使用说明.html)。
+2026-11-01 增量：编辑器操作（场景/UI 面板/Prefab/资产/构建/打包/AB/Excel/热更）默认走 RevCLI；运行时 GM 也可用 `game gm` 直接调，RevMCP 为可选项。新增 `ui.create`、`rect.get/set`、`prefab.apply/unpack`；`daemon start` 后调用中位数约 201ms（无常驻 329ms）。用解释器路径直调 `rev.py`，不要用 `rev.cmd` 或 `py` 启动器。详见 [CLI 优先工作流](../Revolution.Document/自动化工具/RevCLI优先工作流使用说明.html)。
 
 > **关于名字**：本目录原名 `Revolution.Automation`，因为"automation"容易和游戏内的自动化玩法混在一起，现改名为 `Revolution.RevCLI`。
 > 目录、文档、工作流和参数（`--cli-root`）都已同步；Python 包名仍是 `revautomation`，那是内部 import 名，不影响对外使用。

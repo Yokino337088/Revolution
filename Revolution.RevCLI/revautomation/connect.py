@@ -144,4 +144,4 @@ def connect(project, unity=None, timeout=600.0, idle_timeout=1800.0, start_daemo
         steps.append(_step("daemon-start", True, "常驻服务就绪，PID %s" % service.get("pid")))
     return dict(success=True, project=str(project), state="connected", editor=status.get("editorPath"), unityVersion=status.get("unityVersion"),
                 playing=bool(status.get("playing")), capabilityGap=gap, daemon=service, steps=steps,
-                next="编辑器操作走 rev.py，运行时 GM 走 RevMCP；MCP 由客户端自动启动，重启后不需要手工连接。")
+                next="编辑器操作用 rev.py；Play 中调 GM 先 runtime start 再 game gm；RevMCP 可选，由客户端自动启动。")

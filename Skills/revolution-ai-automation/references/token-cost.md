@@ -1,6 +1,6 @@
 # MCP 与 CLI 的 token 成本
 
-**分工先于成本**：编辑器操作走 CLI，运行时 GM 走 MCP。本页回答的是“同一件事两边都能做时怎么省”，以及为什么这样分工划算。
+**默认一套 CLI**：编辑器操作和运行时 GM（`game gm`）都能走 CLI；MCP 是可选项。本页回答的是“同一件事两边都能做时怎么省”，以及为什么这样分工划算。
 
 数字是 2026-10-31 在 `RevolutionFrameWork_Unity` 本体工程实测（139 个 Editor 工具已注册，`tiktoken` `o200k_base` 计数，同一 `editor.status` 只读调用）。
 
@@ -29,8 +29,8 @@
 |---|---|---|
 | 编辑器操作：场景、脚本、Prefab、资产、导表、打 AB、打包 | CLI | 零固定开销，结果只有 MCP 的一半 |
 | 编辑器里一次做很多步 | `scene.compose`、`batch.call`、`pipeline` | 把 N 次调用压成 1 次，这是省得最多的一招 |
-| 运行时 GM、本局状态 | 紧凑 MCP | 需要动态注册表，固定 325/轮 |
-| 运行时多步测试 | `rev_run` 一份计划 | 带断言、等待和 finally，一次提交 |
+| 运行时 GM、本局状态 | CLI `game gm` / `game call` | 同样读本局动态注册表，零固定开销 |
+| 运行时多步测试，要自动出证据报告 | 可选 `rev_run` 一份计划 | 带断言、等待和 finally，一次提交 |
 | 客户端只能全量暴露工具 | 全量 MCP，但会话尽量短 | 17,255/轮，长会话是主要浪费 |
 | 不确定有哪些能力 | `commands --query <词>` | 本地过滤，不占 Unity；MCP 侧用 `rev_discover` + `query` |
 

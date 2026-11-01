@@ -11,6 +11,12 @@
 
 ## [未发布]
 
+### RevCLI 直连游戏运行时（2026-11-01）
+
+- 新增 `rev.py game` 命令族：`status`、`gms`、`actions`、`gm`、`call`，直连运行时自动化 HTTP 服务调 RevGM、点 UI、读状态；编辑器 Play（先 `runtime start`）与独立 Player（`--session`）用同一套命令，一套 CLI 不经 MCP 即可完成编辑器与运行时自动化。
+- 运行时服务保持显式开启：手动 Play 调试不会多开端口；退出 Play 或 `runtime stop` 时凭据自动删除。超时只取消同一工单，绝不换 id 重发。
+- 新增文档《RevCLI 与 RevMCP 怎么选》，讲清两者的区别与利弊，由用户自行选择；Skill 通道规则改为默认 CLI、MCP 可选。
+
 ### RevCLI 全链路开发（2026-11-01）
 
 - 新增 `rev.py connect`：开机或重启后一条命令完成体检、打开 Unity、等编译、起常驻服务、比对能力，可重复执行；`doctor` 改为完全只读体检。

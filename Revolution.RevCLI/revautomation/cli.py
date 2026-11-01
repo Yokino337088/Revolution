@@ -114,6 +114,21 @@ def _build_parser():
             command.add_argument("--executable", required=True)
             command.add_argument("--port", type=int, default=18766)
             command.add_argument("--arguments", default="[]", help="Player参数JSON字符串数组")
+    game = sub.add_parser("game", help="直连游戏运行时（编辑器 Play 或独立 Player）：调 GM、调游戏能力、看状态")
+    game_ops = game.add_subparsers(dest="operation", required=True)
+    for operation, text in (("status", "运行时服务身份与连通性"), ("actions", "本局注册的游戏能力"), ("gms", "本局注册的 GM 及参数"),
+                            ("gm", "执行一条 GM"), ("call", "调用一个游戏能力")):
+        command = game_ops.add_parser(operation, help=text)
+        command.add_argument("--session", help="独立 Player 的会话目录；不给则用编辑器 Play 的凭据")
+        if operation in ("actions", "gms"):
+            command.add_argument("--query", help="按名称或说明筛选")
+        if operation == "gm":
+            command.add_argument("name", help="GM 完整名称，例如 背包/添加道具")
+            command.add_argument("values", nargs="*", help="按顺序的参数")
+        if operation == "call":
+            command.add_argument("name", help="游戏能力 id，例如 ui.click")
+            command.add_argument("--json", type=Path, help="参数 JSON 文件")
+            command.add_argument("--set", action="append", default=[], metavar="KEY=JSON")
     families = {}
     for spec in read_json(ROOT / "commands.json")["actions"]:
         family, operation = spec["id"].split(".", 1)
@@ -520,6 +535,21 @@ def main(argv=None):
             quiet = lambda c, action, payload, confirm: invoke_action(c, action, payload, confirm)
             result = ship.run(client, args.target, args.excel, not args.no_ab, args.player, args.backend, args.development,
                               args.automation, args.frame_timing, args.confirm, args.force, args.skip_invalid, quiet)
+        elif args.family == "game":
+            from . import game
+            payload = None
+            if args.operation == "call":
+                payload = json.loads(args.json.read_text(encoding="utf-8-sig")) if args.json else {}
+                for item in args.set:
+                    key, sep, value = item.partition("=")
+                    if not sep or not key:
+                        raise RevError("--set 需要 KEY=JSON")
+                    try:
+                        payload[key] = json.loads(value)
+                    except ValueError:
+                        payload[key] = value
+            result = game.run(args.operation, args.project, args.session, args.timeout, args.confirm,
+                              getattr(args, "name", None), getattr(args, "values", ()), payload, getattr(args, "query", None))
         elif args.family == "player":
             from . import player
             payload = dict(directory=args.directory)

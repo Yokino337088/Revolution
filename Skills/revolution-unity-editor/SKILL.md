@@ -1,18 +1,21 @@
 ---
 name: revolution-unity-editor
-description: 用 Revolution RevCLI 完成 Unity 全链路自动化开发：写脚本并挂载、一份 JSON 搭场景摆物体、UI 面板、预制体、材质、动画、烘焙、Excel 导表、打 AB、一键打整包，以及电脑重启后自动连接与配置环境。用户提到 Unity 编辑器操作、搭场景、挂脚本、做预制体或 UI、导表、打包、连不上 Unity、重启后继续开发时使用。编辑器操作一律优先走 RevCLI，只有游戏运行时 GM 与端到端测试才切 RevMCP。玩法架构用 revolution-framework，业务测试用 revolution-ai-automation；不提供 eval，脚本只作为普通工程文件写入。
+description: 用 Revolution RevCLI 完成 Unity 全链路自动化开发：写脚本并挂载、一份 JSON 搭场景摆物体、UI 面板、预制体、材质、动画、烘焙、Excel 导表、打 AB、一键打整包，以及电脑重启后自动连接与配置环境。用户提到 Unity 编辑器操作、搭场景、挂脚本、做预制体或 UI、导表、打包、连不上 Unity、重启后继续开发时使用。编辑器操作和游戏运行时 GM 都可以只用 RevCLI（`game gm`/`game call`）；需要一份计划带断言并自动出证据报告时再选 RevMCP 的 rev_run。玩法架构用 revolution-framework，业务测试用 revolution-ai-automation；不提供 eval，脚本只作为普通工程文件写入。
 ---
 
 # Revolution Unity 编辑器操作
 
-把“调整对象、检查资源、制作场景和 UI、定位编辑器问题、打包”落实为可验证的 Unity 操作。**编辑器侧默认走 RevCLI**；游戏运行时的 GM 调用、本局业务状态和带断言的端到端测试才走 RevMCP。不要让用户先背命令，也不要把操作成功当作业务验收通过。
+把“调整对象、检查资源、制作场景和 UI、定位编辑器问题、打包”落实为可验证的 Unity 操作。**默认一套 RevCLI 全搞定**，包括 Play 中调 GM、点 UI、读运行时状态；RevMCP 是可选项，用户可以自己选。不要让用户先背命令，也不要把操作成功当作业务验收通过。
 
-## 通道规则（CLI 优先）
+## 通道规则（CLI 优先，MCP 可选）
 
 | 任务 | 通道 |
 |---|---|
 | 场景/对象/组件/变换/RectTransform、UI 面板、Prefab、资产、材质、设置、编译、测试、打包、AB/Excel/热更/平台资源 | **RevCLI** |
-| Play 中的 GM、运行时业务、跨帧断言、证据报告 | RevMCP（`rev_run`） |
+| Play 中或独立 Player 里调 GM、点 UI、读运行时状态 | **RevCLI** `runtime start` → `game gm` / `game call` |
+| 一份计划带断言、等待、finally 清理，并自动出证据报告 | RevMCP `rev_run`（可选） |
+
+用户明确指定 MCP 时听用户的。两者怎么选见 [RevCLI 与 RevMCP 怎么选](../../Revolution.Document/自动化工具/RevCLI与RevMCP怎么选.md)。
 
 ## 开工第一步：连接
 
@@ -37,6 +40,7 @@ py -3 -c "import sys;print(sys.executable)"         找到 3.10+ 解释器，不
 | 写脚本、挂脚本 | `script.create` → `editor wait` → `script.attach`，或写进 compose 的 `components` |
 | UI 面板、Prefab、材质、动画 | `ui.create` / `prefab.*` / `material.*` / `clip.*` `animator.*` |
 | 导表、打 AB、出包 | `excel.*` / `ab.*`，整包用 `ship` |
+| Play 中调 GM、点 UI、看状态 | `editor play` → `runtime start` → `game gms` 查 → `game gm <名称> 参数...` → `editor stop` |
 | 不知道有没有某能力 | `commands --query <关键词>`，不要读 `commands.json` 全文 |
 
 多步互不依赖的同步动作用 `call batch.call`，有顺序依赖用 `pipeline`。

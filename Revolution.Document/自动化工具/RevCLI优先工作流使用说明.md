@@ -15,9 +15,10 @@
 | 项目设置、构建设置、打包 Player | **RevCLI** | `settings.*`、`build.*` |
 | 编译、Console、Test Runner | **RevCLI** | `editor.compilation/console`、`test.*` |
 | Revolution 全链路（AB、Excel、热更、平台资源） | **RevCLI** | `ab.*`、`excel.*`、`hot.*`、`platform.*` |
-| 游戏运行时的 GM 指令、运行时业务、带断言的端到端测试 | **RevMCP** | 需要本局动态注册表、跨帧等待、`finally` 清理和证据报告 |
+| 游戏运行时的 GM 指令、点 UI、读运行时状态 | **RevCLI** | `runtime start` 后用 `game gm` / `game call` |
+| 一份计划带断言、`finally` 清理并自动出证据报告 | RevMCP（可选） | `rev_run` |
 
-一句话：**编辑器里能做的事先用 CLI，Play 之后调 GM 才用 MCP。** CLI 在 Play 时也能调 `gm.exec`，只是没有计划编排、断言和自动报告，所以正式的运行时测试仍交给 `rev_run`。
+一句话：**默认一套 CLI 全搞定，MCP 按需选用。** 两者区别和利弊见 [RevCLI 与 RevMCP 怎么选](RevCLI与RevMCP怎么选.md)。
 
 ## 二、调用时间
 
@@ -114,7 +115,7 @@ $proj = '<Unity 工程绝对路径>'
 - 编辑器操作先 `commands --action <动作>` 或 `commands --live` 查真实契约，再调用。离线清单只是说明，不代表已安装。
 - 修改前先 `inspect/get`，修改后用同一查询读回断言。
 - 编译、测试和构建用显式等待：`editor.wait`、`test.result`、`build.player` 的真实 BuildReport。
-- 只在需要运行时 GM、本局业务状态、跨帧断言或证据报告时切到 RevMCP（`rev_run`）。
+- Play 中调 GM 用 `runtime start` + `game gm`；需要一份计划带断言并自动出报告时，可选 RevMCP（`rev_run`）。
 - CLI 与 MCP 共用同一个 Unity 桥，同一份参数契约，不会各自维护一套动作。
 
 ## 六、验证与复测

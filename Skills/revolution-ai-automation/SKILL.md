@@ -15,7 +15,7 @@ description: 用一句话驱动 Revolution Unity 编辑器或游戏测试时使�
 
 - 定位 Unity 工程、`Revolution.RevMCP/rev_mcp.py` 和相邻 `Revolution.RevCLI/rev.py`。始终显式传目标工程，不能默认运行框架 Demo。
 - MCP 已连接时先 `rev_discover`；新版支持 `target/query/offset/limit` 按需筛选，旧版退回空参数完整发现。需要减少握手工具体积时可配置 `--compact-tools`，三稳定入口仍能调用全部真实能力。否则执行 `python <rev_mcp.py> --project <工程> discover`。独立 Player 使用 `--runtime-endpoint <runtime.json>`。需要配置时读 [连接和注册](references/connection.md)。
-- **通道分工**：编辑器操作（场景、UI 面板、Prefab、资产、构建、打包、AB/Excel/热更）一律先走 RevCLI 常驻服务，见相邻 `revolution-unity-editor`；本技能的 MCP 只负责游戏运行时 GM、业务状态和带断言的端到端测试。
+- **通道分工**：编辑器操作（场景、UI 面板、Prefab、资产、构建、打包、AB/Excel/热更）一律先走 RevCLI 常驻服务，见相邻 `revolution-unity-editor`；运行时 GM 和 UI 也能用 CLI 的 `game gm` / `game call` 直接调；本技能的 MCP `rev_run` 是可选项，适合一份计划带断言、finally 清理并自动出证据报告。用户指定哪个就用哪个，选择依据见 `Revolution.Document/自动化工具/RevCLI与RevMCP怎么选.md`。
 - 通用场景/对象/资产编辑与工具延迟诊断按相邻 `revolution-unity-editor` 的操作配方执行；常驻连接少往返，同步检查可 batch，业务跨帧测试保持计划等待与 finally，不并发修改 Unity。
 - **先按分工选通道，再按 token 压调用**：编辑器操作走 RevCLI，零固定开销，单次结果也最便宜。运行时 GM 走紧凑 MCP，全量 MCP 的工具 schema 每轮约 1.7 万 token，紧凑模式仅约 325。运行时多步用 `rev_run` 一份计划把调用次数压到 1；编辑器多步用 `scene.compose`、`batch.call` 或 `pipeline`。查能力用 `commands --query <词>` 或带 `query` 的 `rev_discover`（不带词要 12,007，带词只用 340），不要读 `commands.json` 全文。实测数字与判据见 [token 成本](references/token-cost.md)。
 - **连接**：会话开始、电脑重启后或连接报错时，先按相邻 `revolution-unity-editor` 的 reconnect 配方跑 `rev.py connect`，再继续测试；不要在 Unity 未就绪时反复重试 MCP。
