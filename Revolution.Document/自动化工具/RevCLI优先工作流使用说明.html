@@ -13,7 +13,7 @@ pre{background:var(--code-bg);color:var(--code-fg);border-radius:8px;padding:15p
 <main>
 
 <div class="callout"><span class="t">开工和重启后</span>用 <code>connect</code> 一条命令恢复，全链路能力见 <a href="RevCLI全链路开发与重启连接使用说明.html">全链路开发与重启连接</a>。本文只讲通道与耗时。</div>
-<section><h2><span class="num">一</span>分工规则</h2><p class="lead">默认一套 CLI 全搞定，MCP 按需选用。区别和利弊见 <a href="RevCLI与RevMCP怎么选.html">RevCLI 与 RevMCP 怎么选</a>。</p>
+<section><h2><span class="num">一</span>分工规则</h2><p class="lead">轻量操作用 CLI，长自动化测试、要带截图和 GIF 的 HTML 报告用 MCP。区别和利弊见 <a href="RevCLI与RevMCP怎么选.html">RevCLI 与 RevMCP 怎么选</a>。</p>
 <div class="table-wrap"><table><thead><tr><th>要做的事</th><th>走哪里</th><th>原因</th></tr></thead><tbody>
 <tr><td>场景、对象、组件、变换、RectTransform</td><td><b>RevCLI</b></td><td>编辑器同步操作，不需要常驻 MCP 握手</td></tr>
 <tr><td>UI 面板制作（13 种 UGUI 控件）</td><td><b>RevCLI</b></td><td><code>ui.create</code> + <code>rect.set</code>，Undo 完整</td></tr>
@@ -22,7 +22,7 @@ pre{background:var(--code-bg);color:var(--code-fg);border-radius:8px;padding:15p
 <tr><td>项目设置、构建设置、打包 Player</td><td><b>RevCLI</b></td><td><code>settings.*</code>、<code>build.*</code></td></tr>
 <tr><td>编译、Console、Test Runner</td><td><b>RevCLI</b></td><td><code>editor.compilation/console</code>、<code>test.*</code></td></tr>
 <tr><td>Revolution 全链路（AB、Excel、热更、平台资源）</td><td><b>RevCLI</b></td><td><code>ab.*</code>、<code>excel.*</code>、<code>hot.*</code>、<code>platform.*</code></td></tr>
-<tr><td>游戏运行时 GM、点 UI、读运行时状态</td><td><b>RevCLI</b></td><td><code>runtime start</code> 后用 <code>game gm</code> / <code>game call</code></td></tr><tr><td>一份计划带断言、<code>finally</code> 清理并自动出证据报告</td><td>RevMCP（可选）</td><td><code>rev_run</code></td></tr>
+<tr><td>游戏运行时 GM、点 UI、读运行时状态</td><td><b>RevCLI</b></td><td><code>runtime start</code> 后用 <code>game gm</code> / <code>game call</code></td></tr><tr><td>长自动化测试、多步断言、要带截图和 GIF 的 HTML 报告</td><td><b>RevMCP</b></td><td><code>rev_run</code></td></tr>
 </tbody></table></div>
 <p>CLI 在 Play 时也能调 <code>gm.exec</code>，但没有计划编排、断言和自动报告，所以正式的运行时测试仍交给 <code>rev_run</code>。</p></section>
 

@@ -14,16 +14,21 @@ pre{background:var(--code-bg);color:var(--code-fg);border-radius:8px;padding:15p
 <header class="hero"><div class="wrap"><span class="kicker">REVOLUTION · REVCLI / REVMCP</span><h1>RevCLI 与 RevMCP：怎么选</h1><p>两者连的是同一套 Unity 能力，区别在接入方式、token 成本和编排习惯。</p><p class="meta">2026-11-01</p></div><div class="deco"></div></header>
 <main><p>两者连的是<b>同一套</b> Unity 能力：编辑器动作注册表、游戏运行时注册表、RevGM。区别在于“AI 怎么把请求送进去”，所以能做的事几乎一样，成本和习惯不一样。</p>
 <section id="s1"><h2>一句话结论</h2>
-<ul><li><b>默认用 RevCLI</b>：编辑器操作、出包、调 GM、点 UI，一套命令全搞定，不用配客户端。</li><li><b>想要“一次提交一整套带断言的测试，并自动出证据报告”时，用 RevMCP 的 <code>rev_run</code></b>。</li></ul>
+<p>按测试轻重选，AI 会自动判断：</p>
+<ul><li><b>轻量操作用 RevCLI</b>：编辑器操作、出包、调一两条 GM、点一下 UI、读一次状态，不用配客户端。</li><li><b>重量级测试用 RevMCP 的 <code>rev_run</code></b>：长自动化测试、多步断言、失败也必须清理、要一份带截图和 GIF 的 HTML 报告。</li></ul>
+<p>拿不准时：要报告就 MCP，不要报告就 CLI。</p>
 <p>两者可以混用，互不冲突。</p>
 </section>
 <section id="s2"><h2>对比</h2>
 <div class="table-wrap"><table><thead><tr><th></th><th>RevCLI</th><th>RevMCP</th></tr></thead><tbody><tr><td>怎么接入</td><td>有 Python 3.10+ 就能用，<code>rev.py connect</code> 一条命令</td><td>要在 AI 客户端里配置 MCP 服务，重开会话生效</td></tr><tr><td>换电脑 / 重启后</td><td><code>connect</code> 自动打开 Unity、起服务</td><td>客户端自动拉起，但 Unity 仍要先开</td></tr><tr><td>每轮固定 token</td><td><b>0</b></td><td>紧凑模式 325，全量模式 17,255</td></tr><tr><td>单次结果 token</td><td>约 206</td><td>约 445</td></tr><tr><td>编辑器操作耗时</td><td>常驻服务下约 200ms/次</td><td>117–278ms/次</td></tr><tr><td>调游戏运行时</td><td><code>game gm</code> / <code>game call</code>，编辑器 Play 和独立 Player 同一套</td><td><code>rev_call</code> / <code>rev_run</code></td></tr><tr><td>多步编排</td><td><code>pipeline</code>（等待、断言、<code>batch.call</code>）</td><td><code>rev_run</code>：一份计划带断言、等待、finally 清理，一次提交</td></tr><tr><td>证据报告</td><td><code>evidence</code> / <code>capture --report</code> 手动生成</td><td><code>rev_run</code> 自动生成</td></tr><tr><td>在 CI 和脚本里用</td><td>天然适合，命令可复制、可记录</td><td>不适合</td></tr><tr><td>出错时怎么排查</td><td>命令和输出就在终端里，可原样重跑</td><td>要看客户端日志</td></tr></tbody></table></div>
 <p>数字来自框架工程实测，换机器会变：token 见 <code>Skills/revolution-ai-automation/references/token-cost.md</code>，耗时见 <a href="RevCLI优先工作流使用说明.html">CLI 优先工作流</a>。</p>
 </section>
-<section id="s3"><h2>什么时候选 MCP</h2>
-<ol><li>一次要跑十几步的业务验收，希望中途失败也一定执行清理，并且直接拿到 HTML 证据报告。</li><li>团队已经在用支持 MCP 的客户端，且会话较短（全量模式每轮都要付 1.7 万 token）。</li></ol>
-<p>其余情况都建议 CLI。</p>
+<section id="s3"><h2>什么时候选 MCP（重量级测试）</h2>
+<p>命中下面任意一条就用 MCP 的 <code>rev_run</code>：</p>
+<ol><li>要一份 HTML 报告，带截图或 GIF（技能、位移、粒子、UI 过渡这类动态效果）。</li><li>步骤多（大约超过 5 步），或要跨帧等待、轮询状态，例如打完一整关、跑一套新手引导。</li><li>每步都要业务断言，失败要定位到哪一步。</li><li>中途失败也必须清理现场，例如回档、关面板、还原 GM 改过的数据。</li><li>要反复跑做回归或压测。</li></ol>
+<p><code>rev_run</code> 一次提交整份计划，内置断言、有界等待和 <code>finally</code> 清理，跑完自动把截图收进报告目录、合成 GIF、生成 <code>中文标题_日期.html</code>。长测试用 CLI 一步步拼也能做，但要自己记截图路径、合 GIF、保证清理，步骤越多越容易漏，token 也更多。</p>
+<p>其余情况（调一两条 GM、点一下 UI、读一次状态、所有编辑器操作）用 CLI。</p>
+<p>客户端没配 RevMCP 时，AI 会告诉你“用 CLI 降级执行”，逐步截图，最后用 <code>rev.py evidence</code> 和 <code>rev.py gif</code> 生成报告，并在报告里注明是降级执行。</p>
 </section>
 <section id="s4"><h2>用 CLI 调游戏运行时</h2>
 <p>编辑器 Play：</p>

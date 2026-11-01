@@ -16,9 +16,9 @@
 | 编译、Console、Test Runner | **RevCLI** | `editor.compilation/console`、`test.*` |
 | Revolution 全链路（AB、Excel、热更、平台资源） | **RevCLI** | `ab.*`、`excel.*`、`hot.*`、`platform.*` |
 | 游戏运行时的 GM 指令、点 UI、读运行时状态 | **RevCLI** | `runtime start` 后用 `game gm` / `game call` |
-| 一份计划带断言、`finally` 清理并自动出证据报告 | RevMCP（可选） | `rev_run` |
+| 长自动化测试、多步断言、要带截图和 GIF 的 HTML 报告 | **RevMCP** | `rev_run` |
 
-一句话：**默认一套 CLI 全搞定，MCP 按需选用。** 两者区别和利弊见 [RevCLI 与 RevMCP 怎么选](RevCLI与RevMCP怎么选.md)。
+一句话：**轻量操作用 CLI，长自动化测试、要带截图和 GIF 的 HTML 报告用 MCP。** 两者区别和利弊见 [RevCLI 与 RevMCP 怎么选](RevCLI与RevMCP怎么选.md)。
 
 ## 二、调用时间
 

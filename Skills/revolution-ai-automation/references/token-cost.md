@@ -30,7 +30,7 @@
 | 编辑器操作：场景、脚本、Prefab、资产、导表、打 AB、打包 | CLI | 零固定开销，结果只有 MCP 的一半 |
 | 编辑器里一次做很多步 | `scene.compose`、`batch.call`、`pipeline` | 把 N 次调用压成 1 次，这是省得最多的一招 |
 | 运行时 GM、本局状态 | CLI `game gm` / `game call` | 同样读本局动态注册表，零固定开销 |
-| 运行时多步测试，要自动出证据报告 | 可选 `rev_run` 一份计划 | 带断言、等待和 finally，一次提交 |
+| 重量级测试：长流程、要带截图/GIF 的 HTML 报告 | MCP `rev_run` 一份计划 | 带断言、等待和 finally，一次提交，长测试总 token 反而更少 |
 | 客户端只能全量暴露工具 | 全量 MCP，但会话尽量短 | 17,255/轮，长会话是主要浪费 |
 | 不确定有哪些能力 | `commands --query <词>` | 本地过滤，不占 Unity；MCP 侧用 `rev_discover` + `query` |
 

@@ -12,8 +12,10 @@ description: 用 Revolution RevCLI 完成 Unity 全链路自动化开发：写�
 | 任务 | 通道 |
 |---|---|
 | 场景/对象/组件/变换/RectTransform、UI 面板、Prefab、资产、材质、设置、编译、测试、打包、AB/Excel/热更/平台资源 | **RevCLI** |
-| Play 中或独立 Player 里调 GM、点 UI、读运行时状态 | **RevCLI** `runtime start` → `game gm` / `game call` |
-| 一份计划带断言、等待、finally 清理，并自动出证据报告 | RevMCP `rev_run`（可选） |
+| 轻量运行时操作：调一两条 GM、点一下 UI、读一次状态、截一张图确认 | **RevCLI** `runtime start` → `game gm` / `game call` |
+| 重量级测试：长流程、多步断言、必须清理、要带截图和 GIF 的 HTML 报告 | **RevMCP** `rev_run`，按 `revolution-ai-automation` 执行 |
+
+判定规则：要报告、步骤约超过 5 步、要跨帧等待、每步要断言、失败也必须清理，命中任一条就是重量级。拿不准时：要报告就 MCP，不要报告就 CLI。详见 `revolution-ai-automation` 的 references/channel-choice.md。
 
 用户明确指定 MCP 时听用户的。两者怎么选见 [RevCLI 与 RevMCP 怎么选](../../Revolution.Document/自动化工具/RevCLI与RevMCP怎么选.md)。
 

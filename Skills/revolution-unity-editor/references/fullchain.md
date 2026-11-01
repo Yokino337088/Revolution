@@ -179,4 +179,4 @@ editor stop                            服务随 Play 关闭，凭据自动删�
 - 报“会话已更换”说明游戏重启过，之前的对象 id 全部作废。
 - 一次 `game` 命令的时间主要是 Python 启动，游戏往返约 40ms；连续调很多次用同一进程里的 `revautomation.game.GameClient`。
 
-需要一份计划带断言、等待、finally 清理并自动出证据报告时，可选 RevMCP 的 `rev_run`，见 [RevCLI 与 RevMCP 怎么选](../../../Revolution.Document/自动化工具/RevCLI与RevMCP怎么选.md)。
+以上是轻量操作。长自动化测试、要出带截图和 GIF 的 HTML 报告时，换用 RevMCP 的 `rev_run`（重量级），判定规则见 `revolution-ai-automation` 的 references/channel-choice.md，见 [RevCLI 与 RevMCP 怎么选](../../../Revolution.Document/自动化工具/RevCLI与RevMCP怎么选.md)。
