@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "revolution": {
+      "command": "python",
+      "args": [
+        "<本仓库绝对路径>/Revolution.RevMCP/rev_mcp.py",
+        "--project", "<本仓库绝对路径>/RevolutionFrameWork_Unity",
+        "serve"
+      ]
+    }
+  }
+}
