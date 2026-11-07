@@ -75,6 +75,20 @@ namespace Revolution.Tests
             Assert.That(after.Take(), Is.Null);
         }
         [Test]
+        public void RestoredEmptyResponseUsesJobState()
+        {
+            var pending = Job();
+            pending.response = "";
+            var acknowledged = Job("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+            acknowledged.response = "";
+            acknowledged.finishedTicks = DateTime.UtcNow.Ticks;
+            acknowledged.acknowledged = true;
+            var jobs = new RevAutomationMemoryJobs();
+            jobs.Restore(new[] { pending, acknowledged });
+            Assert.That(jobs.Response(pending.id, "session"), Does.Contain("\"pending\":true"));
+            Assert.That(jobs.Response(acknowledged.id, "session"), Does.Contain("ResultExpired"));
+        }
+        [Test]
         public void CleanupProtectsIncompleteActiveAndKeepJobs()
         {
             string root = Path.GetFullPath("Library/StorageFixture_" + Guid.NewGuid().ToString("N"));

@@ -125,7 +125,19 @@ namespace Revolution
             lock (_gate)
             {
                 foreach (Job job in jobs ?? Array.Empty<Job>())
-                { if (_jobs.Count < IdentityCapacity && !_jobs.ContainsKey(job.id)) { _jobs.Add(job.id, job); } }
+                {
+                    if (_jobs.Count >= IdentityCapacity || _jobs.ContainsKey(job.id))
+                    {
+                        continue;
+                    }
+                    // JsonUtility 反序列化时可能把没有回执的字符串变为空串。
+                    // 归一为 null，GET 才会按实际状态返回 pending 或 ResultExpired。
+                    if (string.IsNullOrEmpty(job.response))
+                    {
+                        job.response = null;
+                    }
+                    _jobs.Add(job.id, job);
+                }
                 // 未启动的排队请求在重载后由宿主判 Interrupted，不能自动重放变更。
                 Prune(DateTime.UtcNow);
             }
