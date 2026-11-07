@@ -39,9 +39,26 @@ def request(info, method, path, data=None):
         raise RevError("Editor HTTP %s: %s" % (exc.code, exc.read(2048).decode("utf-8", errors="replace"))) from None
 
 
+def ready(client, session, deadline, cancel):
+    # 重载期间凭据或 listener 可能还未就绪。只轮询 GET，确认同一 Editor 会话后再提交。
+    while time.monotonic() < deadline:
+        if cancel is not None and cancel.is_set():
+            raise RevCancelled("等待 Editor HTTP 时取消，未提交动作")
+        try:
+            info = credentials(client)
+            if info["sessionId"] != session:
+                raise RevError("Editor 会话已变化，请重新发起请求")
+            request(info, "GET", "/health")
+            return info
+        except OSError:
+            time.sleep(.1)
+    raise TimeoutError("等待 Editor HTTP 就绪超时，动作未提交")
+
+
 def call(client, payload, cancel=None):
     ident = payload["id"]
-    info = credentials(client)
+    deadline = time.monotonic() + client.timeout
+    info = ready(client, payload["sessionId"], deadline, cancel)
     if cancel is not None and cancel.is_set():
         raise RevCancelled("请求提交前已取消")
     # POST 出错时业务状态可能未知；不转文件桥、不再次 POST，以免动作执行两遍。
@@ -49,7 +66,6 @@ def call(client, payload, cancel=None):
         request(info, "POST", "/call", payload)
     except OSError as exc:
         raise RevError(f"内存请求提交结果未知：{ident}；未切换通道或重发，请先检查日志。{exc}") from None
-    deadline = time.monotonic() + client.timeout
     try:
         while True:
             if cancel is not None and cancel.is_set():

@@ -80,6 +80,7 @@ namespace Revolution.Editor
         public bool batchMode;
         public string activeRequest;
         public string memoryUrl;
+        public bool memoryRequired;
     }
 
     // 只有这些明确命名的字段才会进入适配器。具体动作只读取自己需要的字段。

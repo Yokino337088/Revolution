@@ -50,6 +50,31 @@ namespace Revolution.Tests
             Assert.That(compact, Does.Contain("file.png"));
         }
         [Test]
+        public void ReloadCheckpointAcceptsEmptyOptionalResultData()
+        {
+            var before = new RevAutomationMemoryJobs();
+            var finished = Job();
+            var play = Job("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+            before.Add(finished, DateTime.UtcNow);
+            before.Add(play, DateTime.UtcNow);
+            before.Take();
+            before.Take();
+            before.Complete(finished.id, "{\"success\":true,\"dataJson\":\"\"}");
+            var checkpoint = before.Snapshot();
+            foreach (var job in checkpoint)
+            {
+                if (job.response != null)
+                {
+                    job.response = RevAutomationEvidence.WithoutImages(job.response);
+                }
+            }
+            var after = new RevAutomationMemoryJobs();
+            after.Restore(checkpoint);
+            Assert.That(after.Response(play.id, "session"), Does.Contain("\"pending\":true"));
+            Assert.That(after.Response(finished.id, "session"), Does.Contain("\"dataJson\":\"\""));
+            Assert.That(after.Take(), Is.Null);
+        }
+        [Test]
         public void CleanupProtectsIncompleteActiveAndKeepJobs()
         {
             string root = Path.GetFullPath("Library/StorageFixture_" + Guid.NewGuid().ToString("N"));

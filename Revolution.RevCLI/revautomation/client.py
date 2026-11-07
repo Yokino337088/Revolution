@@ -221,7 +221,7 @@ class RevClient:
         request = dict(protocol=1, id=request_id, action=action, payloadJson=json.dumps(payload or {}, ensure_ascii=False, allow_nan=False),
                        confirm=confirm, sessionId=endpoint["sessionId"] if endpoint else "", timeoutSeconds=self.timeout,
                        deadlineUtc=(dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=self.timeout)).isoformat())
-        if mode == "live" and endpoint.get("memoryUrl"):
+        if mode == "live" and (endpoint.get("memoryRequired") or endpoint.get("memoryUrl")):
             from .memory_transport import call as memory_call
             return memory_call(self, request, cancel)
         work = self.root / "jobs" / request_id

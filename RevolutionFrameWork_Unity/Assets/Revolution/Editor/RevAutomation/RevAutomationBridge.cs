@@ -79,7 +79,6 @@ namespace Revolution.Editor
             EditorApplication.update += Update;
             EditorApplication.quitting += OnQuit;
             EditorApplication.delayCall += Recover;
-            EditorApplication.delayCall += () => { RevAutomationHttp.Start(Session); RevAutomationHttp.WriteCredentials(); };
         }
 
         /// <summary>
@@ -237,6 +236,8 @@ namespace Revolution.Editor
             double now = EditorApplication.timeSinceStartup;
             try
             {
+                // 首次心跳和后续请求发现必须晚于 HTTP 账本恢复，避免发布半初始化的域。
+                if (!_recovered && !EditorApplication.isCompiling && !EditorApplication.isUpdating) { Recover(); }
                 if (now >= _heartbeat)
                 {
                     _heartbeat = now + 1;
@@ -248,7 +249,8 @@ namespace Revolution.Editor
                         paused = EditorApplication.isPaused, updating = EditorApplication.isUpdating,
                         compilationFailed = EditorUtility.scriptCompilationFailed,
                         scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().path,
-                        batchMode = Application.isBatchMode, activeRequest = _active?.id, memoryUrl = RevAutomationHttp.Url
+                        batchMode = Application.isBatchMode, activeRequest = _active?.id, memoryUrl = RevAutomationHttp.Url,
+                        memoryRequired = !Application.isBatchMode
                     });
                 }
                 if (_active != null)
@@ -289,7 +291,6 @@ namespace Revolution.Editor
                 }
                 // 某些包的 delayCall 抛异常会打断同一轮回调链；Update 再兜一次恢复，
                 // 否则心跳看似正常，收发室却会永远停在“尚未恢复”的状态。
-                if (!_recovered && !EditorApplication.isCompiling && !EditorApplication.isUpdating) { Recover(); }
                 if (!_recovered || now < _poll || EditorApplication.isCompiling || EditorApplication.isUpdating) { return; }
                 RevAutomationStorageActions.Tick();
                 // 20ms 而不是原来的 100ms：空目录检查只是一次 GetFiles，

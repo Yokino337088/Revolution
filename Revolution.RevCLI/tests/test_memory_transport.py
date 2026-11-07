@@ -33,6 +33,8 @@ class Handler(BaseHTTPRequestHandler):
         Handler.ident = self.body["id"]
         self.send({"success": True, "id": Handler.ident})
     def do_GET(self):
+        if self.path == "/health":
+            self.send({"success": True, "transport": "http-memory"}); return
         Handler.gets += 1
         if Handler.mode == "drop" and Handler.gets == 1:
             self.connection.close(); return
@@ -72,6 +74,23 @@ class MemoryTransportTests(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(Handler.posts, 1)
         self.assertGreaterEqual(Handler.gets, 2)
+    def test_reload_heartbeat_without_url_waits_for_http_instead_of_writing_jobs(self):
+        endpoint = dict(memoryRequired=True, sessionId="session")
+        with patch.object(self.client, "ready_endpoint", return_value=endpoint), patch.object(
+            memory_transport, "credentials", side_effect=[FileNotFoundError("reload"), self.info, self.info]
+        ):
+            result = self.client.call("editor.status")
+        self.assertEqual(result["transport"], "http-memory")
+        self.assertEqual(Handler.posts, 1)
+        self.assertFalse((self.client.root / "jobs").exists())
+    def test_unavailable_required_http_times_out_without_file_fallback(self):
+        with patch.object(self.client, "ready_endpoint", return_value=dict(memoryRequired=True, sessionId="session")), patch.object(
+            memory_transport, "credentials", side_effect=FileNotFoundError("reload")
+        ):
+            with self.assertRaises(TimeoutError):
+                self.client.call("editor.status")
+        self.assertEqual(Handler.posts, 0)
+        self.assertFalse((self.client.root / "jobs").exists())
     def test_timeout_cancels_same_identity_without_creating_files(self):
         Handler.mode = "pending"
         with self.assertRaises(TimeoutError): memory_transport.call(self.client, self.payload())
@@ -79,7 +98,7 @@ class MemoryTransportTests(unittest.TestCase):
         self.assertEqual(Handler.deletes, 1)
         self.assertFalse((self.client.root / "jobs").exists())
     def test_post_unknown_result_does_not_fall_back_to_file_transport(self):
-        with patch.object(memory_transport, "request", side_effect=ConnectionError("lost")):
+        with patch.object(memory_transport, "request", side_effect=[{"success": True}, ConnectionError("lost")]):
             with self.assertRaises(RevError): memory_transport.call(self.client, self.payload())
         self.assertFalse((self.client.root / "jobs").exists())
     def test_reports_keep_active_manual_and_marked_files(self):

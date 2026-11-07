@@ -17,7 +17,8 @@ namespace Revolution
             if (value is Dictionary<string, object> map)
             {
                 map.Remove("base64");
-                if (map.TryGetValue("dataJson", out object json) && json is string nested)
+                // JsonUtility 将空的可选字符串写成空串；这类回执没有内嵌 JSON。
+                if (map.TryGetValue("dataJson", out object json) && json is string nested && !string.IsNullOrWhiteSpace(nested))
                 { map["dataJson"] = WithoutImages(nested); }
                 foreach (object child in map.Values) { Trim(child); }
             }

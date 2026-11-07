@@ -16,6 +16,7 @@ namespace Revolution.Editor
     {
         [Serializable] private sealed class Checkpoint { public string sessionId; public RevAutomationMemoryJobs.Job[] jobs; }
         private static readonly RevAutomationMemoryJobs Jobs = new RevAutomationMemoryJobs();
+        private static readonly object SubmissionGate = new object();
         private static HttpListener _listener;
         private static Thread _thread;
         private static string _token, _url, _session;
@@ -44,7 +45,7 @@ namespace Revolution.Editor
                 try { listener.Prefixes.Add("http://127.0.0.1:" + port + "/"); listener.Start(); _listener = listener; break; }
                 catch (HttpListenerException) { listener.Close(); }
             }
-            if (_listener == null) { return; } // 兼容环境仍用文件桥；端点明确没有 memoryUrl。
+            if (_listener == null) { return; }
             SessionState.SetInt("RevAutomation.Http.Port", port); _url = "http://127.0.0.1:" + port;
             Restore();
             _thread = new Thread(Accept) { IsBackground = true, Name = "RevAutomation.EditorHTTP" }; _thread.Start();
@@ -96,8 +97,17 @@ namespace Revolution.Editor
                     if (!(data["confirm"] is bool confirm) || !(data["payloadJson"] is string payload) || !(data["protocol"] is double protocol) || protocol != 1)
                     { throw new ArgumentException("请求类型或协议无效"); }
                     RevAutomationJson.Object(RevAutomationJson.Parse(payload));
-                    Jobs.Add(new RevAutomationMemoryJobs.Job { id = id, action = action, payload = payload, confirm = confirm,
-                        fingerprint = RevAutomationMemoryJobs.Fingerprint(body), deadlineTicks = deadline.UtcDateTime.Ticks, expirable = true }, DateTime.UtcNow);
+                    lock (SubmissionGate)
+                    {
+                        // 在写检查点前冻结收件。已获准的请求一定在快照里。
+                        if (_stopping)
+                        {
+                            Send(context, 503, "{\"success\":false,\"error\":\"Reloading\"}");
+                            return;
+                        }
+                        Jobs.Add(new RevAutomationMemoryJobs.Job { id = id, action = action, payload = payload, confirm = confirm,
+                            fingerprint = RevAutomationMemoryJobs.Fingerprint(body), deadlineTicks = deadline.UtcDateTime.Ticks, expirable = true }, DateTime.UtcNow);
+                    }
                     Send(context, 202, "{\"success\":true,\"id\":\"" + id + "\"}"); return;
                 }
                 if (path.StartsWith("/jobs/", StringComparison.Ordinal))
@@ -134,7 +144,11 @@ namespace Revolution.Editor
         private static void BeforeReload()
         {
             if (!Available) { return; }
-            _stopping = true; _listener.Close(); _thread?.Join(500); _listener = null;
+            lock (SubmissionGate)
+            {
+                _stopping = true;
+            }
+            _listener.Close(); _thread?.Join(500); _listener = null;
             var jobs = Jobs.Snapshot();
             int responseBudget = 256 * 1024;
             foreach (var job in jobs)
@@ -142,7 +156,14 @@ namespace Revolution.Editor
                 // 已确认的大响应已经释放；未确认的极大结果不写盘，重载后明确 ResultExpired。
                 if (job.response != null)
                 {
-                    job.response = RevAutomationEvidence.WithoutImages(job.response);
+                    try { job.response = RevAutomationEvidence.WithoutImages(job.response); }
+                    catch (ArgumentException)
+                    {
+                        // 单条损坏结果可以过期，但不能让其它工单的身份从检查点消失。
+                        job.response = null;
+                        job.acknowledged = true;
+                        continue;
+                    }
                     responseBudget -= job.response.Length;
                     if (responseBudget < 0) { job.response = null; job.acknowledged = true; }
                 }
