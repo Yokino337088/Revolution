@@ -50,7 +50,7 @@ class MemoryTransportTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.project = Path(self.temp.name)
         (self.project / "Assets").mkdir(); (self.project / "ProjectSettings").mkdir()
-        self.client = RevClient(self.project, "live", timeout=.3)
+        self.client = RevClient(self.project, "live", timeout=3)
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True); self.thread.start()
         self.info = dict(protocol=1, url=f"http://127.0.0.1:{self.server.server_port}", token="private", sessionId="session", project=str(self.project))
@@ -84,6 +84,7 @@ class MemoryTransportTests(unittest.TestCase):
         self.assertEqual(Handler.posts, 1)
         self.assertFalse((self.client.root / "jobs").exists())
     def test_unavailable_required_http_times_out_without_file_fallback(self):
+        self.client.timeout = .3
         with patch.object(self.client, "ready_endpoint", return_value=dict(memoryRequired=True, sessionId="session")), patch.object(
             memory_transport, "credentials", side_effect=FileNotFoundError("reload")
         ):
@@ -92,6 +93,7 @@ class MemoryTransportTests(unittest.TestCase):
         self.assertEqual(Handler.posts, 0)
         self.assertFalse((self.client.root / "jobs").exists())
     def test_timeout_cancels_same_identity_without_creating_files(self):
+        self.client.timeout = .3
         Handler.mode = "pending"
         with self.assertRaises(TimeoutError): memory_transport.call(self.client, self.payload())
         self.assertEqual(Handler.posts, 1)
