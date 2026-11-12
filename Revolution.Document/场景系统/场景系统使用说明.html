@@ -284,6 +284,10 @@ RevScene.OnLoadStart += _ =&gt;
     </ul>
     <p>于是你拿到的 <code>p</code> / <code>RevScene.Progress</code> 永远可以<b>直接</b>喂 <code>Slider.value</code>，不用自己乘系数。</p>
 
+    <h4>业务放行：<code>RevScene.LoadWhenReadyAsync</code></h4>
+    <p>本机完成真实预加载后调用业务门禁。返回 <code>true</code> 才把新场景设为活动场景并卸载旧活动场景；返回 <code>false</code> 时卸载临时预加载，保留旧活动场景。</p>
+    <p>门禁由业务提供超时和取消。Unity 的异步操作队列此时被挂起，回调只等待网络、业务状态或下一帧；面板与图集须先准备好。</p>
+
     <h3>② 最短展示时长：<code>minSeconds</code></h3>
     <p>小场景加载只要几十毫秒，加载界面会"闪一下"。传 <code>minSeconds</code>（或全局 <code>DefaultMinSeconds</code>）后：</p>
     <ul>
