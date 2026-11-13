@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^(startup|resume|compact|fork|clear)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_ROOT}/hooks/session.py\"",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -Command \"python (Join-Path ([Environment]::GetEnvironmentVariable('PLUGIN_ROOT')) 'hooks/session.py')\"",
+            "timeout": 5,
+            "statusMessage": "恢复 RevGame 项目约定"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "revgame",
+  "version": "0.1.0",
+  "description": "RevGame 围棋史莱姆的项目规范、资源验收与 Unity 自动化入口。",
+  "author": { "name": "Revolution" },
+  "license": "MIT",
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "RevGame",
+    "shortDescription": "在 RevGame 中按项目规范开发和验收"
+  }
+}

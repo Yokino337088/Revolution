@@ -1,0 +1,20 @@
+{
+  "name": "revolution-tools",
+  "interface": {
+    "displayName": "Revolution"
+  },
+  "plugins": [
+    {
+      "name": "revolution",
+      "source": { "source": "local", "path": "./Plugin/revolution" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Development"
+    },
+    {
+      "name": "revgame",
+      "source": { "source": "local", "path": "./Plugin/revgame" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Development"
+    }
+  ]
+}

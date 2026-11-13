@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "revolution_unity": {
+      "command": "python",
+      "args": ["-B", "./server/serve.py"],
+      "cwd": ".",
+      "startup_timeout_sec": 20,
+      "tool_timeout_sec": 900
+    }
+  }
+}

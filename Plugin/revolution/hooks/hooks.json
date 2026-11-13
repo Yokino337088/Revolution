@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^(startup|resume|compact|fork|clear)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_ROOT}/hooks/session.py\"",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -Command \"python (Join-Path ([Environment]::GetEnvironmentVariable('PLUGIN_ROOT')) 'hooks/session.py')\"",
+            "timeout": 5,
+            "statusMessage": "读取 Revolution 项目约定"
+          }
+        ]
+      }
+    ]
+  }
+}
