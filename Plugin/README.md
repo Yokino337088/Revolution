@@ -30,7 +30,7 @@ codex plugin add revgame@revolution-tools
 
 将 `Plugin/revolution/policy` 中的检查器源码随项目分发，配置放到项目根 `.codex/rev-policy.json`。项目自选资产目录、受查 C# 目录和启动入口。可直接查看 [RevGame 项目配置](https://github.com/Yokino337088/RevGame/blob/main/.codex/rev-policy.json)。
 
-终端默认检查工作区，提交前用 `--staged`，CI 用 `--base <基线提交>`。输出 0 为通过，1 为违规，2 为检查无法完成。Unity 的资源验证、真机与业务验收继续走项目原入口。
+终端默认检查工作区，提交前用 `--staged`，CI 用 `--base <基线提交>`。GitHub Actions 可加 `--format github`，在完整日志之外生成文件注解。C# 注解定位到违规行列，GUID 注解定位到对应 `.meta` 的字段行，目录和缺失文件问题显示具体资产与修复提示。退出码 0 为通过，1 为违规，2 为检查无法完成。Unity 的资源验证、真机与业务验收继续走项目原入口。
 
 资产规则检测目录与 `.meta`、Git 已识别的资产移动、变更 GUID 重复和框架快照锚点。C# 检查使用 .NET 8 SDK 内置 Roslyn 的语法树，在常用 Unity 符号组合中查新增问题。语义判断由 Unity 编译和代码审查负责。仓库管理员可把检查设为必需状态检查，以在合并时执行门禁。
 

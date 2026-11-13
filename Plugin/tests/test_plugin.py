@@ -118,6 +118,45 @@ class PolicyTests(unittest.TestCase):
         for number in range(200, 207):
             self.assertIn(f"REV{number}", output)
 
+    def test_ci_annotations_use_changed_files_and_exact_tokens(self):
+        """同类旧违规留在基线。CI 使用提交中的实际列，并标记本次改动的重复 GUID。"""
+        changed_code = self.old_code.replace("        if (true)", (
+            "        if (true) return; // 新增一处同类违规\n"
+            "        var resource = UnityEngine.Resources\n"
+            "            .Load<object>(\"test\");\n"
+            "        if (true)"
+        ))
+        self.put(self.code, changed_code)
+        misplaced = "Unity/Assets/Scenes/材质,100%.mat"
+        self.put(misplaced, "material\n")
+        duplicate = "Unity/Assets/GameRes/Material/Board/新材质.mat"
+        self.put(duplicate, "material\n")
+        self.put(duplicate + ".meta", f"fileFormatVersion: 2\nguid: {GUID}\n")
+        self.git("add", "--", self.code, misplaced, duplicate, duplicate + ".meta")
+        self.git("commit", "-qm", "annotation fixture")
+        self.put(self.code, "\n\n" + self.old_code)
+        output = self.check(1, "--base", "HEAD^", "--format", "github")
+        self.assertIn(f"::error file={self.code},title=REV200,line=5,col=19::", output)
+        self.assertIn(f"::error file={self.code},title=REV203,line=7,col=14::", output)
+        self.assertNotIn(f"file={self.code},title=REV200,line=8", output)
+        escaped = "Unity/Assets/Scenes/材质%2C100%25.mat"
+        self.assertIn(f"::error file={escaped},title=REV100::", output)
+        self.assertIn(f"::error file={escaped},title=REV101::", output)
+        self.assertIn(misplaced + ".meta", output)
+        self.assertIn(f"::error file={duplicate}.meta,title=REV103,line=2::", output)
+        self.assertIn(self.material + ".meta", output)
+
+    def test_metadata_diagnostic_points_to_guid_field(self):
+        """格式错误的 GUID 有真实坐标。缺目录 meta 时跳到本次新增的子文件。"""
+        self.put(self.material + ".meta", "fileFormatVersion: 2\nguid: bad\n")
+        added = "Unity/Assets/GameRes/Material/New/新材质.mat"
+        self.put(added, "material\n")
+        self.put(added + ".meta", f"guid: {'2' * 32}\n")
+        output = self.check(1, "--format", "github")
+        self.assertIn(f"::error file={self.material}.meta,title=REV102,line=2::", output)
+        self.assertIn(f"::error file={added},title=REV101::", output)
+        self.assertIn("Unity/Assets/GameRes/Material/New.meta", output)
+
 
 class PluginTests(unittest.TestCase):
     """Use the installed layout and the real RevMCP stdio worker."""
