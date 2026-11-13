@@ -1,0 +1,14 @@
+{
+  "name": "revolution",
+  "version": "0.1.0",
+  "description": "Revolution 框架技能、RevCLI 和可连接 Unity 的 RevMCP。",
+  "author": { "name": "Revolution" },
+  "license": "MIT",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Revolution",
+    "shortDescription": "用 Revolution 开发、制作和验证 Unity 项目"
+  }
+}

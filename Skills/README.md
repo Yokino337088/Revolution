@@ -43,7 +43,7 @@
 
 ```text
 revolution-framework/
-├── SKILL.md                     ← 主入口：21 个 Runtime 目录总览、分诊表、反幻觉协议、技术铁律与规范
+├── SKILL.md                     ← 主入口：任务分诊、公开门面与验收
 ├── REFERENCE_GUIDELINES.md      ← 代码审查入口：逐条清单（清理/资源/UI/异步/事件/时间/服务/热更/启动与真机/规范）+ 8 组正反例
 ├── references/
 │   ├── playbooks.md             ← 21 个任务配方（R1~R21），含游戏域 × FSM、横竖屏、GM/AI 自动测试接线

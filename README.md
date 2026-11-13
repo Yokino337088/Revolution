@@ -295,6 +295,8 @@ Revolution 的核心价值，是把它们连起来，让“AI 能写”向“AI 
 
 把完整的 `revolution-framework` 和 `revolution-ai-automation` Skill 目录安装到所用 Agent 支持的 skills 位置，具体方法见 [Skills 安装说明](Skills/README.md)。
 
+Codex 用户也可以安装 [Revolution 与 RevGame 插件](Plugin/README.md)，使用框架技能、RevCLI、RevMCP 和项目规范检查。
+
 一份负责**怎样规范地开发**，一份负责**怎样调用工具并验证**。安装目录及启用方式由客户端决定，不能只把文件放进去就假定它一定被加载。
 
 ### 🔗 3. 连接你的 MCP 客户端
