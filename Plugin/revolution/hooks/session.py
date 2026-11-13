@@ -7,7 +7,17 @@ from pathlib import Path
 
 def uses_revolution(root):
     """查找源码、内置包或已声明的 UPM 依赖，普通 Unity 工程不注入。"""
-    for project in (root, root / "RevolutionFrameWork_Unity"):
+    projects = [root, root / "RevolutionFrameWork_Unity"]
+    # 项目规范与检查器共用 unityProject 入口，仓库根也能找到嵌套工程。
+    policy = root / ".codex/rev-policy.json"
+    if policy.is_file():
+        try:
+            project = (root / json.loads(policy.read_text(encoding="utf-8-sig"))["unityProject"]).resolve()
+            if project.is_relative_to(root):
+                projects.append(project)
+        except (KeyError, OSError, TypeError, ValueError):
+            pass
+    for project in projects:
         if (project / "Assets/Revolution/package.json").is_file():
             return True
         manifest = project / "Packages/manifest.json"

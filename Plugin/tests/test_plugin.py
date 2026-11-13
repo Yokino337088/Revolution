@@ -195,6 +195,24 @@ class PluginTests(unittest.TestCase):
             context = json.loads(invoke())["hookSpecificOutput"]["additionalContext"]
             self.assertIn("tools/RevPolicy/check.py", context)
 
+    def test_revolution_session_finds_nested_project(self):
+        """The repository root resolves the same Unity project as its policy."""
+        hook = FRAMEWORK / "hooks/session.py"
+        with tempfile.TemporaryDirectory(prefix="rev-nested-hook-") as directory:
+            root = Path(directory)
+            project = root / "client/Unity"
+            package = project / "Assets/Revolution/package.json"
+            package.parent.mkdir(parents=True)
+            package.write_text("{}", encoding="utf-8")
+            policy = root / ".codex/rev-policy.json"
+            policy.parent.mkdir()
+            policy.write_text(json.dumps({"unityProject": "client/Unity"}), encoding="utf-8")
+            for cwd in (root, project):
+                event = {"cwd": str(cwd), "hook_event_name": "SessionStart", "source": "compact"}
+                output = subprocess.check_output([sys.executable, str(hook)], input=json.dumps(event), encoding="utf-8")
+                context = json.loads(output)["hookSpecificOutput"]["additionalContext"]
+                self.assertIn("RevScope", context)
+
 
 if __name__ == "__main__":
     unittest.main()

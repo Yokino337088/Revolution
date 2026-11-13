@@ -1,6 +1,6 @@
 {
   "name": "revolution",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Revolution 框架技能、RevCLI 和可连接 Unity 的 RevMCP。",
   "author": { "name": "Revolution" },
   "license": "MIT",
