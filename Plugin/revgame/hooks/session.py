@@ -18,6 +18,7 @@ def main():
                     "框架改动在 Revolution 源仓库进行。项目材质归 GameRes/Material/模块，移动资产带原 .meta。"
                     "编辑器用 RevCLI；游戏验收优先项目 RevMCP，发现后调用并核对断言和清理。"
                     "交付前运行 python tools/RevPolicy/check.py。"
+                    "最后一次 Unity 脚本改动后，在编辑态完整重编并核对本次编译工单无错误，再进入 Play 或交付。"
                 ),
             }}))
             return
