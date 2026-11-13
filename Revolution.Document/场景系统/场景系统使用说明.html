@@ -286,7 +286,8 @@ RevScene.OnLoadStart += _ =&gt;
 
     <h4>业务放行：<code>RevScene.LoadWhenReadyAsync</code></h4>
     <p>本机完成真实预加载后调用业务门禁。返回 <code>true</code> 才把新场景设为活动场景并卸载旧活动场景；返回 <code>false</code> 时卸载临时预加载，保留旧活动场景。</p>
-    <p>门禁由业务提供超时和取消。Unity 的异步操作队列此时被挂起，回调只等待网络、业务状态或下一帧；面板与图集须先准备好。</p>
+    <p>门禁默认最多等待 60 秒，五参数重载可指定实时时限。超时进入 <code>Failed</code> 并通知 <code>OnLoadFailed</code>，正常拒绝回到 <code>Idle</code>。两者都会放开 Unity 队列，等待附加场景加载并卸载它，保留原活动场景和框架空闲池。Unity 仍可能调用临时场景的 <code>Awake</code> / <code>OnEnable</code>，业务应延后外部副作用，并自行取消未结束的门禁任务。</p>
+    <p>Unity 异步队列挂起期间，门禁只等待网络、业务状态或下一帧。面板与图集应先准备好。Build Settings 中有同名场景时传完整路径。</p>
 
     <h3>② 最短展示时长：<code>minSeconds</code></h3>
     <p>小场景加载只要几十毫秒，加载界面会"闪一下"。传 <code>minSeconds</code>（或全局 <code>DefaultMinSeconds</code>）后：</p>
