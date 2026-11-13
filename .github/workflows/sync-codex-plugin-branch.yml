@@ -1,0 +1,53 @@
+name: 发布 Codex 插件分支
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Plugin/**'
+      - '.agents/plugins/marketplace.json'
+      - '.github/workflows/sync-codex-plugin-branch.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-codex-plugin
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python Plugin/package_plugins.py --check
+      - name: 发布两个插件及市场清单
+        run: |
+          set -euo pipefail
+          source_sha="$(git rev-parse HEAD)"
+          branch=refs/heads/codex-plugin
+          previous="$(git ls-remote origin "$branch" | cut -f1)"
+          parents=()
+          if [ -n "$previous" ]; then
+            git fetch --depth=1 origin "$branch"
+            parents=(-p "$(git rev-parse FETCH_HEAD)")
+          fi
+          index_dir="$(mktemp -d)"
+          export GIT_INDEX_FILE="$index_dir/index"
+          git read-tree --empty
+          git read-tree --prefix=Plugin/ "$source_sha:Plugin"
+          catalog="$(git rev-parse "$source_sha:.agents/plugins/marketplace.json")"
+          git update-index --add --cacheinfo "100644,$catalog,.agents/plugins/marketplace.json"
+          tree="$(git write-tree)"
+          if [ -n "$previous" ] && [ "$tree" = "$(git rev-parse "${parents[1]}^{tree}")" ]; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          release="$(git commit-tree "$tree" "${parents[@]}" -m "publish: Codex 插件（源 $source_sha）")"
+          git push origin "$release:$branch"

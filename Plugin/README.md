@@ -4,6 +4,14 @@ Revolution 插件包含框架、编辑器、AI 自动化、性能和 scenario �
 
 ## 安装和使用
 
+官方 `codex-plugin` 分支发布两个可安装插件及市场清单。开发在 `main` 进行，GitHub Actions 将验证过的插件副本同步到发布分支。可直接用 Codex CLI 添加发布分支：
+
+```powershell
+codex plugin marketplace add Yokino337088/Revolution --ref codex-plugin
+codex plugin add revolution@revolution-tools
+codex plugin add revgame@revolution-tools
+```
+
 在 Codex 桌面端打开 Revolution 仓库并选择 **Revolution** 插件来源。安装 **Revolution**，在 RevGame 工作时再安装 **RevGame**。已安装的 Codex CLI 也可注册该市场并安装：
 
 ```powershell
