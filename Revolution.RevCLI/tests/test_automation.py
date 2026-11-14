@@ -22,6 +22,21 @@ class FakeClient:
 
 
 class AutomationTests(unittest.TestCase):
+    def test_summary_preserves_late_failure_and_recovery_fields(self):
+        from revautomation.summary import summarize
+        rows = [{"id": str(i), "response": {"success": True, "data": {"log": "x" * 9000}}}
+                for i in range(6)]
+        rows[-1]["response"] = {"success": False, "error": "AssertionFailed",
+                                "assertion": {"path": "/data/value", "equals": 3}}
+        result = {"success": False, "steps": rows, "cleanup": [{"response": {"success": True}}]}
+        summary = summarize(result)
+        self.assertEqual(summary["stepsCount"], 6)
+        self.assertEqual(summary["steps"][-1]["response"]["error"], "AssertionFailed")
+        self.assertTrue(summary["cleanup"][0]["response"]["success"])
+        self.assertEqual(len(result["steps"][0]["response"]["data"]["log"]), 9000)
+        small = {"success": True, "data": {"requestId": "abc", "finished": True}}
+        self.assertIs(summarize(small), small)
+
     def test_incremental_ab_commands_require_an_explicit_target(self):
         for operation in ("build-incremental", "publish-incremental"):
             action = "ab." + operation

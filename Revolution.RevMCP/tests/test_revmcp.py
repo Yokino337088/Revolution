@@ -38,6 +38,25 @@ class FakeHub:
 
 
 class RevMCPTests(unittest.TestCase):
+    def test_mcp_summary_retains_full_report_and_full_override(self):
+        from revmcp.server import Server
+        hub = FakeHub()
+        original = {"success": True, "data": {"requestId": "build", "log": "x" * 9000}}
+        hub.call = lambda *args: original
+        saved = []
+        hub.save = lambda value: saved.append(value) or "report.json"
+        server = Server(hub, compact_tools=True)
+        args = {"target": "game", "action": "state"}
+        result = server._call({"name": "rev_call", "arguments": args}, None)
+        summary = result["structuredContent"]
+        self.assertTrue(summary["detailsTruncated"])
+        self.assertEqual(summary["data"]["requestId"], "build")
+        self.assertEqual(summary["reportPath"], "report.json")
+        self.assertIs(saved[0], original)
+        self.assertNotIn("xxxx", result["content"][0]["text"])
+        full = server._call({"name": "rev_call", "arguments": dict(args, full=True)}, None)
+        self.assertEqual(full["structuredContent"]["data"]["log"], original["data"]["log"])
+
     def test_schema_distinguishes_bool_and_number(self):
         with self.assertRaises(ValueError):
             validate(True, {"type": "integer"})
