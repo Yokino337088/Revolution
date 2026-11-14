@@ -46,8 +46,8 @@ jobs:
       - name: 校验能作为库导入
         run: |
           cd /tmp/revmcp
-          python -m compileall -q Revolution.RevMCP Revolution.RevCLI
-          python -c "
+          PYTHONPYCACHEPREFIX="$(mktemp -d)" python -m compileall -q Revolution.RevMCP Revolution.RevCLI
+          python -B -c "
           import sys
           sys.path.insert(0, 'Revolution.RevCLI')
           sys.path.insert(0, 'Revolution.RevMCP')
