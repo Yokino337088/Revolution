@@ -34,7 +34,14 @@ def main():
     """只用会话工作目录定位工程，输出 Codex SessionStart 支持的上下文。"""
     event = json.load(sys.stdin.buffer)
     cwd = Path(event["cwd"]).resolve()
-    if not any(uses_revolution(path) for path in (cwd, *cwd.parents)):
+    roots = (cwd, *cwd.parents)
+    # RevGame 由仓库规则和项目插件负责。即使当前目录在嵌套 Unity 工程中，也不重复注入。
+    if any((root / "AGENTS.md").is_file()
+           and (root / ".codex/rev-policy.json").is_file()
+           and (root / ".codex/skills/revgame-development/SKILL.md").is_file()
+           for root in roots):
+        return
+    if not any(uses_revolution(path) for path in roots):
         return
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "SessionStart",
