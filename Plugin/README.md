@@ -1,6 +1,6 @@
 # Revolution 与 RevGame Codex 插件
 
-Revolution 插件包含框架、编辑器、AI 自动化、性能和 scenario 五个技能，以及 RevCLI、RevMCP。RevGame 插件从目标仓库读取当版项目规范，并在支持 hooks 的本地 Codex 会话启动或压缩后补充简短约定。RevGame 的项目规则和检查配置由 RevGame 仓库维护。
+Revolution 插件包含框架、编辑器、AI 自动化、性能和 scenario 五个技能，以及 RevCLI、RevMCP。RevGame 会话的项目 Hook 只指向仓库根 `AGENTS.md` 和项目 Skill，通用 Revolution Hook 在识别到 RevGame 时跳过。其它 Revolution 工程沿用通用提示。RevGame 的项目规则和检查配置由 RevGame 仓库维护。
 
 ## 安装和使用
 
@@ -34,7 +34,7 @@ codex plugin add revgame@revolution-tools
 
 Revolution 插件在已升级的工程内可发现 `ab.build-incremental` 和 `ab.publish-incremental`。两个动作都要求显式 `target`。先构建并核对 `ab.check-map`，再按同一平台发布至 StreamingAssets。若构建成功且 `data.rebuildReason` 非空，记录原因并使用本次全量产物继续流程。回退原因、发布拒绝和重试策略见 [增量 AB 配方](revolution/skills/revolution-unity-editor/references/incremental-ab.md)。
 
-Unity 功能交付前需要在编辑态主动执行 `editor.recompile`，等 `editor wait`，再用 `editor.compilation` 核对本次工单的 `requestId`、`finished` 和错误。会话钩子在启动和压缩后恢复这条约定，实际编译由代理在目标工程中执行。
+Unity 功能交付前需要在编辑态主动执行 `editor.recompile`，等 `editor wait`，再用 `editor.compilation` 核对本次工单的 `requestId`、`finished` 和错误。RevGame 从仓库规则读取这条约定，独立 Revolution 工程仍由通用 Hook 提醒。实际编译与验收由代理在目标工程中执行。
 
 将 `Plugin/revolution/policy` 中的检查器源码随项目分发，配置放到项目根 `.codex/rev-policy.json`。项目自选资产目录、受查 C# 目录和启动入口。可直接查看 [RevGame 项目配置](https://github.com/Yokino337088/RevGame/blob/main/.codex/rev-policy.json)。
 

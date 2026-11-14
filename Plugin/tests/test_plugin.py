@@ -215,24 +215,34 @@ class PluginTests(unittest.TestCase):
                 process.stdout.close()
 
     def test_revgame_session_context_is_scoped(self):
-        """Compaction in RevGame restores its key rules; another workspace stays quiet."""
-        hook = ROOT / "revgame/hooks/session.py"
+        """RevGame 根目录和嵌套 Unity 工程只注入一条入口提示。"""
+        project_hook = ROOT / "revgame/hooks/session.py"
+        framework_hook = FRAMEWORK / "hooks/session.py"
         with tempfile.TemporaryDirectory(prefix="rev-hook-test-") as directory:
             root = Path(directory)
-            child = root / "src"
-            child.mkdir()
+            child = root / "client/Unity"
+            package = child / "Assets/Revolution/package.json"
+            package.parent.mkdir(parents=True)
+            package.write_text("{}", encoding="utf-8")
 
-            def invoke():
-                event = {"cwd": str(child), "hook_event_name": "SessionStart", "source": "compact"}
+            def invoke(hook, cwd, source):
+                event = {"cwd": str(cwd), "hook_event_name": "SessionStart", "source": source}
                 return subprocess.check_output([sys.executable, str(hook)], input=json.dumps(event), encoding="utf-8")
 
-            self.assertEqual(invoke(), "")
+            self.assertEqual(invoke(project_hook, child, "startup"), "")
             skill = root / ".codex/skills/revgame-development/SKILL.md"
             skill.parent.mkdir(parents=True)
             skill.touch()
-            (root / ".codex/rev-policy.json").touch()
-            context = json.loads(invoke())["hookSpecificOutput"]["additionalContext"]
-            self.assertIn("tools/RevPolicy/check.py", context)
+            (root / ".codex/rev-policy.json").write_text(json.dumps({"unityProject": "client/Unity"}), encoding="utf-8")
+            fallback = json.loads(invoke(framework_hook, child, "startup"))["hookSpecificOutput"]["additionalContext"]
+            self.assertIn("完整重编", fallback)
+            (root / "AGENTS.md").write_text("# RevGame", encoding="utf-8")
+            for cwd in (root, child):
+                for source in ("startup", "resume", "compact", "fork", "clear"):
+                    with self.subTest(cwd=cwd, source=source):
+                        self.assertEqual(invoke(framework_hook, cwd, source), "")
+                        context = json.loads(invoke(project_hook, cwd, source))["hookSpecificOutput"]["additionalContext"]
+                        self.assertEqual(context, "RevGame 项目规则见仓库根 AGENTS.md，专题按 revgame-development 路由。")
 
     def test_revolution_session_finds_nested_project(self):
         """The repository root resolves the same Unity project as its policy."""
@@ -251,6 +261,8 @@ class PluginTests(unittest.TestCase):
                 output = subprocess.check_output([sys.executable, str(hook)], input=json.dumps(event), encoding="utf-8")
                 context = json.loads(output)["hookSpecificOutput"]["additionalContext"]
                 self.assertIn("RevScope", context)
+                self.assertIn("完整重编", context)
+                self.assertIn("revolution-ai-automation", context)
 
 
 if __name__ == "__main__":
