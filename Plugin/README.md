@@ -24,6 +24,8 @@ codex plugin add revgame@revolution-tools
 
 编辑器制作、导表和构建使用 `Revolution.RevCLI/rev.py`。优先用目标工程相邻工具，也可用 `rev_bind` 返回的 `bundledRevCli`。所有调用显式传 `--project`。RevMCP 通过现有 Hub 分发 Editor、开发态 GM 和测试计划，计划断言、取消与清理沿用 RevMCP。使用项目自己明确配置的外部扩展工具时，继续用项目的独立 RevMCP 启动参数。
 
+功能验收或修 Bug 时，在 Codex 调用 `$revolution-ai-automation`。技能引导 Codex 对照需求覆盖主流程、失败与重入，用 RevMCP 收集预期和实测，读当前源码找根因并给出修改建议。任务授权修复时，Codex 改工程后复跑原用例与受影响的回归，把修前修后证据连到同一缺陷。可在请求中指定“只测试和给建议”或“发现问题后直接修复并复测”。 [缺陷闭环](../Skills/revolution-ai-automation/references/defect-closure.md)
+
 在桌面端 **Review hooks** 中审核插件 hooks 后，Codex 才会执行会话提醒。用 Git 检查器和 CI 落实可判定的规则。具体宿主支持范围和审核方式见官方文档。 [插件打包](https://developers.openai.com/plugins/build/plugins) · [Codex Hooks](https://learn.chatgpt.com/docs/hooks)
 
 ## 在项目内执行规范检查
