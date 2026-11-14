@@ -13,7 +13,7 @@ def uses_revolution(root):
     if policy.is_file():
         try:
             project = (root / json.loads(policy.read_text(encoding="utf-8-sig"))["unityProject"]).resolve()
-            if project.is_relative_to(root):
+            if project == root or root in project.parents:
                 projects.append(project)
         except (KeyError, OSError, TypeError, ValueError):
             pass

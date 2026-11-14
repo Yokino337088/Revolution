@@ -1,6 +1,6 @@
 {
   "name": "revolution",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Revolution 框架开发、Unity 自动化、功能完整性与缺陷修复回归。包含 RevCLI 和 RevMCP。",
   "author": { "name": "Revolution" },
   "license": "MIT",
