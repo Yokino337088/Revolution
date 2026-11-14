@@ -22,6 +22,16 @@ class FakeClient:
 
 
 class AutomationTests(unittest.TestCase):
+    def test_incremental_ab_commands_require_an_explicit_target(self):
+        for operation in ("build-incremental", "publish-incremental"):
+            action = "ab." + operation
+            args = parser().parse_args(["ab", operation, "--target", "StandaloneWindows64"])
+            self.assertEqual(payload_of(args), {"target": "StandaloneWindows64"})
+            validate_action(action, payload_of(args))
+            for payload in ({}, {"target": " "}, {"target": True}, {"target": "Android", "force": True}):
+                with self.subTest(action=action, payload=payload), self.assertRaises(RevError):
+                    validate_action(action, payload)
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

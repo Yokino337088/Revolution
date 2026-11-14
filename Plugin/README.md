@@ -30,6 +30,10 @@ codex plugin add revgame@revolution-tools
 
 ## 在项目内执行规范检查
 
+### AI 增量构建与发布 AB
+
+Revolution 插件在已升级的工程内可发现 `ab.build-incremental` 和 `ab.publish-incremental`。两个动作都要求显式 `target`。先构建并核对 `ab.check-map`，再按同一平台发布至 StreamingAssets。使用 RevCLI 的 `ab build-incremental --target StandaloneWindows64` 和 `ab publish-incremental --target StandaloneWindows64`，或在插件里用同名点分隔动作调用。完整流程和回执字段见 [增量 AB 配方](revolution/skills/revolution-unity-editor/references/incremental-ab.md)。
+
 Unity 功能交付前需要在编辑态主动执行 `editor.recompile`，等 `editor wait`，再用 `editor.compilation` 核对本次工单的 `requestId`、`finished` 和错误。会话钩子在启动和压缩后恢复这条约定，实际编译由代理在目标工程中执行。
 
 将 `Plugin/revolution/policy` 中的检查器源码随项目分发，配置放到项目根 `.codex/rev-policy.json`。项目自选资产目录、受查 C# 目录和启动入口。可直接查看 [RevGame 项目配置](https://github.com/Yokino337088/RevGame/blob/main/.codex/rev-policy.json)。

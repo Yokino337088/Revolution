@@ -108,6 +108,8 @@ if (!h.IsLoaded) { RevLog.Error($"加载失败：{h.ErrorReason}", "Res"); }
 
 ## 7. 写业务的四条硬规则
 
+AI 进行小范围资源迭代时，可用 RevCLI 的显式增量构建、映射检查、增量发布流程。两步使用同一 BuildTarget，发布回执会返回实际更新与移除数量。见 [增量 AB 配方](../../revolution-unity-editor/references/incremental-ab.md)。
+
 1. **只写逻辑路径**：用 `RevResPath.*` 生成常量（`Assets/Revolution/Generation/RevResPath.cs`）或两段式参数；**禁止** `StreamingAssets` / `dataPath` / `Resources.Load` 自己拼路径。
 2. **成对 Release**：`Load`/`LoadAsync` 每次都要有对应释放点（面板 `OnClose` / 状态退出 / 分组卸载）。
 3. **真机首次一律异步**：`LoadAsync` + 回调（或 `await` 包装）；同步 `Load` 只用于"已缓存 / 编辑器直读"。
