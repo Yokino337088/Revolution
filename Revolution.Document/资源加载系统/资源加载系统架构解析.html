@@ -537,7 +537,7 @@ Assets/StreamingAssets/PC/                  <span class="c">← 拷进来的运�
       <li><b>增量是自动的</b>：<code>forceRebuild</code> 关闭时，Unity 按内容 Hash 跳过没变的包；只有怀疑产物脏了才勾它。</li>
       <li><b>编辑器默认不走 AB</b>：开发期 <code>RevEditorResPolicy</code> 直读工程（所有资源一律 <code>AssetDatabase</code> 读，不打包也能跑）。要验证 AB 链路，用菜单 <code>Revolution.Tools/资源/AB 加载模式（编辑器）</code> 切换，或直接出真机包验证。<br>
         <b>⚠️ "编辑器能跑"不代表"真机能跑"，AB 链路一定要在真机上验一次。</b></li>
-      <li><b><code>copyToStreamingAssets</code> 打开后是"整目录覆盖"</b>：目标目录会被先删再拷，别往里放手写的东西。</li>
+      <li><b>发布按内容增量更新</b>：<code>ABBuilderCore.PublishToAssets</code> 只替换变化的包、主包及清单，保留已有 Unity <code>.meta</code>。从上次清单移除的包会删除，未纳入清单的文件保留。构建失败时禁止发布，复制异常时尝试恢复本次已替换的文件。</li>
       <li><b>任何 <code>Resources</code> 文件夹里的东西都会被无条件打进包体</b>：框架的 <code>ResMap.txt</code> 就放在它自己的
         <code>Assets/Revolution/Resources/ResourceSystem/</code> 里（很小）。<b>别把大资源往任何 <code>Resources</code> 文件夹里放</b>
         —— 包括框架这个：它存在的唯一目的就是让 <code>Resources.Load</code> 能读到这张小表。</li>

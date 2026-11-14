@@ -321,6 +321,7 @@ Debug.Log($<span class="s">"缓存 {RevResManager.CachedCount} 份，其中待�
     <div class="callout bad">
       <span class="t">⚠️ 先明确一件事：框架本体不含热更新代码</span>
       AB 默认只从<b>本机</b> <code>StreamingAssets</code> 读（源码里就写着这句，见 <code>RevABLoader.cs</code> 头部注释）。
+      日常迭代可关闭「强制全部重打」和「打包前清空输出目录」，保留上次输出。Unity 会检查依赖、复用可复用的包并生成完整主包。开启发布后，框架只替换变化的产物并显示实际更新数量。已有成功构建也可用 <code>ab.copy</code> 单独发布。
       <b>资源热更</b>由官方扩展包 <b>RevHotUpdate</b> 提供：它通过本体预留的 2 个默认 <code>null</code> 钩子
       （<code>RevABLoader.BundlePathResolver</code> = 包路径重定向 / <code>RevResBootstrap.ResMapOverride</code> = 映射表覆盖）
       把加载指到持久化版本目录（Android / iOS / PC）或 CDN 的版本化 URL（小游戏）—— <b>不装 = 与从前逐字节一致</b>。
