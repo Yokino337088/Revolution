@@ -14,3 +14,5 @@ Unity 目标是该仓库的 `RevGame_Client/UnityProject/RevGame.Unity`。用相
 写代码或移动资产后，从 RevGame 根运行 `python tools/RevPolicy/check.py`。准备提交时用 `--staged` 检查索引。资源改动继续经过 Unity 的 `GameResourceUsage.Validate` 和目标 AB 验收。
 
 小范围 AB 更新加载 RevGame 项目的 Unity 与资源专题。先验证项目分包与图集，再通过 Revolution 的 `ab.build-incremental` → `ab.check-map` → `ab.publish-incremental` 串行执行，三步使用相同的显式 BuildTarget。读取回执确认实际替换数；Windows Editor 冷启动验证用 StandaloneWindows64。
+
+构建成功且 `data.rebuildReason` 非空时，本次已经强制全量。记录原因，继续同平台映射检查和发布。遇到构建未完成、平台不符或校验不一致导致发布被拒时，按项目的增量 AB 配方检查工单并重建。发布回执用于确认实际替换数量。
