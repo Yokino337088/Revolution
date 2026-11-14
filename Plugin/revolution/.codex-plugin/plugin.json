@@ -1,7 +1,7 @@
 {
   "name": "revolution",
-  "version": "0.1.3",
-  "description": "Revolution 框架技能、RevCLI 和可连接 Unity 的 RevMCP。",
+  "version": "0.1.4",
+  "description": "Revolution 框架开发、Unity 自动化、功能完整性与缺陷修复回归。包含 RevCLI 和 RevMCP。",
   "author": { "name": "Revolution" },
   "license": "MIT",
   "skills": "./skills/",
@@ -9,6 +9,6 @@
   "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "Revolution",
-    "shortDescription": "用 Revolution 开发、制作和验证 Unity 项目"
+    "shortDescription": "开发 Unity 功能，执行真实测试、源码定位和修复回归"
   }
 }

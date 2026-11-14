@@ -1,5 +1,7 @@
 # Revolution 官方Skills
 
+[revolution-ai-automation](revolution-ai-automation/SKILL.md) 支持功能完整性审查和缺陷闭环。Coding Agent 按需求设计正反例、执行真实测试、结合源码确认根因，并在修复授权内落实改动、复跑原失败用例和相关回归。用例、`code_refs` 和修前修后证据格式见 [缺陷闭环](revolution-ai-automation/references/defect-closure.md)。
+
 2026-10-31 新增 [revolution-unity-editor](revolution-unity-editor/SKILL.md)：通过常驻 RevMCP / RevCLI 搭建场景、修改对象/组件、检查资产/Prefab，按需发现、同步批量、读回断言与 Undo/清理；配套 [提速与活动窗口教程](../Revolution.Document/自动化工具/RevMCP提速与活动窗口优化使用说明.html) 和 [通用 Unity 扩展](../Revolution.Document/自动化工具/RevCLI与RevMCP通用Unity扩展使用说明.html)。安装完整目录到项目 Agent skills，不额外安装参考 CLI 的第三方技能。
 
 2026-10-31 新增 [MCP 与 CLI 的 token 成本](revolution-ai-automation/references/token-cost.md)：框架本体工程实测全量 MCP 每轮 17,255、紧凑 MCP 325、CLI 无固定开销且结果约为 MCP 一半。
