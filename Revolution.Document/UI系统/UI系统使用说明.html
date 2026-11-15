@@ -610,7 +610,15 @@ RevUISetting.CanvasPlaneDistance = 100f;</pre>
 // 或 RevUISetting.CanvasOrientation = RevUICanvasOrientation.Auto;       // 跟随实际宽高（默认）
 // 或 RevUISetting.CanvasOrientation = RevUICanvasOrientation.UseDesign;  // 完全保留原预制体配置</span></pre>
     <p>这里选择的是<b>UI 的设计尺寸与缩放策略</b>，不强制改变设备方向：原生应用的屏幕方向在 Player Settings 配置（也可在游戏启动时设置 <code>Screen.orientation</code>），小游戏还需在发布平台的方向设置中选横屏 / 竖屏。竖屏项目应同时把平台方向设为竖屏，否则仍会在横屏窗口里绘制竖屏设计。<code>Auto</code> 模式用实际 <code>Screen.width/height</code> 判断，编辑器 Game 视图可切换测试；<code>RevUISetting.PortraitMatchWidthOrHeight</code> 可改竖屏缩放权重（默认 0 = 按宽）；代码兜底时 <code>RevUISetting.ReferenceResolution</code> 是设计尺寸。</p>
-    <div class="callout warn">这解决的是<b>根 Canvas 的缩放与旋转恢复</b>，不是把 1920×1080 横屏面板自动重排成竖屏。具体页面仍须使用锚点/布局组件制作竖屏版；刘海屏、圆角和底部手势条需在<b>内容面板</b>按 <code>Screen.safeArea</code> 布局，弹窗遮罩/全屏背景应继续覆盖全屏，不能给整个根 Canvas 加安全区内缩。测试时至少检查 9:16、9:19.5 和有缺口真机。</div>
+    <h3>内容容器的安全区与等比布局</h3>
+    <p>在屏幕空间面板的内容容器上挂 <code>RevUIAdaptiveLayout</code>，让它的父级使用完整画幅。根 Canvas 继续负责分辨率缩放，面板根节点可独立播放开关动画。全屏背景和遮罩放在内容容器外，覆盖整个画幅。</p>
+    <ul>
+      <li><code>SafeArea</code> 把内容延展到安全区，子控件沿用原有锚点和布局组。</li>
+      <li><code>FitDesignFrame</code> 把固定设计尺寸等比放进安全区并居中。设计尺寸留零会跟随根 <code>CanvasScaler</code>。</li>
+    </ul>
+    <pre>layout.Configure(RevUIAdaptiveLayoutMode.FitDesignFrame, new Vector2(1920, 1080));</pre>
+    <p><code>Viewport</code> 返回相对父级的归一化矩形，<code>ViewportChanged</code> 在布局写入后派发。停用组件会恢复启用前的布局。</p>
+    <p>棋盘相机等场景对象可用 <code>RevUIViewport.GetScreenSafeArea()</code> 和 <code>FitDesignFrame(viewportSize, safeArea, designResolution)</code> 计算同一视口。页面内部布局、设备方向和窗口模式偏好由项目维护。副屏与纹理相机的内容跟随各自的完整画幅。</p>
 
     <h3>什么时候才切换到三 Canvas？</h3>
     <div class="callout good"><span class="t">优先坚持默认的单 Canvas。</span>不要仅因为有倒计时、动画或多个面板就切换。</div>
