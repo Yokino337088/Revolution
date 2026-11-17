@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "Plugin/revolution"
 SKILLS = (
     "revolution-framework", "revolution-unity-editor", "revolution-ai-automation",
-    "revolution-performance", "revolution-automation-tester",
+    "revolution-performance", "revolution-automation-tester", "revolution-gal",
 )
 # 源仓库相对文档链接在安装缓存里没有源目录。分发时转换为官方仓库链接。
 DOC_LINK = re.compile(rb"(?<=\()(?:(?:\.\./)+)(Revolution\.Document/[^)\s]+)")
