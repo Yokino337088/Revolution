@@ -1,6 +1,6 @@
 # Revolution 官方Skills
 
-[revolution-gal](revolution-gal/SKILL.md) 支持 Gal 剧情 SO、节点图、试玩和 RevCLI 自动化。对应 Unity 扩展随独立的 [gal 分支](https://github.com/Yokino337088/Revolution/tree/gal) 发布。
+[revolution-gal](revolution-gal/SKILL.md) 支持 Gal 剧情 SO、节点图、RevCLI 自动化、自定义宿主接入与默认面板主题。对应 Unity 扩展随独立的 [gal 分支](https://github.com/Yokino337088/Revolution/tree/gal) 发布。
 
 [revolution-ai-automation](revolution-ai-automation/SKILL.md) 支持功能完整性审查和缺陷闭环。Coding Agent 按需求设计正反例、执行真实测试、结合源码确认根因，并在修复授权内落实改动、复跑原失败用例和相关回归。用例、`code_refs` 和修前修后证据格式见 [缺陷闭环](revolution-ai-automation/references/defect-closure.md)。
 
