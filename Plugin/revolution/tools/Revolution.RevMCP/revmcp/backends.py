@@ -20,7 +20,7 @@ import urllib.request
 import uuid
 
 from revautomation.client import RevClient, RevError, RevCancelled, atomic_json, read_json
-from revautomation.cli import validate_action
+from revautomation.cli import editor_outcome, validate_action
 from .schema import validate, check_schema, object_schema
 from .activity import Activity
 from revautomation import player
@@ -257,7 +257,7 @@ class Hub:
         if not self.editor:
             raise RevError("Configure --project or --runtime-endpoint")
         if action == "gm.exec":
-            return self.editor.call(action, arguments, confirm, cancel=cancel)
+            return editor_outcome(action, self.editor.call(action, arguments, confirm, cancel=cancel))
         return self.editor.call("runtime.call", {"runtimeAction": action, "argumentsJson": json.dumps(arguments, ensure_ascii=False)}, confirm, cancel=cancel)
 
     def discover(self, cancel=None, editor_only=False):
