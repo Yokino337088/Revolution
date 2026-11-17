@@ -171,7 +171,11 @@ class PluginTests(unittest.TestCase):
             for name in ("skills", "hooks", "mcpServers"):
                 if name in manifest:
                     self.assertTrue((root / manifest[name]).exists())
-        self.assertEqual(len(list((FRAMEWORK / "skills").glob("*/SKILL.md"))), 5)
+        self.assertEqual(
+            {path.parent.name for path in (FRAMEWORK / "skills").glob("*/SKILL.md")},
+            {"revolution-framework", "revolution-unity-editor", "revolution-ai-automation",
+             "revolution-performance", "revolution-automation-tester", "revolution-gal"},
+        )
 
     def test_mcp_binds_explicitly_and_retains_binding_on_error(self):
         """A bad second bind cannot replace the already selected Unity project."""

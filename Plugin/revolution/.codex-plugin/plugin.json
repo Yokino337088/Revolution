@@ -1,7 +1,7 @@
 {
   "name": "revolution",
-  "version": "0.1.9",
-  "description": "Revolution 框架开发、Unity 自动化、功能完整性与缺陷修复回归。包含 RevCLI 和 RevMCP。",
+  "version": "0.2.0",
+  "description": "Revolution 框架开发、Gal 剧情创作、Unity 自动化及真实回归。包含 RevCLI 和 RevMCP。",
   "author": { "name": "Revolution" },
   "license": "MIT",
   "skills": "./skills/",

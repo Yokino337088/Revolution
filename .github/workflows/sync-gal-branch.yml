@@ -1,0 +1,30 @@
+name: 发布 Revolution.Gal 扩展包
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'RevolutionFrameWork_Unity/Assets/Revolution.Gal/**'
+      - '.github/workflows/sync-gal-branch.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-revolution-gal
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+      - name: 导出并发布 gal 分支
+        run: |
+          package=$(git subtree split --prefix=RevolutionFrameWork_Unity/Assets/Revolution.Gal HEAD)
+          git cat-file -e "$package:package.json"
+          git push origin "$package:refs/heads/gal"

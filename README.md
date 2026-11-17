@@ -301,6 +301,8 @@ Revolution 的核心价值，是把它们连起来，让“AI 能写”向“AI 
 
 Codex 用户也可以安装 [Revolution 与 RevGame 插件](Plugin/README.md)，使用框架技能、RevCLI、RevMCP 和项目规范检查。
 
+视觉小说项目可独立安装 [Revolution.Gal](https://github.com/Yokino337088/Revolution/tree/gal)。该扩展提供剧情 SO、写作与节点工作台、默认 RevUI 播放和 RevCLI 自动化，源码位于 [Assets/Revolution.Gal](RevolutionFrameWork_Unity/Assets/Revolution.Gal)。
+
 一份负责**怎样规范地开发**，一份负责**怎样调用工具并验证**。安装目录及启用方式由客户端决定，不能只把文件放进去就假定它一定被加载。
 
 ### 🔗 3. 连接你的 MCP 客户端
