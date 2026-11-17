@@ -13,6 +13,10 @@
 /Revolution/
 /Revolution.Demo/
 
+# 框架验证用例保留在本机，框架本体仅发布工具与实现。
+/RevolutionFrameWork_Unity/Assets/Revolution/Tests/
+/RevolutionFrameWork_Unity/Assets/Revolution/Tests.meta
+
 # ---------------- Unity 自动生成 / 本机状态 ----------------
 /RevolutionFrameWork_Unity/[Ll]ibrary/
 /RevolutionFrameWork_Unity/[Tt]emp/

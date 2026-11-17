@@ -15,6 +15,7 @@ on:
     branches: [main]
     paths:
       - 'RevolutionFrameWork_Unity/Assets/Revolution/**'
+      - '.github/workflows/sync-package-branch.yml'
   workflow_dispatch:
 
 permissions:
@@ -28,9 +29,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 组装包内容（框架本体 → 仓库根）
+        shell: bash
         run: |
           mkdir -p /tmp/pkg
-          cp -r RevolutionFrameWork_Unity/Assets/Revolution/. /tmp/pkg/
+          # 仅导出已提交的框架文件，排除验证用例及其 Unity 目录元数据。
+          git -c core.autocrlf=false -c core.eol=lf archive --format=tar \
+            HEAD:RevolutionFrameWork_Unity/Assets/Revolution -- . ':(top,exclude)Tests' ':(top,exclude)Tests.meta' |
+            tar -xf - -C /tmp/pkg
           echo "文件数：$(find /tmp/pkg -type f | wc -l)"
 
       - name: 推送到 package 分支
