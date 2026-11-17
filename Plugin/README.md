@@ -1,6 +1,6 @@
 # Revolution 与 RevGame Codex 插件
 
-Revolution 插件包含框架、编辑器、AI 自动化、性能、scenario 和 [Gal 剧情创作](../Skills/revolution-gal/SKILL.md) 技能，以及 RevCLI、RevMCP。RevGame 会话的项目 Hook 只指向仓库根 `AGENTS.md` 和项目 Skill，通用 Revolution Hook 在识别到 RevGame 时跳过。其它 Revolution 工程沿用通用提示。RevGame 的项目规则和检查配置由 RevGame 仓库维护。
+Revolution 插件包含框架、编辑器、AI 自动化、性能、scenario 和 [Gal 剧情创作与自定义接入](../Skills/revolution-gal/SKILL.md) 技能，以及 RevCLI、RevMCP。Gal 的 Skill 入口会按只制作剧情、自有界面接入或使用默认界面来引导 Agent 调用实际能力。RevGame 会话的项目 Hook 只指向仓库根 `AGENTS.md` 和项目 Skill，通用 Revolution Hook 在识别到 RevGame 时跳过。其它 Revolution 工程沿用通用提示。RevGame 的项目规则和检查配置由 RevGame 仓库维护。
 
 ## 安装和使用
 
