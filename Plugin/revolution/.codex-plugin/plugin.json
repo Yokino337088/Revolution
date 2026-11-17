@@ -1,6 +1,6 @@
 {
   "name": "revolution",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Revolution 框架开发、Gal 剧情创作与自定义界面接入、Unity 自动化及真实回归。包含 RevCLI 和 RevMCP。",
   "author": { "name": "Revolution" },
   "license": "MIT",
