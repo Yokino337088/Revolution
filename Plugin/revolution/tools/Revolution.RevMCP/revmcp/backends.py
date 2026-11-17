@@ -257,7 +257,7 @@ class Hub:
         if not self.editor:
             raise RevError("Configure --project or --runtime-endpoint")
         if action == "gm.exec":
-            return editor_outcome(action, self.editor.call(action, arguments, confirm, cancel=cancel))
+            return self.editor.call(action, arguments, confirm, cancel=cancel)
         return self.editor.call("runtime.call", {"runtimeAction": action, "argumentsJson": json.dumps(arguments, ensure_ascii=False)}, confirm, cancel=cancel)
 
     def discover(self, cancel=None, editor_only=False):
@@ -334,7 +334,7 @@ class Hub:
             if spec.get("keys") is not None and set(arguments) - set(spec["keys"]):
                 raise RevError("Unknown editor arguments")
             validate_action(action, arguments)
-            return self.editor.call(action, arguments, confirm, cancel=cancel)
+            return editor_outcome(action, self.editor.call(action, arguments, confirm, cancel=cancel))
         validate(arguments, spec["inputSchema"])
         if target == "game":
             return self.game_call(action, arguments, confirm, cancel)

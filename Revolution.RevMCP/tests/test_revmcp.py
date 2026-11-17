@@ -100,6 +100,19 @@ class RevMCPTests(unittest.TestCase):
         self.assertTrue(report["success"])
         self.assertEqual(seen, [args])
 
+    def test_editor_batch_action_propagates_inner_failure(self):
+        class Editor:
+            def call(self, action, arguments, confirm, cancel=None):
+                return {"success": True, "data": {"success": False, "failed": 1}}
+
+        hub = Hub.__new__(Hub)
+        hub.editor = Editor()
+        spec = dict(target="editor", id="batch.call", keys=["steps"])
+        result = hub._call("editor", "batch.call", {"steps": [{"action": "editor.status"}]}, catalog={"actions": [spec]})
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "BatchStepFailed")
+        self.assertEqual(result["data"]["failed"], 1)
+
     def test_failed_assertion_still_cleans_up(self):
         hub = FakeHub()
         report = run(hub, {"steps": [dict(target="game", action="add", expect=[dict(path="/data/count", equals=9)])], "finally": [dict(target="game", action="reset")]})
