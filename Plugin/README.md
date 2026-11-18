@@ -32,6 +32,8 @@ codex plugin add revgame@revolution-tools
 
 ### AI 增量构建与发布 AB
 
+两个插件的资源工作流都要求导入前核对已有资产和分包。同一资源沿用现有资产与逻辑路径，在一个目标平台只由一个 AB 提供。改动图集或分包后检查依赖、映射与实际产物，避免重复导入和隐式副本占用包体积。 [资源复用与单包归属](revolution/skills/revolution-framework/references/resource-and-ab.md#61-资源复用与单包归属)
+
 Revolution 插件在已升级的工程内可发现 `ab.build-incremental` 和 `ab.publish-incremental`。两个动作都要求显式 `target`。先构建并核对 `ab.check-map`，再按同一平台发布至 StreamingAssets。若构建成功且 `data.rebuildReason` 非空，记录原因并使用本次全量产物继续流程。回退原因、发布拒绝和重试策略见 [增量 AB 配方](revolution/skills/revolution-unity-editor/references/incremental-ab.md)。
 
 Unity 功能交付前需要在编辑态主动执行 `editor.recompile`，等 `editor wait`，再用 `editor.compilation` 核对本次工单的 `requestId`、`finished` 和错误。RevGame 从仓库规则读取这条约定，独立 Revolution 工程仍由通用 Hook 提醒。实际编译与验收由代理在目标工程中执行。
