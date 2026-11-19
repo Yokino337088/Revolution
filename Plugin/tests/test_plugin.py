@@ -230,6 +230,7 @@ class PluginTests(unittest.TestCase):
             package.write_text("{}", encoding="utf-8")
 
             def invoke(hook, cwd, source):
+                """发送真实的 SessionStart 输入，返回目标 Hook 的标准输出。"""
                 event = {"cwd": str(cwd), "hook_event_name": "SessionStart", "source": source}
                 return subprocess.check_output([sys.executable, str(hook)], input=json.dumps(event), encoding="utf-8")
 
@@ -246,10 +247,11 @@ class PluginTests(unittest.TestCase):
                     with self.subTest(cwd=cwd, source=source):
                         self.assertEqual(invoke(framework_hook, cwd, source), "")
                         context = json.loads(invoke(project_hook, cwd, source))["hookSpecificOutput"]["additionalContext"]
-                        self.assertEqual(context, "RevGame 项目规则见仓库根 AGENTS.md，专题按 revgame-development 路由。")
+                        for expected in ("AGENTS.md", "revgame-development", "新手注释守则", "关键实现", "核对 diff"):
+                            self.assertIn(expected, context)
 
     def test_revolution_session_finds_nested_project(self):
-        """The repository root resolves the same Unity project as its policy."""
+        """根目录与嵌套工程的压缩会话都能恢复框架约定和注释要求。"""
         hook = FRAMEWORK / "hooks/session.py"
         with tempfile.TemporaryDirectory(prefix="rev-nested-hook-") as directory:
             root = Path(directory)
@@ -267,6 +269,8 @@ class PluginTests(unittest.TestCase):
                 self.assertIn("RevScope", context)
                 self.assertIn("完整重编", context)
                 self.assertIn("revolution-ai-automation", context)
+                for expected in ("新手注释规范", "关键实现", "核对 diff"):
+                    self.assertIn(expected, context)
 
 
 if __name__ == "__main__":
