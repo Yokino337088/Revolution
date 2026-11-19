@@ -1,4 +1,4 @@
-"""识别 RevGame 后仅指向仓库规则入口。"""
+"""识别 RevGame 后恢复项目入口和写代码时的注释约定。"""
 
 import json
 import sys
@@ -15,7 +15,11 @@ def main():
                 and (root / ".codex/skills/revgame-development/SKILL.md").is_file()):
             print(json.dumps({"hookSpecificOutput": {
                 "hookEventName": "SessionStart",
-                "additionalContext": "RevGame 项目规则见仓库根 AGENTS.md，专题按 revgame-development 路由。",
+                "additionalContext": (
+                    "RevGame 项目规则见仓库根 AGENTS.md，专题按 revgame-development 路由。"
+                    "写代码前读项目的新手注释守则。新增或修改的类型、接口、字段和方法逐项写中文注释。"
+                    "短行为一句话，关键实现旁解释原因、顺序、边界与清理。交付前逐项核对 diff 并补齐。"
+                ),
             }}))
             return
 

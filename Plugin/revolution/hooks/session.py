@@ -47,6 +47,8 @@ def main():
         "hookEventName": "SessionStart",
         "additionalContext": (
             "Revolution 工程：写业务前查当前安装的公开门面和同类实现。"
+            "写代码按 revolution-framework 的新手注释规范。新增或修改的类型、接口、字段和方法逐项写中文注释。"
+            "简单行为一句话，关键实现旁解释原因、顺序、边界与清理。交付前逐项核对 diff 并补齐。"
             "FSM 管阶段，RevScope 管生命周期，业务异步用 RevTask。"
             "Unity 操作先确认绝对工程路径与真实注册表，编辑器验证和运行期验收各用对应证据。"
             "Unity 功能最后一次脚本改动后，先退出 Play，在目标编辑器主动完整重编并核对本次编译无错误，再进 Play 或交付。"
