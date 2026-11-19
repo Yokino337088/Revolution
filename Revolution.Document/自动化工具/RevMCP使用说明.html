@@ -237,10 +237,10 @@ RevRuntimeAutomation.Register("inventory.reset", () =&gt; bag.Clear());</code></
 <li>报告样式沿用项目既有的工程手册风（纸色底 + 绿金主色：顶栏 / hero / 章节卡片 / 表格 / 图墙），样式由 <code>revautomation/report.py</code> 的 <code>REPORT_CSS</code> 提供，不另造一套；</li>
 <li>必须带<strong>本次运行的截图</strong>（初始态、关键操作后、失败现场），并压到网页可用的体积；</li>
 <li><strong>动态效果必须给 GIF</strong>（技能、位移、粒子、UI 过渡），单帧看不出节奏；</li>
-<li>过程文件（markers / status / 逐帧 CSV）合进一个证据 zip，不要散落在报告目录里；</li>
+<li>过程文件、原始图片和机器工单存项目忽略目录。正式文档仅附必要画面；</li>
 <li>结论只由断言决定，图片只证画面。</li>
-</ul><p><code>rev_run</code> 现在会<strong>自动</strong>做这件事：把计划里截图动作产出的 PNG 收进报告目录、超过 1 帧就合成 <code>anim.gif</code>，并写出带日期的报告，返回里带 <code>evidencePath</code>。完整的命名、目录结构与反例见 <code>Skills/revolution-ai-automation/references/report.md</code>。</p><p>手动补也可以（同一个引擎）：</p><pre><code class="language-text">python Revolution.RevCLI/rev.py evidence --directory &lt;结果目录&gt; --title "本次测试" --subtitle "截图与动图"
-python Revolution.RevCLI/rev.py --project &lt;工程&gt; --mode live capture --out results\anim.gif --frames 12 --interval 120 --report</code></pre></section><section id="s9"><h2>8. 验证口径</h2><p>2026-10-22 的验证：Python 自动化 19 项、RevMCP 13 项、Unity EditMode 24 项通过；真实 MCP stdio → Editor 文件桥，以及 stdio → 本机 HTTP → Windows Development Player 的“按钮 + GM + 断言 + 截图 + 归零”全链路已跑通。</p><p><strong>未</strong>声称 Android、IL2CPP、小游戏真机通过。需要哪个平台结论，就在那个平台单独跑。</p></section><section id="s10"><h2>9. 相关文档</h2><ul>
+</ul><h3>输出位置</h3><p><code>Revolution.RevMCP/results/</code> 已停用，指向该路径的配置会被拒绝。<code>reportPath</code> 指原始 JSON 工单，默认写入绑定项目的 <code>.codex/work/revmcp/</code>。</p><p>正式计划先用 <code>reportDirectory</code> 指定的项目内文档路径，相对路径从仓库根计算。省略时沿工程向上查找现有文档并优先已有测试报告目录。找不到时只保留工单并返回 <code>evidenceError</code>。</p><p><code>evidencePath</code> 是正式 HTML。CLI <code>run</code> 与 MCP <code>rev_run</code>各执行计划一次，按需交付最多三张缩放截图及一份动图。单次截图继续返回画面与回执。</p><p>手动补也可以（同一个引擎）：</p><pre><code class="language-text">python Revolution.RevCLI/rev.py evidence --directory "&lt;本次项目文档目录&gt;" --title "本次测试" --subtitle "截图与动图"
+python Revolution.RevCLI/rev.py --project &lt;工程&gt; --mode live capture --out "&lt;本次项目文档目录&gt;/anim.gif" --frames 12 --interval 120 --report</code></pre></section><section id="s9"><h2>8. 验证口径</h2><p>2026-10-22 的验证：Python 自动化 19 项、RevMCP 13 项、Unity EditMode 24 项通过；真实 MCP stdio → Editor 文件桥，以及 stdio → 本机 HTTP → Windows Development Player 的“按钮 + GM + 断言 + 截图 + 归零”全链路已跑通。</p><p><strong>未</strong>声称 Android、IL2CPP、小游戏真机通过。需要哪个平台结论，就在那个平台单独跑。</p></section><section id="s10"><h2>9. 相关文档</h2><ul>
 <li><a href="Revolution自动化工具使用说明.html">Revolution 自动化工具（命令行）</a> —— 底层那双手怎么用</li>
 <li><a href="RevMCP架构解析.html">RevMCP 架构解析</a> —— 写给维护者：线程、工单生命周期、扩展选型</li>
 <li>仓库内：<code>Revolution.RevMCP/README.md</code>、<code>Revolution.RevCLI/README.md</code></li>

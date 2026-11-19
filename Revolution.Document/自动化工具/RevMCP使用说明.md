@@ -164,16 +164,22 @@ RevRuntimeAutomation.Register("inventory.reset", () => bag.Clear());
 - 报告样式沿用项目既有的工程手册风（纸色底 + 绿金主色：顶栏 / hero / 章节卡片 / 表格 / 图墙），样式由 `revautomation/report.py` 的 `REPORT_CSS` 提供，不另造一套；
 - 必须带**本次运行的截图**（初始态、关键操作后、失败现场），并压到网页可用的体积；
 - **动态效果必须给 GIF**（技能、位移、粒子、UI 过渡），单帧看不出节奏；
-- 过程文件（markers / status / 逐帧 CSV）合进一个证据 zip，不要散落在报告目录里；
+- 过程文件、原始图片和机器工单存项目忽略目录。正式文档仅附必要画面；
 - 结论只由断言决定，图片只证画面。
 
-`rev_run` 现在会**自动**做这件事：把计划里截图动作产出的 PNG 收进报告目录、超过 1 帧就合成 `anim.gif`，并写出带日期的报告，返回里带 `evidencePath`。完整的命名、目录结构与反例见 `Skills/revolution-ai-automation/references/report.md`。
+### 输出位置
+
+`Revolution.RevMCP/results/` 已停用。代码会拒绝向这个目录、子目录或指向它的别名写入。`reportPath` 是原始 JSON 工单，默认进绑定项目仓库的 `.codex/work/revmcp/`。`--reports` 只调整工单路径。
+
+正式报告优先使用计划中的 `reportDirectory`。相对路径从绑定工程的仓库根计算，也可以传项目内的绝对路径。未指定时，从 Unity 工程逐级查找既有的 `文档`、`Docs`、`Documentation` 等目录，优先已有测试报告子目录。没有找到时只保存原始工单，并返回 `evidenceError`。
+
+CLI 的 `run` 与 MCP 的 `rev_run` 都按本规则生成一份 HTML。`evidencePath` 指向文档中的报告。每份最多附三张缩放截图和一份 GIF。截图查询仍返回画面与工单。完整报告规范见 [AI 自动化 Skill](../../Skills/revolution-ai-automation/references/report.md)。
 
 手动补也可以（同一个引擎）：
 
 ```powershell
-python Revolution.RevCLI/rev.py evidence --directory <结果目录> --title "本次测试" --subtitle "截图与动图"
-python Revolution.RevCLI/rev.py --project <工程> --mode live capture --out results\anim.gif --frames 12 --interval 120 --report
+python Revolution.RevCLI/rev.py evidence --directory "<本次项目文档目录>" --title "本次测试" --subtitle "截图与动图"
+python Revolution.RevCLI/rev.py --project <工程> --mode live capture --out "<本次项目文档目录>/anim.gif" --frames 12 --interval 120 --report
 ```
 
 ## 8. 验证口径

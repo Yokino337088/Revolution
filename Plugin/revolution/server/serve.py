@@ -84,19 +84,13 @@ class ProjectServer(Server):
         project_cli = project.parent / "Revolution.RevCLI"
         has_cli = (project_cli / "rev.py").is_file() and (project_cli / "commands.json").is_file()
         cli = project_cli if has_cli else CLI
-        reports = project / "Library/RevolutionAutomation/codex"
-        for parent in (project, *project.parents):
-            if (parent / ".codex/rev-policy.json").is_file() and (parent / ".git").exists():
-                reports = parent / ".codex/work/revolution-plugin"
-                break
-
         binding = (project, endpoint)
         if binding != self.binding:
-            self.hub = Hub(project=project, runtime_endpoint=endpoint, cli_root=cli, reports=reports)
+            self.hub = Hub(project=project, runtime_endpoint=endpoint, cli_root=cli)
             self.binding = binding
         return {"success": True, "project": str(project), "commandCatalog": str(cli / "commands.json"),
                 "bundledRevCli": str(CLI / "rev.py"),
-                "player": endpoint is not None, "revMcp": str(MCP), "reports": str(reports)}
+                "player": endpoint is not None, "revMcp": str(MCP), "reports": str(self.hub.reports)}
 
 
 if __name__ == "__main__":

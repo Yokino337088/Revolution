@@ -42,6 +42,7 @@ jobs:
           echo "文件数：$(find /tmp/revmcp -type f | wc -l)"
           test -f /tmp/revmcp/Revolution.RevMCP/rev_mcp.py
           test -f /tmp/revmcp/Revolution.RevCLI/revautomation/client.py
+          printf '%s\n' '.codex/work/' 'Revolution.RevMCP/results/' '__pycache__/' > /tmp/revmcp/.gitignore
 
       - name: 校验能作为库导入
         run: |
