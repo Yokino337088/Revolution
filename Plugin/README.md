@@ -1,6 +1,6 @@
 # Revolution 与 RevGame Codex 插件
 
-Revolution 插件包含框架、编辑器、AI 自动化、性能、scenario 和 [Gal 剧情创作与自定义接入](revolution/skills/revolution-gal/SKILL.md) 技能，以及 RevCLI、RevMCP。Gal 的 Skill 入口按剧情创作、自有界面接入或使用默认界面引导 Agent 调用实际能力。两个插件的会话 Hook 都会提醒按改动写面向新手的中文注释并逐项核对。RevGame 由自己的 Hook 指向仓库 `AGENTS.md` 和项目 Skill，其它 Revolution 工程由通用 Hook 指向 [新手注释规范](revolution/skills/revolution-framework/references/code-style.md#3-面向新手的中文注释是交付门禁)。RevGame 的项目规则和检查配置由 RevGame 仓库维护。
+Revolution 插件包含框架、编辑器、AI 自动化、性能、scenario、[Revolution-TA](revolution/skills/revolution-ta/SKILL.md) 和 [Gal 剧情创作与自定义接入](revolution/skills/revolution-gal/SKILL.md) 技能，以及 RevCLI、RevMCP。使用 `$revolution-ta` 查 Shader 和材质制作、图集 UV、粉屏、目标 AB 或真机渲染。RevGame 插件会从项目入口找到这套技术美术流程。两个插件的会话 Hook 都会提醒按改动写面向新手的中文注释并逐项核对。RevGame 的项目规则和检查配置由 RevGame 仓库维护。
 
 ## 安装和使用
 

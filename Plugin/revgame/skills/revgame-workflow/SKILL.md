@@ -9,6 +9,8 @@ description: 在 RevGame 围棋史莱姆仓库中定位项目规范、资源检�
 
 编写、修改或审查代码时，先读 RevGame 根目录下的 `.codex/skills/revgame-development/references/code-and-comments.md`。新增或修改的类型、接口、字段、属性、方法和回调逐项写面向新手的中文注释。简短逻辑一句话，关键实现解释原因、顺序、边界和清理。交付前按 diff 和新文件逐项核对，补齐遗漏或过期的注释。
 
+制作或排查 Shader、材质、纹理和渲染特效时，读 RevGame 根目录下的 `.codex/skills/revolution-ta/SKILL.md`，也可用已安装的 Revolution 插件中的 `revolution-ta`。RevGame 自有 Shader 在 `Assets/GameShader/<模块>`，材质在 `Assets/GameRes/Material/<模块>`。按现行采样、分包和实际目标画面验证。
+
 Unity 目标是该仓库的 `RevGame_Client/UnityProject/RevGame.Unity`。用相邻的 `Revolution.RevCLI/rev.py` 做编辑器操作。实际游戏测试优先已绑定到这个工程的常驻 RevMCP。使用 Revolution 插件内置 MCP 时，先用 `rev_bind` 绑定此工程的绝对路径，再 `rev_discover`。工具调用、业务断言和清理分别核对。
 
 功能完整性、缺陷定位和修复回归沿 `revgame-development` 的验收入口加载 `revolution-ai-automation`。覆盖本次需求对应的玩家路径、失败与重入，保留首轮实测、`code_refs`、修改建议、原断言复测和相关回归。原始证据按项目约定放 `.codex/work/`。

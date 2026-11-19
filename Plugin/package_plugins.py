@@ -8,9 +8,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "Plugin/revolution"
+# 插件按显式清单分发完整 Skill 目录，保证主题入口和相对引用一同安装。
 SKILLS = (
     "revolution-framework", "revolution-unity-editor", "revolution-ai-automation",
-    "revolution-performance", "revolution-automation-tester", "revolution-gal",
+    "revolution-performance", "revolution-automation-tester", "revolution-gal", "revolution-ta",
 )
 # 源仓库相对文档链接在安装缓存里没有源目录。分发时转换为官方仓库链接。
 DOC_LINK = re.compile(rb"(?<=\()(?:(?:\.\./)+)(Revolution\.Document/[^)\s]+)")

@@ -1,5 +1,7 @@
 # Revolution 官方Skills
 
+[Revolution-TA](revolution-ta/SKILL.md) 用于 Unity Shader、材质和技术美术，涵盖制作、图集与 AB、兼容排错和实拍验收。包含 RevGame 的 65 个 Shader 与 5 个共享 include 的 [索引](revolution-ta/references/revgame-catalog.md)，以及 [GitHub 项目实践](revolution-ta/references/open-source-patterns.md)。随完整 Skill 目录和 Revolution 插件发布。
+
 [revolution-gal](revolution-gal/SKILL.md) 支持 Gal 剧情 SO、节点图、RevCLI 自动化、自定义宿主接入与默认面板主题。对应 Unity 扩展随独立的 [gal 分支](https://github.com/Yokino337088/Revolution/tree/gal) 发布。
 
 [revolution-ai-automation](revolution-ai-automation/SKILL.md) 支持功能完整性审查和缺陷闭环。Coding Agent 按需求设计正反例、执行真实测试、结合源码确认根因，并在修复授权内落实改动、复跑原失败用例和相关回归。用例、`code_refs` 和修前修后证据格式见 [缺陷闭环](revolution-ai-automation/references/defect-closure.md)。

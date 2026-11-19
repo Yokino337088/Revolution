@@ -71,6 +71,7 @@
 | 🛠️ 搭场景、挂组件、导表、构建、恢复连接 | [revolution-unity-editor](Skills/revolution-unity-editor/SKILL.md) |
 | 🧪 亲自测玩法、定位 Bug、给修改建议、做回归 | [revolution-ai-automation](Skills/revolution-ai-automation/SKILL.md) |
 | 🎬 写分支剧情、调 Gal 默认面板或接自己的界面 | [revolution-gal](Skills/revolution-gal/SKILL.md) |
+| 🎨 做 Shader、材质和特效，查粉屏、图集 UV 及渲染依赖 | [Revolution-TA](Skills/revolution-ta/SKILL.md) |
 | 📈 查帧时、内存、GPU 批次和资源寿命 | [revolution-performance](Skills/revolution-performance/SKILL.md) |
 
 ### 🎮 RevGame 实践 · 把规矩落到大厅、战斗和数据表
