@@ -174,7 +174,7 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(
             {path.parent.name for path in (FRAMEWORK / "skills").glob("*/SKILL.md")},
             {"revolution-framework", "revolution-unity-editor", "revolution-ai-automation",
-             "revolution-performance", "revolution-automation-tester", "revolution-gal"},
+             "revolution-performance", "revolution-automation-tester", "revolution-gal", "revolution-ta"},
         )
 
     def test_mcp_binds_explicitly_and_retains_binding_on_error(self):
