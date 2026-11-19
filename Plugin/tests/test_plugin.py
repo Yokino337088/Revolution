@@ -178,7 +178,7 @@ class PluginTests(unittest.TestCase):
         )
 
     def test_mcp_binds_explicitly_and_retains_binding_on_error(self):
-        """A bad second bind cannot replace the already selected Unity project."""
+        """无效的重新绑定保留原工程，插件返回发现结果且无需创建工单文件。"""
         with tempfile.TemporaryDirectory(prefix="rev-plugin-test-") as directory:
             project = Path(directory) / "测试 Unity"
             (project / "Assets").mkdir(parents=True)
@@ -205,14 +205,17 @@ class PluginTests(unittest.TestCase):
 
                 exchange("initialize", {"protocolVersion": "2025-03-26"})
                 exchange("notifications/initialized", ident=None)
-                names = {tool["name"] for tool in exchange("tools/list")["tools"]}
-                self.assertEqual(names, {"rev_bind", "rev_discover", "rev_call", "rev_run"})
+                tools = {tool["name"]: tool for tool in exchange("tools/list")["tools"]}
+                self.assertEqual(set(tools), {"rev_bind", "rev_discover", "rev_call", "rev_run"})
+                report_options = tools["rev_run"]["inputSchema"]["properties"]["plan"]["properties"]
+                self.assertEqual(set(report_options), {"report", "reportDirectory"})
                 self.assertTrue(call("rev_discover", {})["isError"])
                 self.assertEqual(call("rev_bind", {"project": str(project)})["structuredContent"]["project"], str(project.resolve()))
                 self.assertTrue(call("rev_bind", {"project": "relative"})["isError"])
                 result = call("rev_discover", {"target": "editor", "query": "editor.status"})["structuredContent"]
                 self.assertTrue(result["unavailable"])
-                self.assertTrue(Path(result["reportPath"]).is_file())
+                self.assertNotIn("reportPath", result)
+                self.assertFalse((project / ".codex/work/revmcp").exists())
             finally:
                 process.stdin.close()
                 process.wait(timeout=15)

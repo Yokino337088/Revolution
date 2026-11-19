@@ -19,12 +19,12 @@ pre{background:var(--code-bg);color:var(--code-fg);border-radius:8px;padding:15p
 <div class="plain"><span class="tag">直接说</span>“检查当前工程的 RevMCP 调用延迟。记录冷调用、20 次稳态样本和活动窗口开关状态；不要改场景或停止我的 Play。解释卡在 Python、Unity tick 还是动作自身。”</div>
 <div class="callout"><span class="t">更新要更新两端</span>Python 服务更新后重启对应 MCP 会话；Unity 桥更新后等待编译完成。只换 Python，旧编辑器不会突然拥有新增能力。始终显式选择目标工程。</div></section>
 <section id="s1"><h2><span class="num">一</span>调用慢在哪里</h2><p class="lead">不是给轮询数字多减几个零。一次普通查询曾包含三次 Unity 往返和无关图像报告工作。</p>
-<div class="cmp"><div class="no"><div class="h">旧路径</div>发现全部 Editor → 发现 Play 才有的运行时 → 执行动作 → 每次查询也生成 HTML，扫描共享报告目录。</div><div class="yes"><div class="h">新路径</div>按目标查目录 → 普通 Editor 短缓存复用 → 每次真实执行目标动作 → 保留 JSON 和日志。正式计划才在项目文档目录生成 HTML。</div></div>
+<div class="cmp"><div class="no"><div class="h">旧路径</div>发现全部 Editor → 发现 Play 才有的运行时 → 执行动作 → 每次查询也生成 HTML，扫描共享报告目录。</div><div class="yes"><div class="h">新路径</div>按目标查目录 → 普通 Editor 短缓存复用 → 每次真实执行目标动作 → 直接返回执行结果，用户明确要求时才在项目文档目录生成 HTML。</div></div>
 <div class="table-wrap"><table><thead><tr><th>改动</th><th>约束没有消失</th></tr></thead><tbody>
 <tr><td>Editor 能力说明缓存最多 2 秒</td><td>以 session、domainId 域代际、Play、暂停、编译、导入状态为键；变更、失败和显式 discover 后失效。Session 继续保留跨重载工单，domainId 单独变化。旧桥没有域字段仍受两秒上限约束。只缓存说明，不缓存业务结果。</td></tr>
 <tr><td>Editor 调用不再先查运行时；CLI 会话操作不先查 Editor</td><td>目标能力仍需真实注册。GM/game 保留本局实时目录校验。</td></tr>
 <tr><td>Runtime 工单轮询 5ms → 20ms → 50ms 退让</td><td>只 GET 同一 request ID；取消/超时仍收尾，绝不重新 POST 变更。不是零延迟承诺。</td></tr>
-<tr><td>证据目录按工单隔离</td><td>普通查询仍保存 JSON 与活动日志；测试计划及本次截图保留 HTML，不拿历史图片冒充当前画面。</td></tr>
+<tr><td>按需导出报告</td><td>普通查询和计划直接返回结果。明确要求报告时只使用本次测试的必要画面。</td></tr>
 </tbody></table></div><div class="callout warn"><span class="t">Unity 主线程仍是边界</span>空闲 Editor tick、导入、编译、AB/Player 构建及动作自身耗时仍可能占主要时间。没有把 Unity 变更并发化，也没有用第二个 batch Unity 绕过忙状态。</div></section>
 <section id="s2"><h2><span class="num">二</span>紧凑工具目录</h2><p class="lead">项目注册了几百项能力时，不必在每次握手把所有工具描述都塞给模型。</p>
 <p>可选 <code>--compact-tools</code> 只暴露三个稳定工具：<code>rev_discover</code>、<code>rev_call</code>、<code>rev_run</code>。<b>真实能力没有被删除</b>，AI 按关键词找需要的能力，再通过统一入口调用。默认仍保留全部动态工具，兼容旧配置。</p>
@@ -61,7 +61,7 @@ pre{background:var(--code-bg);color:var(--code-fg);border-radius:8px;padding:15p
 <p>这组均值耗时下降约 <b>75.8%</b>，中位数下降约 <b>84.7%</b>。所有冷调用和长尾都包含在均值里，不只挑最快的一次。原底层 RevClient 同环境 12 次 mean 200.1ms；它不是 MCP 层的改前值。</p>
 <p>另跑真实 MCP stdio → Unity 20 次，mean 475.6ms、median 278.2ms；tools/list 989.0ms、第一条冷调用 2833.1ms。此轮没有同口径改前 stdio 样本，因此<b>不计算其加速倍数</b>。窗口开关和整机卡顿必须另外验收。</p>
 <pre>python Revolution.RevMCP/tests/benchmark_unity.py --project RevolutionFrameWork_Unity --samples 20 --output .codex/work/mcp-benchmark/stdio.json</pre>
-<p>脚本只读 editor.status，不启动/停止 Unity，不改场景。保留全部样本、冷调用、mean、median、P95。不同工程、窗口状态或后台负载不能直接相减。原始工单和机器证据放被忽略目录；公开报告只用相对路径，不包含凭据。</p>
+<p>脚本只读 editor.status，不启动/停止 Unity，不改场景。保留全部样本、冷调用、mean、median、P95。不同工程、窗口状态或后台负载不能直接相减。明确指定输出时将采样数据放在项目忽略目录。公开报告使用相对路径。</p>
 <p>窗口及新增能力的最终回归见 <a href="验证记录/RevMCP提速与Unity扩展验证_2026-10-31.html">本轮验证记录</a>；未实测的图形交互与设备项在那里明确列出。</p></section>
 <section id="s6"><h2><span class="num">六</span>升级与故障排查</h2><p class="lead">先区分 Python 服务版本、Unity 桥版本和实际业务执行耗时。</p>
 <ol><li>更新 RevCLI 与 RevMCP，增量更新目标工程中的 Automation 桥和活动窗口，保留项目自定义接线与生成物。</li><li>等 Unity 编译完成，检查 compilation/Console。重启对应 Python MCP 会话；需要紧凑模式再加 compact-tools。</li><li>让 AI 按关键词发现一个新动作，再查询已存在的只读动作，核对实际返回，不用离线清单宣布升级成功。</li><li>调用仍慢：先测底层与 MCP 两层，再分开窗口开关；长构建、导入和编译可能阻塞主线程，别删证据或强杀用户编辑器。</li><li>目录失效或 session 变化：重新发现；失败不能自动重放。测试计划、取消和 finally 规则不变。</li></ol>

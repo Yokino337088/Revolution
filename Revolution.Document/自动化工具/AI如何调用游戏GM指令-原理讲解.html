@@ -284,7 +284,7 @@ id / 参数类型 / environment / readOnly，Python 按文件 mtime 缓存，改
 <ul>
 <li><b>schema 是现算的</b>：<code>server.py:26-40</code> 用 Unity 给的参数类型表动态生成 JSON Schema，所以你在项目里新注册一个 GM，AI 立刻能看到它的参数。</li>
 <li><b>单 worker 串行</b>：<code>server.py</code> 主循环收消息、一个 worker 顺序执行，长任务期间仍能收到 <code>notifications/cancelled</code> 并设置取消信号——既不会两个变更撞车，又能取消。</li>
-<li><b>结束自动留证据</b>：<code>rev_run</code> 结束后会把截图收进报告目录、合成 GIF、写 <code>report.html</code>（<code>server.py</code> 的 <code>write_evidence</code>）。</li>
+<li><b>按需交付文件</b>。<code>rev_run</code> 默认返回实际响应。仅在用户明确要求时，根据 <code>report</code> 或 <code>reportDirectory</code> 导出 HTML 和必要画面。</li>
 </ul>
 </section>
 

@@ -157,23 +157,21 @@ RevRuntimeAutomation.Register("inventory.reset", () => bag.Clear());
 - **两个 MCP 连接不能同时改同一个工程**（比如 Unity MCP 和 RevMCP 同时操作）；
 - 断言失败、清理失败都会被记为失败——这是**故意的**，避免“跑完看起来绿了、其实脏了”。
 
-## 7. 测试产出：报告 + 截图 + GIF（硬规矩）
+## 7. 执行结果与按需导出的报告
 
-跑完计划**不等于任务结束**。每次测试都必须留一份能直接发给别人看的报告，文件名是 `<中文标题>_<日期>.html`（例如 `登录流程验收_2026-10-26.html`），只有"success: true"的结果会被当成没做完。
+默认在对话给出实测、业务断言与清理结果。想保存一份报告时，请明确告诉 AI，例如「测完请出一份自动化测试报告，保存到 `文档/自动化测试报告/登录验收`」。报告命名为 `<中文标题>_<日期>.html`。
 
-- 报告样式沿用项目既有的工程手册风（纸色底 + 绿金主色：顶栏 / hero / 章节卡片 / 表格 / 图墙），样式由 `revautomation/report.py` 的 `REPORT_CSS` 提供，不另造一套；
-- 必须带**本次运行的截图**（初始态、关键操作后、失败现场），并压到网页可用的体积；
-- **动态效果必须给 GIF**（技能、位移、粒子、UI 过渡），单帧看不出节奏；
-- 过程文件、原始图片和机器工单存项目忽略目录。正式文档仅附必要画面；
-- 结论只由断言决定，图片只证画面。
+- 报告样式沿用项目现有的工程手册。默认样式由 `revautomation/report.py` 的 `REPORT_CSS` 提供。
+- 视觉验收附本次必要截图。动态效果可用实际连拍制作 GIF，附件压到网页可用体积。
+- 结论基于实际业务断言，画面验证以本次截图为依据。
 
 ### 输出位置
 
-`Revolution.RevMCP/results/` 已停用。代码会拒绝向这个目录、子目录或指向它的别名写入。`reportPath` 是原始 JSON 工单，默认进绑定项目仓库的 `.codex/work/revmcp/`。`--reports` 只调整工单路径。
+`Revolution.RevMCP/results/` 禁止写入所有运行产物。日常使用内联计划或 `rev_mcp.py run -`，结果直接返回。确需临时工单时，消费后立即永久删除。
 
-正式报告优先使用计划中的 `reportDirectory`。相对路径从绑定工程的仓库根计算，也可以传项目内的绝对路径。未指定时，从 Unity 工程逐级查找既有的 `文档`、`Docs`、`Documentation` 等目录，优先已有测试报告子目录。没有找到时只保存原始工单，并返回 `evidenceError`。
+报告优先采用计划中的 `reportDirectory`。相对路径从绑定工程的仓库根计算，也可以传项目内绝对路径。明确要求报告但未指定路径时，用 `report: true` 从 Unity 工程逐级查找已有 `文档`、`Docs` 或 `Documentation`，优先已有测试报告子目录。未找到时返回 `evidenceError` 和本次实际结果。
 
-CLI 的 `run` 与 MCP 的 `rev_run` 都按本规则生成一份 HTML。`evidencePath` 指向文档中的报告。每份最多附三张缩放截图和一份 GIF。截图查询仍返回画面与工单。完整报告规范见 [AI 自动化 Skill](../../Skills/revolution-ai-automation/references/report.md)。
+CLI 的 `run` 与 MCP 的 `rev_run` 共用按需导出规则。`evidencePath` 指向生成的 HTML。每份最多附三张缩放截图和一份 GIF。截图查询直接返回画面。完整报告规范见 [AI 自动化 Skill](../../Skills/revolution-ai-automation/references/report.md)。
 
 手动补也可以（同一个引擎）：
 

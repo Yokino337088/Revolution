@@ -167,9 +167,9 @@ Unity 里的编辑器桥（Assets/Revolution/Editor/RevAutomation）
 
 **只有两种情况才回到本文档（CLI）**：接 CI（Jenkins / GitHub Actions，那里没有 AI），或者 AI 报“连不上”时你想亲手确认哪一层坏了。
 
-## 8. 测试产出：HTML 报告 + 截图 + GIF（硬规矩）
+## 8. 按需导出测试报告
 
-**一次测试的交付物不是"success: true"，而是一份能直接发给别人看的报告。**
+默认返回测试响应。用户明确要求文件版报告时，按下表组织并写入用户指定的项目文档目录，或项目已有的测试报告目录。临时工单在最后一次读取后立即永久删除。
 
 | 必须有 | 说明 |
 |---|---|
@@ -177,23 +177,23 @@ Unity 里的编辑器桥（Assets/Revolution/Editor/RevAutomation）
 | **版式** | 沿用工程手册风（纸色底 + 绿金主色：顶栏 / hero / 章节卡片 / 表格 / 图墙），样式来自 `revautomation/report.py` 的 `REPORT_CSS` |
 | **截图** | 至少覆盖初始态、关键操作后、失败现场；转成 1600 宽 JPEG，别塞 3MB 原图 |
 | **GIF** | 技能、位移、粒子、UI 过渡这类"动起来才看得懂"的效果，必须连拍成动图（≤720 宽） |
-| **证据包** | 每轮的 markers/status/逐帧 CSV 合成一个 zip，不要摊在目录里 |
+| **证据数据** | 按目标项目规则，仅保留支撑结论的必要数据 |
 | 结论 | 通过/失败只由断言决定；写清环境、首个失败原因、未验证项 |
 
-命名规则实现在 `revautomation/report.py::report_file_name`，`evidence` / `capture --report` / `run --report` 三条路径都走它。
+命名规则实现在 `revautomation/report.py::report_file_name`，`evidence`、`capture --report` 和 RevMCP 的报告导出均使用它。
 
 ```powershell
 # 一遍连拍 + 合成 + 出报告（Unity 在 Play 中时）
-.\rev.py --project <工程> --mode live capture --out results\anim.gif --frames 12 --interval 120 --report
+.\rev.py --project <工程> --mode live capture --out "<项目文档目录>/anim.gif" --frames 12 --interval 120 --report
 
 # 已有图，只补报告
-.\rev.py evidence --directory results\<本次目录> --title "第一章流程自动化测试" --subtitle "截图与动图"
+.\rev.py evidence --directory "<本次项目文档目录>" --title "第一章流程自动化测试" --subtitle "截图与动图"
 
 # 只有零散截图，先合动图（离线）
-.\rev.py gif a.png b.png c.png --out results\anim.gif --delay 120
+.\rev.py gif a.png b.png c.png --out "<项目文档目录>/anim.gif" --delay 120
 ```
 
-> 用 RevMCP 跑计划时会**自动**产出这份报告（见 `RevMCP使用说明`），不需要你手动补。
+> RevMCP 计划通过 `report: true` 或 `reportDirectory` 请求导出。旧 scenario 在同步执行时传 `--report-dir <目录>`。
 
 ## 9. 验证口径
 

@@ -90,7 +90,7 @@ class ProjectServer(Server):
             self.binding = binding
         return {"success": True, "project": str(project), "commandCatalog": str(cli / "commands.json"),
                 "bundledRevCli": str(CLI / "rev.py"),
-                "player": endpoint is not None, "revMcp": str(MCP), "reports": str(self.hub.reports)}
+                "player": endpoint is not None, "revMcp": str(MCP)}
 
 
 if __name__ == "__main__":

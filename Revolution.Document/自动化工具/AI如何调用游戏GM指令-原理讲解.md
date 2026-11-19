@@ -136,7 +136,7 @@ MCP 服务只暴露 3 个稳定工具，其余全部是“动态动作”，按�
 
 - schema 是现算的：server.py:26-40 用 Unity 给的参数类型表动态生成 JSON Schema，所以你在项目里新注册一个 GM，AI 立刻能看到它的参数。
 - 单 worker 串行：server.py 主循环收消息、一个 worker 顺序执行，长任务期间仍能收到 notifications/cancelled 并设置取消信号——既不会两个变更撞车，又能取消。
-- 结束自动留证据：rev_run 结束后会把截图收进报告目录、合成 GIF、写 report.html（server.py 的 write_evidence）。
+- 按需交付文件。用户明确要求报告时，`rev_run` 按计划中的 `report` 或 `reportDirectory` 生成 HTML 和必要画面，常规执行直接返回结果。
 
 ## 6. GM 的调用入口（代码级）
 

@@ -26,6 +26,8 @@ codex plugin add revgame@revolution-tools
 
 功能验收或修 Bug 时，在 Codex 调用 `$revolution-ai-automation`。技能引导 Codex 对照需求覆盖主流程、失败与重入，用 RevMCP 收集预期和实测，读当前源码找根因并给出修改建议。任务授权修复时，Codex 改工程后复跑原用例与受影响的回归，把修前修后证据连到同一缺陷。可在请求中指定“只测试和给建议”或“发现问题后直接修复并复测”。 [缺陷闭环](../Skills/revolution-ai-automation/references/defect-closure.md)
 
+RevMCP 默认直接返回执行结果。确需临时工单时，消费后立即永久删除。想要文件版报告时请明确告诉 AI，例如「测完请出一份报告，保存到这个项目文档目录」。已指定路径用 `plan.reportDirectory`。只要求报告时用 `plan.report: true` 查已有文档目录。 [报告规范](../Skills/revolution-ai-automation/references/report.md)
+
 在桌面端 **Review hooks** 中审核插件 hooks 后，Codex 才会执行会话提醒。用 Git 检查器和 CI 落实可判定的规则。具体宿主支持范围和审核方式见官方文档。 [插件打包](https://developers.openai.com/plugins/build/plugins) · [Codex Hooks](https://learn.chatgpt.com/docs/hooks)
 
 ## 在项目内执行规范检查

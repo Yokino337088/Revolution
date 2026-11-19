@@ -24,7 +24,7 @@ pre{background:var(--code-bg);color:var(--code-fg);border-radius:8px;padding:15p
 <tr><td>Revolution 全链路（AB、Excel、热更、平台资源）</td><td><b>RevCLI</b></td><td><code>ab.*</code>、<code>excel.*</code>、<code>hot.*</code>、<code>platform.*</code></td></tr>
 <tr><td>游戏运行时 GM、点 UI、读运行时状态</td><td><b>RevCLI</b></td><td><code>runtime start</code> 后用 <code>game gm</code> / <code>game call</code></td></tr><tr><td>长自动化测试、多步断言、要带截图和 GIF 的 HTML 报告</td><td><b>RevMCP</b></td><td><code>rev_run</code></td></tr>
 </tbody></table></div>
-<p>CLI 在 Play 时也能调 <code>gm.exec</code>，但没有计划编排、断言和自动报告，所以正式的运行时测试仍交给 <code>rev_run</code>。</p></section>
+<p>CLI 在 Play 时也能调 <code>gm.exec</code>，。跨接口断言与清理用 <code>rev_run</code>，用户明确要求时才导出报告。</p></section>
 
 <section><h2><span class="num">二</span>调用时间</h2><p class="lead">常驻服务 + 快速路径：启动一次，之后每条命令只做一次本机转发。</p>
 <h3>做了什么</h3>
@@ -92,7 +92,7 @@ $proj = '&lt;Unity 工程绝对路径&gt;'
 <ul><li>先用 <code>commands --action &lt;动作&gt;</code> 或 <code>commands --live</code> 查真实契约，再调用。</li>
 <li>修改前先 inspect/get，修改后用同一查询读回断言。</li>
 <li>编译、测试和构建用显式等待：<code>editor.wait</code>、<code>test.result</code>、<code>build.player</code> 的真实 BuildReport。</li>
-<li>Play 中调 GM 用 <code>runtime start</code> + <code>game gm</code>；需要一份计划带断言并自动出报告时，可选 RevMCP（<code>rev_run</code>）。</li>
+<li>Play 中调 GM 用 <code>runtime start</code> + <code>game gm</code>。多步断言用 <code>rev_run</code>。仅在用户明确要求时设置报告选项。</li>
 <li>CLI 与 MCP 共用同一个 Unity 桥和同一份参数契约。</li></ul></section>
 
 <section><h2><span class="num">六</span>验证与已知情况</h2><p class="lead">只写实际跑过的结果。</p>

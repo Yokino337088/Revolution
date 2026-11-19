@@ -115,7 +115,7 @@ $proj = '<Unity 工程绝对路径>'
 - 编辑器操作先 `commands --action <动作>` 或 `commands --live` 查真实契约，再调用。离线清单只是说明，不代表已安装。
 - 修改前先 `inspect/get`，修改后用同一查询读回断言。
 - 编译、测试和构建用显式等待：`editor.wait`、`test.result`、`build.player` 的真实 BuildReport。
-- Play 中调 GM 用 `runtime start` + `game gm`；需要一份计划带断言并自动出报告时，可选 RevMCP（`rev_run`）。
+- Play 中调 GM 用 `runtime start` 和 `game gm`。多步断言可用 RevMCP 的 `rev_run`，明确要求报告时才设置报告选项。
 - CLI 与 MCP 共用同一个 Unity 桥，同一份参数契约，不会各自维护一套动作。
 
 ## 六、验证与复测
