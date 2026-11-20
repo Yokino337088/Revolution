@@ -354,6 +354,14 @@ RevScene.OnLoadStart += _ =&gt;
     </ul>
   </section>
 
+  <section id="handoff">
+    <h2><span class="num">六</span>等待业务场景交接</h2>
+    <p>流程服务持有 <code>RevScene.CreateHandoffTracker()</code> 创建的追踪器，通过业务门禁后用 <code>TryBegin</code> 接单。请求在途时再次接单会返回空，原请求 ID 保持有效。</p>
+    <p>观察者用 <code>Latest</code> 或 <code>TryGet</code> 取得句柄，用 <code>await handoff.WaitAsync()</code> 等待。返回结果包含终态、阶段、实际场景、实际业务状态与原因码。</p>
+    <p>流程服务用 <code>TryAdvance</code> 标记阶段，业务就绪、遮挡结束并解除互斥后用 <code>TryComplete</code> 交付。失败或退出也在本次清理后发布相应终态，故障回退可以另开请求。</p>
+    <p>在实际依赖入口用 <code>handoff.Resources.Require</code> 登记来源与首屏门禁。通过 <code>RevResManager.LoadOwnedAsync</code> 取得具名引用，并在退出时释放租约。面板与对象池自动标明其 prefab 引用。</p>
+    <p>首屏交付时用 <code>CaptureReady()</code> 记录持有情况，退场清理后用 <code>CaptureExit(exitRequestId)</code> 冻结退场快照。通过入场 ID 可读取两份快照，或用 <code>CaptureCurrent()</code> 查现有持有者。旧接口的未具名引用仍显示计数。</p>
+  </section>
 </main>
 
 <footer>
