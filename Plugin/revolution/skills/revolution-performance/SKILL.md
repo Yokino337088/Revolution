@@ -9,6 +9,8 @@ description: 编写、修改、审查 Revolution Unity 项目的战斗、AI、�
 
 以 [RevGame 实践与来源](references/revgame-practice.md) 为例，包含 2026-11-19 的无尽敌潮插值、网格提交与六章测量。实际步长、容量、入口和通过标准读取目标项目。
 
+固定负载可以通过 [RevMCP 性能批次](../revolution-framework/references/automatic-delivery.md#自动验收与性能对比) 预热、重复并比较回执。指标从每轮真实结果提取，按路径、工作量与设备口径核对。
+
 ## 写性能敏感代码时
 
 先按真实调用入口估算工作量，明确每呈现帧、每逻辑步、每次变更或加载时分别做什么，最多处理多少实体、顶点、UI 项或资源。按下面四项检查本次路径，计量与改动直接相关的成本。

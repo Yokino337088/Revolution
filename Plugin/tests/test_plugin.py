@@ -208,9 +208,12 @@ class PluginTests(unittest.TestCase):
                 tools = {tool["name"]: tool for tool in exchange("tools/list")["tools"]}
                 self.assertEqual(set(tools), {"rev_bind", "rev_discover", "rev_call", "rev_run"})
                 report_options = tools["rev_run"]["inputSchema"]["properties"]["plan"]["properties"]
-                self.assertEqual(set(report_options), {"report", "reportDirectory"})
+                self.assertEqual(set(report_options), {"report", "reportDirectory", "benchmark"})
                 self.assertTrue(call("rev_discover", {})["isError"])
-                self.assertEqual(call("rev_bind", {"project": str(project)})["structuredContent"]["project"], str(project.resolve()))
+                bound = call("rev_bind", {"project": str(project)})["structuredContent"]
+                self.assertEqual(bound["project"], str(project.resolve()))
+                self.assertEqual(bound["contractVersion"], 1)
+                self.assertEqual(len(bound["manifestHash"]), 64)
                 self.assertTrue(call("rev_bind", {"project": "relative"})["isError"])
                 result = call("rev_discover", {"target": "editor", "query": "editor.status"})["structuredContent"]
                 self.assertTrue(result["unavailable"])
