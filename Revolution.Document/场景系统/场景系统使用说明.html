@@ -361,6 +361,7 @@ RevScene.OnLoadStart += _ =&gt;
     <p>流程服务用 <code>TryAdvance</code> 标记阶段，业务就绪、遮挡结束并解除互斥后用 <code>TryComplete</code> 交付。失败或退出也在本次清理后发布相应终态，故障回退可以另开请求。</p>
     <p>在实际依赖入口用 <code>handoff.Resources.Require</code> 登记来源与首屏门禁。通过 <code>RevResManager.LoadOwnedAsync</code> 取得具名引用，并在退出时释放租约。面板与对象池自动标明其 prefab 引用。</p>
     <p>首屏交付时用 <code>CaptureReady()</code> 记录持有情况，退场清理后用 <code>CaptureExit(exitRequestId)</code> 冻结退场快照。通过入场 ID 可读取两份快照，或用 <code>CaptureCurrent()</code> 查现有持有者。旧接口的未具名引用仍显示计数。</p>
+    <p>交接终态后读取 <code>handoff.Performance</code>，查询资源预热、场景激活、首屏准备和清理等阶段的实时时长。在 Play 中可启用帧采样，读取 P50、P95、P99、最大帧间隔和 Unity 已分配内存峰值。跨阶段的间隔归给上一帧首次观察时的阶段，无有效样本的字段为空。</p>
   </section>
 </main>
 
