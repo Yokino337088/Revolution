@@ -253,7 +253,8 @@ class PluginTests(unittest.TestCase):
                     with self.subTest(cwd=cwd, source=source):
                         self.assertEqual(invoke(framework_hook, cwd, source), "")
                         context = json.loads(invoke(project_hook, cwd, source))["hookSpecificOutput"]["additionalContext"]
-                        for expected in ("AGENTS.md", "revgame-development", "新手注释守则", "关键实现", "核对 diff"):
+                        for expected in ("AGENTS.md", "revgame-development", "RevGame 工程实践索引", "业务自动交付契约",
+                                         "新手注释守则", "关键实现", "核对 diff"):
                             self.assertIn(expected, context)
 
     def test_revolution_session_finds_nested_project(self):
@@ -273,6 +274,8 @@ class PluginTests(unittest.TestCase):
                 output = subprocess.check_output([sys.executable, str(hook)], input=json.dumps(event), encoding="utf-8")
                 context = json.loads(output)["hookSpecificOutput"]["additionalContext"]
                 self.assertIn("RevScope", context)
+                self.assertIn("RevGame 工程实践索引", context)
+                self.assertIn("业务自动交付契约", context)
                 self.assertIn("完整重编", context)
                 self.assertIn("revolution-ai-automation", context)
                 for expected in ("新手注释规范", "关键实现", "核对 diff"):

@@ -1,7 +1,7 @@
 {
   "name": "revgame",
-  "version": "0.1.8",
-  "description": "RevGame 围棋史莱姆的项目规范、Revolution-TA 技术美术、资源验收及缺陷闭环入口。",
+  "version": "0.1.9",
+  "description": "RevGame 工程实践、业务自动交付、项目规范、Revolution-TA 技术美术和真实测试入口。",
   "author": { "name": "Revolution" },
   "license": "MIT",
   "skills": "./skills/",

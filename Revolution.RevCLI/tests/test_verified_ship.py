@@ -2,6 +2,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 # 使用被测试的同批工具，避免主机 Python 已装包掩盖问题。
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -59,6 +60,9 @@ class VerifiedShipTests(unittest.TestCase):
         observed = contracts.audit(offline, {"protocol": 1, "actions": [actual]})
         self.assertTrue(observed["success"])
         self.assertEqual(observed["onlineActions"][0]["inputSchema"]["properties"]["path"]["type"], "string")
+        actual["readOnly"] = False
+        saved = dict(offline["actions"][0], readOnly=True)
+        self.assertFalse(contracts.merge_editor_action(actual, saved)["readOnly"])
         actual["keys"] += ["extra"]
         self.assertFalse(contracts.audit(offline, {"protocol": 1, "actions": [actual]})["success"])
 
@@ -80,3 +84,13 @@ class VerifiedShipTests(unittest.TestCase):
                           invoke=invoke, smoke=lambda: {"success": False})
         self.assertFalse(result["success"])
         self.assertEqual(actions[-2:], ["editor.play", "editor.stop"])
+
+    def test_smoke_keeps_build_budget_outside_mcp_step_limit(self):
+        """整包预算可达四小时，RevMCP 仍只接收受支持的单工单超时。"""
+        entry = Path(__file__)
+        plan = {"steps": [{}], "finally": [{}]}
+        with patch.object(ship.subprocess, "run", return_value=Mock(returncode=0, stdout=b'{"success":true}')) as run:
+            self.assertTrue(ship.smoke_runner(entry, entry.parent, plan, 14400)()["success"])
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index("--timeout") + 1], "3600")
+        self.assertEqual(run.call_args.kwargs["timeout"], 14400)

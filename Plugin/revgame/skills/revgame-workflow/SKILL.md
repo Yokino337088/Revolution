@@ -5,6 +5,8 @@ description: 在 RevGame 围棋史莱姆仓库中定位项目规范、资源检�
 
 # RevGame 项目入口
 
+编写或验收业务前，先查目标仓库的 `.codex/skills/revolution-framework/references/revgame-practice-map.md` 和命中的实际源码。用 [框架参考](https://github.com/Yokino337088/Revolution/blob/main/Skills/revolution-framework/references/revgame-practice-map.md) 找跨阶段、UI、内容、联机和交付先例，当前项目保持自己的规则和版本。自动交付在仓库同专题查看实际接口。
+
 从工作目录向上找到同时包含 `AGENTS.md` 与 `RevGame_Client/UnityProject/RevGame.Unity` 的仓库根。读取根 `AGENTS.md` 与 `.codex/skills/revgame-development/SKILL.md`，沿后者只加载当前任务需要的专题。它们随 RevGame 版本更新。
 
 编写、修改或审查代码时，先读 RevGame 根目录下的 `.codex/skills/revgame-development/references/code-and-comments.md`。新增或修改的类型、接口、字段、属性、方法和回调逐项写面向新手的中文注释。简短逻辑一句话，关键实现解释原因、顺序、边界和清理。交付前按 diff 和新文件逐项核对，补齐遗漏或过期的注释。

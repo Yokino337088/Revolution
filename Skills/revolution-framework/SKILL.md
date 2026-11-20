@@ -5,6 +5,8 @@ description: 使用或维护 Revolution Unity 框架时选择公开门面、FSM�
 
 # Revolution 框架开发
 
+先读 [RevGame 工程实践索引](references/revgame-practice-map.md) 中与当前任务相近的真实路径。用项目自己的目标版本、规则、平台和资源归属决定适配。涉及切场、UI 命令、初始化、保存和跨帧所有权时，优先用 [业务自动交付契约](references/automatic-delivery.md) 接现有框架能力。
+
 实现或审查项目功能时，先看项目 `AGENTS.md`、已安装的框架版本和同类代码。使用实际存在的公开 API。项目可用 [RevGame 实现索引](references/revgame-engineering.md) 找到同职责例子；项目版本决定签名与生命周期契约。编写业务时按任务读 [官方编程架构规范](https://github.com/Yokino337088/Revolution/blob/main/Revolution.Document/编程范式/Revolution官方编程架构规范.md) 的对应部分。
 
 ## 先选相关专题

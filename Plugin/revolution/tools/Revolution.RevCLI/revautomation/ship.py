@@ -28,12 +28,18 @@ def smoke_runner(entry, project, plan, timeout):
 
     def run_plan():
         """执行一次并保留断言及清理结果，工具失败不会自动重放。"""
-        command = [sys.executable, str(entry), "--project", str(project), "--timeout", str(timeout), "--full", "run", "-"]
+        # 出包整体预算可超过 RevMCP 的单步上限，分别传递总预算与单次工单预算。
+        command = [sys.executable, str(entry), "--project", str(project), "--timeout", str(min(timeout, 3600)), "--full", "run", "-"]
         try:
             completed = subprocess.run(command, input=serialized, capture_output=True, timeout=timeout)
-            result = json.loads(completed.stdout)
-        except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+        except (OSError, subprocess.TimeoutExpired) as error:
             raise RevError("业务验收回执不可用：" + str(error)) from error
+        try:
+            result = json.loads(completed.stdout)
+        except ValueError as error:
+            stderr = completed.stderr.decode("utf-8", errors="replace").strip().splitlines()
+            reason = stderr[-1][:400] if stderr else str(error)
+            raise RevError(f"业务验收回执不可用（退出码 {completed.returncode}）：{reason}") from error
         if not isinstance(result, dict):
             raise RevError("业务验收未返回对象回执。")
         return {"success": completed.returncode == 0 and result.get("success") is True, "data": result}

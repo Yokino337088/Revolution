@@ -2,6 +2,7 @@
 
 框架开发遵循 [Revolution 官方编程架构规范](Revolution.Document/编程范式/Revolution官方编程架构规范.md)。涉及导入、分包或发布资源时，同时查阅 [资源加载与 AB 技能](Skills/revolution-framework/references/resource-and-ab.md)。
 
+- 写业务、维护框架门面或验收时，优先用 [RevGame 工程实践索引](Skills/revolution-framework/references/revgame-practice-map.md) 找职责相近的真实入口和回归证据，再结合目标项目已安装版本、平台、规则和资产归属适配。
 - 涉及开页、切场、初始化、异步命令和持久化时，优先采用 [业务自动交付契约](Skills/revolution-framework/references/automatic-delivery.md)。业务声明许可、依赖、就绪和提交点。接单、取消、失败回收和诊断由对应框架入口承担。
 - 新增工具动作时尽量在 Unity 注册处声明 DTO。发布前通过 RevCLI `contract` 校验清单，有在线工程时加 `--live` 核对实际注册与编译结果。
 - 新增或修改手写代码时，按 [新手注释规范](Skills/revolution-framework/references/code-style.md#3-面向新手的中文注释是交付门禁) 写中文注释。类型和接口、字段和属性、方法和回调逐项覆盖，方法内关键步骤写清原因、顺序和收尾。简单行为一句话，复杂契约分段说明。交付前按实际改动逐项补齐，方法体变更也要检查声明的注释。

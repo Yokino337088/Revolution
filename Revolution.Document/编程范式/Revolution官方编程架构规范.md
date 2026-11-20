@@ -23,6 +23,8 @@
 
 切场的阶段与结案、域内请求的取消、界面命令解绑、数据启动撤销与同槽保存由框架提供。实际玩法许可、服务器权威写入和失败回退由业务策略决定。工具契约、资产预检与发布验收见 [业务自动交付契约](../../Skills/revolution-framework/references/automatic-delivery.md)。
 
+按 [RevGame 工程实践索引](../../Skills/revolution-framework/references/revgame-practice-map.md) 先读相近业务实现，追当前用户入口、真实提交、拒绝与退场。结合目标工程版本、配置、平台和玩法规则适配，并记录来源和本轮验收证据。
+
 ## 2. 整体流程必须由 FSM + 游戏域统一管理
 
 游戏启动入口只初始化框架和项目服务/GM 注册一次；**一个明确的流程控制者**持有 FSM，负责推进与查询当前状态。状态负责自己域的 `Enter` / `Exit`，不越权清别人的域；`RevScope` 内核不依赖 FSM，项目用状态回调把两者接线。业务不应从任意按钮、面板或 GM 命令直接散落调用 `RevScope.ExitAll()` 来“切流程”。

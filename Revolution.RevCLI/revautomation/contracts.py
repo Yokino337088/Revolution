@@ -24,7 +24,9 @@ def merge_editor_action(registered, offline=None):
     """在线注册决定类型和可用性，预存清单补足旧动作元数据。"""
     previous = offline or {}
     action = dict(previous, **registered)
-    action["readOnly"] = bool(registered.get("readOnly") or previous.get("readOnly"))
+    # 类型化注册的权限属于当前 Unity 动作。只有旧注册才能用离线清单补充只读标记。
+    typed = bool(registered.get("inputSchemaJson") or registered.get("inputSchema"))
+    action["readOnly"] = bool(registered.get("readOnly") if typed else registered.get("readOnly") or previous.get("readOnly"))
     for source, target in (("inputSchemaJson", "inputSchema"), ("outputSchemaJson", "outputSchema")):
         value = action.pop(source, None)
         if value:
