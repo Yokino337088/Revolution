@@ -243,7 +243,7 @@ LateUpdate（渲染前） →  一次做完：
 ```text
 Closing → 通知 Part 关闭 → 播关闭转场 → OnClose() → 摘掉本面板所有事件
         → 播隐藏动画 → 置 Closed → 管理器收尾
-                                    ├─ 可复用（KeepAlive）→ 失活后放回池
+                                    ├─ 同域 KeepAlive → 失活后尝试放回池
                                     └─ 否则 → 挂进"待销毁"队列，下一帧才真正销毁 + 还资源引用
 ```
 
@@ -377,7 +377,9 @@ Closing → 通知 Part 关闭 → 播关闭转场 → OnClose() → 摘掉本�
 
 **做法：** 做专用的 `RevUIPanelPool`。理由很实在：界面复用需要重置的东西远多于普通对象（控件引用、监听、数据、滚动位置、选中态、输入内容、倒计时…），通用池只懂"失活 / 激活"，管不了这些。**所以复用必须是"有契约的路径"**：池只负责存取，清理由必被调用的 `OnReuse()` 负责，而框架先替你把数据清掉。
 
-**源码里长这样：** `Implementation\RevUIPanelPool.cs:6-12` 明确写了"不要用通用 `GameObjectPool`"的结论；`:44-48` 说明为什么 `OnReuse` 放在"取出时"调；`Support\RevUISetting.cs:41-45` 的 `MaxCachedPanels` **默认是 1** —— 一个面板同时只会开一份，多出来的回收掉，避免"池变成内存黑洞"。
+`RevUIPanelPool` 使用面板键检索、域句柄确认归属，并按最后一次回池的顺序裁剪全局空闲实例。`MaxCachedPanels` 默认每种一份，`MaxIdlePanels` 默认全局 32 份。管理器先移除索引再调用清理钩子，避免释放回调重入时复用正被销毁的实例。
+
+`RevScope.Exit` 在 UI 步骤同步停止原域面板、结束退场并归还其预制体租约。`OnClose` 每轮至多执行一次，晚到的转场回调无法重新入池。Unity 在帧末销毁实例，低内存处理只裁剪空闲实例并通过资源管理器整理零引用资源。`ui.cache-state` 暴露最近处置和引用数。
 
 **代价：** 每个面板都要写清"复用时哪些残留要清"。框架把能替你做的都做了（清数据、兜底摘事件），但界面上的残留只有你懂。
 
@@ -565,7 +567,7 @@ Closing → 通知 Part 关闭 → 播关闭转场 → OnClose() → 摘掉本�
 | `Facade\RevUI.cs` | **业务唯一入口**：打开 / 关闭 / 返回 / 查询 / 预热 / 诊断；只转发 + 失败时给人话文案 |
 | `Implementation\RevUIManager.cs` | **唯一状态中心**：五级查找、在途合并、互斥组、返回栈、层级重排、池与资源引用配对、诊断 |
 | `Implementation\RevUIRoot.cs` | **常驻场景根**：建 Canvas / 子画布 / 六层挂点 / 挡板 / EventSystem / UI 相机；`Update` 处理延迟销毁，`LateUpdate` 触发重排 |
-| `Implementation\RevUIPanelPool.cs` | **面板实例专用池**（按面板分桶、后进先出、上限 `MaxCachedPanels`）；不套用通用对象池 |
+| `Implementation\RevUIPanelPool.cs` | **面板实例专用池**，按键和域查找，可按全局最近使用顺序淘汰 |
 | `Implementation\RevUIPopupMask.cs` | **弹窗挡板**：每层一块、不生成顶点（零 overdraw）、自动插到对应面板下方、点它关该层最上面的弹窗 |
 | `Core\RevUIPanel.cs` | **面板基类**：生命周期钩子、状态、绑定触发、数据入口、自动摘事件、转场钩子 |
 | `Core\RevUIPanel.Generic.cs` | `RevUIPanel<TData>`：强类型数据入口 + 强制实现 `OnRefreshView` |

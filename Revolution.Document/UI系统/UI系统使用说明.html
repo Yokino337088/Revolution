@@ -735,7 +735,7 @@ RevUIAnim.StopAllOf(<span class="k">this</span>);                               
           <tr><td>⑨ 面板里直接 <code>Destroy(gameObject)</code></td><td>绕过管理器会让索引、池、资源引用对不上 → 关自己请用 <code>CloseSelf()</code></td></tr>
           <tr><td>⑩ 把飘字放在参与返回栈的层</td><td><code>Toast</code> 层不参与 <code>Back()</code>；自定义面板若不想被返回键关掉，设 <code>InBackStack = false</code></td></tr>
           <tr><td>⑪ 遮罩把不该挡的挡住了</td><td>想"看一眼但不打断操作"的浮层，显式写 <code>Mask = RevUIMaskMode.None</code>（<code>Popup</code> / <code>Guide</code> / <code>Top</code> 层默认是挡的）</td></tr>
-          <tr><td>⑫ 池里实例占内存</td><td><code>KeepAlive</code> 的界面会一直留着一份实例（连同它端的预制体引用）→ 大界面用 <code>CacheMode = DestroyOnClose</code>，或把 <code>MaxCachedPanels</code> 调小</td></tr>
+          <tr><td>⑫ 池里实例占内存</td><td><code>KeepAlive</code> 在有效域内持有空闲实例及预制体引用。大界面可使用 <code>DestroyOnClose</code>，也可调整 <code>MaxCachedPanels</code> 与 <code>MaxIdlePanels</code></td></tr>
           <tr><td>⑬ 改了数据界面没反应</td><td>框架<b>不监听</b>数据对象内容：原地改（<code>Data.Count++</code>）后要手动 <code>RefreshView()</code>；换新对象走 <code>SetData(...)</code> 才会自动刷 → 详见 4.3 的场景对照表</td></tr>
         </tbody>
       </table>
@@ -763,6 +763,11 @@ RevUIAnim.StopAllOf(<span class="k">this</span>);                               
     <p>同组的候选页先在隐藏容器准备首屏，完成后接管输入并关闭旧页。<code>RevUI.OpenTracked</code> 返回可等待票据，<code>ui.open-state</code> 按 ID 展示各阶段和退场结果。需要分帧时设置 <code>deferAssembly</code>，首屏工作通过 <code>PrepareFirstScreenAsync</code> 明确报告。</p>
     <p>定高竖向列表使用 <code>RevUIVirtualList&lt;T&gt;</code> 接管 ScrollRect 和行模板。数据提交使用稳定键，绑定函数返回清理动作，异步结果需要校验绑定版本。关闭列表时释放行与订阅。</p>
     <p><code>RevPopupQueue</code> 把阶段准入、优先级、去重和过期从页面中提炼出来。确认按钮结束当前票据，业务在收到确认结果后运行。</p>
+  </section>
+  <section id="panel-cache">
+    <h2>面板缓存与退域</h2>
+    <p><code>KeepAlive</code> 在同一有效域内复用，退域时先清理面板并归还租约。异域请求遇到同键空闲实例时会销毁旧实例，显式解绑的面板也在关闭后销毁。<code>MaxCachedPanels</code> 默认每种一份，<code>MaxIdlePanels</code> 默认全局 32 份，超额优先回收最久未用的实例。</p>
+    <p>低内存先释放空闲面板租约，再整理无引用资源。<code>RevUI.GetCacheSnapshot()</code> 与 <code>ui.cache-state</code> 显示空闲归属、开窗 ID、回收原因和剩余预制体引用，方便核对共享资源是否仍有有效持有者。</p>
   </section>
 </main>
 

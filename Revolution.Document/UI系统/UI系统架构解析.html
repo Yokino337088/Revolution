@@ -379,7 +379,7 @@
     <p>关闭不是一句 <code>SetActive(false)</code>，而是一条有始有终的流程：</p>
     <pre>Closing → 通知 Part 关闭 → 播关闭转场 → <span class="k">OnClose()</span> → 摘掉本面板所有事件
         → 播隐藏动画 → 置 <span class="k">Closed</span> → 管理器收尾
-                                                    ├─ 可复用（KeepAlive）→ 失活后放回池
+                                                    ├─ 同域 KeepAlive → 失活后尝试放回池
                                                     └─ 否则 → 挂进"待销毁"队列，<span class="b">下一帧</span>才真正销毁 + 还资源引用</pre>
     <p>因为中间有转场和动画，所以"关闭"必然跨帧 —— 这才需要 <code>Closing</code> 这个状态（见第四章）。<b>延迟一帧销毁</b>则是因为：关闭请求很可能发生在"正在遍历某个列表/正在派发事件"的过程中，边遍历边删对象是经典崩法，所以统一推到下一帧的 <code>Update</code> 里做。</p>
 
@@ -502,7 +502,8 @@
     <h3>决策 6：UI 专用实例池 + 清理契约（不套通用对象池）</h3>
     <p><b>问题：</b>界面关掉就销毁 → 下次打开要重新加载 + 实例化，明显卡顿；关掉不销毁、下次直接用 → 快，但"上次的东西还在"。更微妙的是：<b>能不能用框架里现成的通用对象池？</b></p>
     <p><b>做法：</b>做专用的 <code>RevUIPanelPool</code>。理由很实在：界面复用需要重置的东西远多于普通对象（控件引用、监听、数据、滚动位置、选中态、输入内容、倒计时…），通用池只懂"失活 / 激活"，管不了这些。<b>所以复用必须是"有契约的路径"</b>：池只负责存取，清理由必被调用的 <code>OnReuse()</code> 负责，而框架先替你把数据清掉。</p>
-    <p><b>源码里长这样：</b><code>Implementation\RevUIPanelPool.cs:6-12</code> 明确写了"不要用通用 <code>GameObjectPool</code>"的结论；<code>:44-48</code> 说明为什么 <code>OnReuse</code> 放在"取出时"调；<code>Support\RevUISetting.cs:41-45</code> 的 <code>MaxCachedPanels</code> <b>默认是 1</b> —— 一个面板同时只会开一份，多出来的回收掉，避免"池变成内存黑洞"。</p>
+    <p><code>RevUIPanelPool</code> 按键查找并用域句柄确认归属。<code>MaxCachedPanels</code> 默认每种一份，<code>MaxIdlePanels</code> 默认全局 32 份。全局裁剪按照回池顺序淘汰最久未使用的实例。管理器先摘索引再执行清理钩子。</p>
+    <p>退域的 UI 步骤会停用原域的面板、收尾动画并同步归还租约。<code>OnClose</code> 每轮至多执行一次。低内存先裁剪空闲面板，由资源管理器整理零引用 AB。开发态可用 <code>ui.cache-state</code> 查实际处置。</p>
     <p><b>代价：</b>每个面板都要写清"复用时哪些残留要清"。框架把能替你做的都做了（清数据、兜底摘事件），但界面上的残留只有你懂。</p>
 
     <h3>决策 7：异步安全 —— 状态守卫、在途合并、延迟一帧销毁</h3>
@@ -706,7 +707,7 @@
           <tr><td><code>Facade\RevUI.cs</code></td><td><b>业务唯一入口</b>：打开 / 关闭 / 返回 / 查询 / 预热 / 诊断；只转发 + 失败时给人话文案</td></tr>
           <tr><td><code>Implementation\RevUIManager.cs</code></td><td><b>唯一状态中心</b>：五级查找、在途合并、互斥组、返回栈、层级重排、池与资源引用配对、诊断</td></tr>
           <tr><td><code>Implementation\RevUIRoot.cs</code></td><td><b>常驻场景根</b>：建 Canvas / 子画布 / 六层挂点 / 挡板 / EventSystem / UI 相机；<code>Update</code> 处理延迟销毁，<code>LateUpdate</code> 触发重排</td></tr>
-          <tr><td><code>Implementation\RevUIPanelPool.cs</code></td><td><b>面板实例专用池</b>（按面板分桶、后进先出、上限 <code>MaxCachedPanels</code>）；不套用通用对象池</td></tr>
+          <tr><td><code>Implementation\RevUIPanelPool.cs</code></td><td><b>面板实例专用池</b>，按键和域查找，支持全局最近使用顺序淘汰</td></tr>
           <tr><td><code>Implementation\RevUIPopupMask.cs</code></td><td><b>弹窗挡板</b>：每层一块、不生成顶点（零 overdraw）、自动插到对应面板下方、点它关该层最上面的弹窗</td></tr>
           <tr><td><code>Core\RevUIPanel.cs</code></td><td><b>面板基类</b>：生命周期钩子、状态、绑定触发、数据入口、自动摘事件、转场钩子</td></tr>
           <tr><td><code>Core\RevUIPanel.Generic.cs</code></td><td><code>RevUIPanel&lt;TData&gt;</code>：强类型数据入口 + 强制实现 <code>OnRefreshView</code></td></tr>
@@ -757,7 +758,7 @@
   </section>
 
   <section id="large-ui">
-    <h2>大型界面的三个有界生命周期</h2>
+    <h2>大型界面的生命周期</h2>
     <p>候选页与公开页面使用各自的索引。候选通过首屏准备后发布，旧页随原缓存策略退场。开窗票据只保留有界的时间线和资源处置结果。</p>
     <p>定高虚拟列表从滚动坐标直接求可见索引，绑定代次隔开不同设备的数据和事件。弹窗队列依据业务阶段挑选窗口，先释放可见身份，再通知等待方。二者的宿主都明确负责离场清理。</p>
   </section>

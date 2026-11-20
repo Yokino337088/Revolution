@@ -593,7 +593,7 @@ RevUIAnim.StopAllOf(this);                                     // 停掉这个�
 | ⑨ 面板里直接 `Destroy(gameObject)` | 绕过管理器会让索引、池、资源引用对不上 → 关自己请用 `CloseSelf()` |
 | ⑩ 把飘字放在参与返回栈的层 | `Toast` 层不参与 `Back()`；自定义面板若不想被返回键关掉，设 `InBackStack = false` |
 | ⑪ 遮罩把不该挡的挡住了 | 想"看一眼但不打断操作"的浮层，显式写 `Mask = RevUIMaskMode.None`（`Popup` / `Guide` / `Top` 层默认是挡的） |
-| ⑫ 池里实例占内存 | `KeepAlive` 的界面会一直留着一份实例（连同它端的预制体引用）→ 大界面用 `CacheMode = DestroyOnClose`，或把 `MaxCachedPanels` 调小 |
+| ⑫ 池里实例占内存 | `KeepAlive` 在有效域内持有空闲实例及预制体引用。大界面可使用 `DestroyOnClose`，也可调整 `MaxCachedPanels` 与 `MaxIdlePanels` |
 | ⑬ 改了数据界面没反应 | 框架**不监听**数据对象内容：原地改（`Data.Count++`）后要手动 `RefreshView()`；换新对象走 `SetData(...)` 才会自动刷 → 详见 4.3 的场景对照表 |
 
 > [!NOTE]
@@ -631,3 +631,9 @@ RevUIOpenStatus status = await open.WaitAsync();
 定高竖向列表在现有 ScrollRect 上使用 `RevUIVirtualList<T>`，传入内容根下的顶部锚定模板、行距、稳定键和绑定函数。用 `SetItems` 提交只读快照，绑定函数返回解绑动作。关闭时 `Dispose`，异步结果校验行代次或取消令牌。
 
 需要串行等待确认的界面使用 `RevPopupQueue`。登录、大厅、对局或结算阶段由业务用 `SetPhase` 提供，工作项声明去重键、阶段、优先级及最长等待时间。视图用 `TryComplete(ticket, confirmed)` 结束当前票据。业务等待结果后执行确认动作，外部关闭用 `Cancel(ticket)`，域退出时队列自动撤销。
+
+### 面板缓存与退域
+
+`KeepAlive` 需要实际登记到一个开放的 `RevScope`。同域关窗后可以复用，遇到异域的同键空闲实例会销毁并归还它的引用。退域时同步收回该域的面板及租约，Unity 在帧末完成实例销毁。过场面板可以显式解绑并由流程负责关闭，关闭后直接销毁。
+
+`RevUISetting.MaxCachedPanels` 默认每种一份，`RevUISetting.MaxIdlePanels` 默认全局 32 份。全局超额按最久未使用的顺序裁剪，0 禁用空闲缓存。低内存会先清空闲实例再整理零引用资源，仍有持有者的图集继续可用。`RevUI.GetCacheSnapshot()` 或开发态 `ui.cache-state` 可查看实例的域、开窗 ID、释放原因和剩余预制体引用数。
