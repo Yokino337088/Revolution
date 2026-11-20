@@ -12,7 +12,7 @@
 
 2026-11-01 通道规则：**按轻重选**：编辑器操作和轻量运行时操作（`game gm`）走 RevCLI；长自动化测试、要带截图和 GIF 的 HTML 报告走 RevMCP `rev_run`（[判定规则](revolution-ai-automation/references/channel-choice.md)），选择依据见 [RevCLI 与 RevMCP 怎么选](../Revolution.Document/自动化工具/RevCLI与RevMCP怎么选.md)。[revolution-unity-editor](revolution-unity-editor/SKILL.md) 新增 [重启后重新连接](revolution-unity-editor/references/reconnect.md) 与 [全链路开发](revolution-unity-editor/references/fullchain.md)，覆盖写脚本挂载、一份 JSON 搭场景、动画、烘焙、导表、打 AB 和一键打整包。
 
-性能优化使用 [revolution-performance](revolution-performance/SKILL.md)：提炼RevGame截至2026-10-30的测量、规则/AI缓存、UI/反馈、GPU/透明绘制、图集/AB与生命周期实践。先建立固定输入基线，按瓶颈读取专题，保持规则与画质并验证完整结果；不承诺加载技能即可零GC或达到固定帧率。安装完整 `revolution-performance/` 目录到项目 `.codex/skills/`（或对应Agent目录）；普通业务开发继续配合 `revolution-framework`，实际测试使用已安装 `revolution-ai-automation` 能力。
+编写、修改或审查战斗、密集 UI/特效及其他性能敏感代码时，使用 [revolution-performance](revolution-performance/SKILL.md)。检查 CPU、GPU、内存、缓存与资源寿命，从 RevGame 的逻辑与表现分离、网格和图集实践中选同类参考，按固定负载验证。安装时使用完整 `revolution-performance/` 目录，业务门面和实际测试分别配合框架与自动化技能。
 
 2026-10-28：加入 [RevGame真实工程架构/编程参考](revolution-framework/references/revgame-engineering.md)、[Unity编辑器实践](revolution-framework/references/revgame-editor-practice.md)、[AI开发闭环](revolution-framework/references/revgame-ai-workflow.md) 和 [自动化测试实践](revolution-ai-automation/references/revgame-testing.md)。AI写Revolution业务前须按职责读取 [RevGame工程](https://github.com/Yokino337088/RevGame) 的同类源码，记录参考版本与契约，再适配目标项目；Demo补模块用法，项目样本不替代当前API/用户规则。
 
