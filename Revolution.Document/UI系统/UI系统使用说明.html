@@ -165,6 +165,7 @@ footer{max-width:1000px;margin:0 auto;padding:0 24px 60px;color:var(--text-sub);
       <li><a href="#s5">五、层级 / 遮罩 / 返回栈</a></li>
       <li><a href="#s6">六、新手最容易踩的 6 个坑</a></li>
       <li><a href="#s7">七、相关文档</a></li>
+      <li><a href="#large-ui">八、页面交割、长列表与弹窗</a></li>
     </ol>
   </nav>
 
@@ -757,6 +758,12 @@ RevUIAnim.StopAllOf(<span class="k">this</span>);                               
     </ul>
   </section>
 
+  <section id="large-ui">
+    <h2>页面交割、长列表与弹窗</h2>
+    <p>同组的候选页先在隐藏容器准备首屏，完成后接管输入并关闭旧页。<code>RevUI.OpenTracked</code> 返回可等待票据，<code>ui.open-state</code> 按 ID 展示各阶段和退场结果。需要分帧时设置 <code>deferAssembly</code>，首屏工作通过 <code>PrepareFirstScreenAsync</code> 明确报告。</p>
+    <p>定高竖向列表使用 <code>RevUIVirtualList&lt;T&gt;</code> 接管 ScrollRect 和行模板。数据提交使用稳定键，绑定函数返回清理动作，异步结果需要校验绑定版本。关闭列表时释放行与订阅。</p>
+    <p><code>RevPopupQueue</code> 把阶段准入、优先级、去重和过期从页面中提炼出来。确认按钮结束当前票据，业务在收到确认结果后运行。</p>
+  </section>
 </main>
 
 <footer>

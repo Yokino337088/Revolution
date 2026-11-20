@@ -1,6 +1,6 @@
 {
   "name": "revolution",
-  "version": "0.7.7",
+  "version": "0.7.8",
   "description": "Revolution 框架开发、Revolution-TA 技术美术、Gal 剧情创作和 Unity 自动化验收。包含 RevCLI 和 RevMCP。",
   "author": { "name": "Revolution" },
   "license": "MIT",

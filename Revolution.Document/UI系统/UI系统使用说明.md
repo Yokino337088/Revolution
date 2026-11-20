@@ -23,6 +23,7 @@
 - 五、层级 / 遮罩 / 返回栈
 - 六、新手最容易踩的 6 个坑
 - 七、相关文档
+- 八、页面交割、长列表与弹窗
 
 ---
 
@@ -614,3 +615,19 @@ RevUIAnim.StopAllOf(this);                                     // 停掉这个�
 ---
 
 在线文档站
+
+## 八、页面交割、长列表与弹窗
+
+在页签面板上声明相同的 `ExclusiveGroup`。候选页会在隐藏容器中准备，旧页在换页前保持可见并接收输入。面板可重写 `PrepareFirstScreenAsync(token)` 等待首屏必需内容。返回 false、读取失败、取消、退域或超时都会终止候选。首屏通过后再交割输入并处理退场，后续播放入场动画。
+
+```csharp
+RevUIOpenTicket open = RevUI.OpenTracked<InventoryPanel>(deferAssembly: true);
+RevUIOpenStatus status = await open.WaitAsync();
+// 用 open.Id 查询阶段毫秒数及旧页的 PreviousDisposition。
+```
+
+`RevUI.TryGetOpen` 和开发态 `ui.open-state` 都使用开窗 ID。可查询资源、排队、实例、绑定、首屏、交割和动画阶段。旧页关闭完成后记录回池或释放。默认装配队列每帧最多处理两个请求，时间预算为 3 ms，单次实例化可以超过预算。调参和首屏拆分依据实际同负载采样。
+
+定高竖向列表在现有 ScrollRect 上使用 `RevUIVirtualList<T>`，传入内容根下的顶部锚定模板、行距、稳定键和绑定函数。用 `SetItems` 提交只读快照，绑定函数返回解绑动作。关闭时 `Dispose`，异步结果校验行代次或取消令牌。
+
+需要串行等待确认的界面使用 `RevPopupQueue`。登录、大厅、对局或结算阶段由业务用 `SetPhase` 提供，工作项声明去重键、阶段、优先级及最长等待时间。视图用 `TryComplete(ticket, confirmed)` 结束当前票据。业务等待结果后执行确认动作，外部关闭用 `Cancel(ticket)`，域退出时队列自动撤销。
