@@ -10,7 +10,7 @@
 
 | 需求 | 使用框架现有入口 | 项目只实现 |
 |---|---|---|
-| 启动、场景切换 | `RevInitialize`、`RevScene` | 登录/大厅/战斗场景选择、失败回退 |
+| 启动、场景切换 | `RevInitialize`、`RevStartupPlan`、`RevSceneHandoffExecution` | 依赖、目标、首屏就绪、业务提交与恢复 |
 | 游戏阶段、返回式流程 | `RevLightFSM<T>`、`RevLightStackFSM<T>`；AI 用 `RevHeavyFSM<,>` | 阶段状态、合法转移条件、驱动宿主 |
 | 阶段内资源与对象归属 | `RevScope`、`RevDomain`、`RevLogicBase` / `RevLogic` | 自定义域名、各阶段开关域、无界面局内逻辑 |
 | 共享业务能力 | `RevServices`；同接口并行实例隔离才用 `RevServiceLocator.CreateScope()` | 登录/战斗等业务服务与其注册/注销 |
@@ -20,6 +20,8 @@
 | 可观测业务测试入口 | `RevGM.Register`、`RevGM.Execute`、`RevGMResult` | 有权限边界的业务测试命令与断言 |
 
 三种业务承载点按**生存期**选：仅当前屏幕的装配/显示放面板；无界面且只活一段玩法的业务放 `[RevLogic(域名)]` + `RevLogicBase`；跨阶段的长期能力放服务。不要因为看到“作用域”就把 `RevScope`（游戏域）与 `RevServiceLocator.CreateScope()`（服务实例隔离）混为一谈。
+
+切场的阶段与结案、域内请求的取消、界面命令解绑、数据启动撤销与同槽保存由框架提供。实际玩法许可、服务器权威写入和失败回退由业务策略决定。工具契约、资产预检与发布验收见 [业务自动交付契约](../../Skills/revolution-framework/references/automatic-delivery.md)。
 
 ## 2. 整体流程必须由 FSM + 游戏域统一管理
 

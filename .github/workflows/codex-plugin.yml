@@ -21,4 +21,5 @@ jobs:
         with:
           dotnet-version: '8.0.x'
       - run: python Plugin/package_plugins.py --check
+      - run: python Revolution.RevCLI/rev.py --no-daemon --full contract
       - run: python -m unittest discover -s Plugin/tests

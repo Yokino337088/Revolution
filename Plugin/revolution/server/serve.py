@@ -14,6 +14,8 @@ sys.path[:0] = [str(CLI), str(MCP)]
 from revmcp.backends import Hub
 from revmcp.schema import object_schema, validate
 from revmcp.server import Server
+from revautomation.contracts import audit
+from revautomation.client import read_json
 
 
 # 服务器切换工程需要完整路径，避免在多个打开的工程之间自动猜测。
@@ -86,11 +88,19 @@ class ProjectServer(Server):
         cli = project_cli if has_cli else CLI
         binding = (project, endpoint)
         if binding != self.binding:
+            # 先校验安装缓存与项目清单主版本，仍由插件自带 Python 实现处理请求。
+            installed = audit(read_json(CLI / "commands.json"))
+            declared = audit(read_json(cli / "commands.json"))
+            if not installed["success"] or installed["contractVersion"] != declared["contractVersion"]:
+                raise ValueError("插件工具与项目命令契约不兼容，请核对安装版本。")
             self.hub = Hub(project=project, runtime_endpoint=endpoint, cli_root=cli)
             self.binding = binding
+        report = audit(self.hub.manifest)
         return {"success": True, "project": str(project), "commandCatalog": str(cli / "commands.json"),
                 "bundledRevCli": str(CLI / "rev.py"),
-                "player": endpoint is not None, "revMcp": str(MCP)}
+                "player": endpoint is not None, "revMcp": str(MCP),
+                "contractVersion": report["contractVersion"], "manifestHash": report["manifestHash"],
+                "schemaIssues": report["errors"]}
 
 
 if __name__ == "__main__":

@@ -411,9 +411,22 @@ namespace Revolution.HotUpdate
                     await RevHotStore.ValidateSnapshotAsync(remote, resVersion, token);
                 }
                 else await RevHotStore.ValidateWebGLCandidateAsync(remote, resVersion, token);
+                await RevHotStore.ProbeRequiredAssetsAsync(remote, resVersion, config.RequiredAssets, token);
                 token.ThrowIfCancelled();
 
                 // ---------- ⑤ 切版本前留恢复日志；旧目录必须保留到重装成功之后 ----------
+                // 下载及探测跨帧。玩家可能在此期间进入玩法或重新借到资源，提交前再次确认。
+                if (config.CanActivate != null && !config.CanActivate(remote))
+                {
+                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.ApplyFailed, "业务目前不允许激活候选版本"), false);
+                }
+                foreach (RevResHandle handle in RevResManager.CachedHandles.Values)
+                {
+                    if (handle.RefCount > 0 || handle.IsLoading)
+                    {
+                        throw new RevHotException(RevHotError.Of(RevHotErrorCode.ApplyFailed, "激活前出现了新的业务资源持有或加载"), false);
+                    }
+                }
                 RevHotStore.MarkVersionComplete(resVersion);
                 RevHotStore.BeginActivation(previousVersion);
                 activating = true;

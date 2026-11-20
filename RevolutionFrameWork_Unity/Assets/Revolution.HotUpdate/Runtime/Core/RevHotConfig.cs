@@ -67,6 +67,12 @@ namespace Revolution.HotUpdate
         /// <summary>渠道段（可空）：分渠道资源时用，拼在路径里。</summary>
         public string Channel = "";
 
+        /// <summary>候选版本切换前必须实际打开的 ResMap 键。空列表沿用完整文件校验。</summary>
+        public string[] RequiredAssets = Array.Empty<string>();
+
+        /// <summary>在候选检查完成后复核业务是否允许激活，例如当前是否仍在大厅。</summary>
+        public Func<RevHotManifest, bool> CanActivate;
+
         /// <summary>
         /// 附加请求头（可空）：临时令牌之类。★ 客户端永远不要放云厂商的长期密钥；
         /// 私有桶请由你们的服务端签发"临时 URL"，这里只负责把它带上。

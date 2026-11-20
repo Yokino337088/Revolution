@@ -354,6 +354,104 @@ namespace Revolution.HotUpdate
             }
         }
 
+        /// <summary>用候选 ResMap 和包依赖打开代表资源。验证期间保持旧版本指针与资源管理器。</summary>
+        internal static async RevTask ProbeRequiredAssetsAsync(RevHotManifest manifest, string version, string[] requested, RevCancellationToken token)
+        {
+            if (requested == null || requested.Length == 0)
+            {
+                return;
+            }
+            // 复制业务输入，避免调用方在跨帧检查期间更改验收目标。
+            string[] keys = (string[])requested.Clone();
+            var map = RevHotPlatform.SupportsLocalFiles ? ParseResMapText(File.ReadAllText(ResMapPath(version))) : _memoryResMap;
+            foreach (string key in keys)
+            {
+                token.ThrowIfCancelled();
+                if (string.IsNullOrWhiteSpace(key) || map == null || !map.TryGetValue(key, out string mapping))
+                {
+                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "代表资源缺少候选映射：" + key), false);
+                }
+                string[] parts = mapping.Split('|');
+                if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[1]))
+                {
+                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "代表资源的候选映射无效：" + key), false);
+                }
+                var opened = new Dictionary<string, AssetBundle>(StringComparer.OrdinalIgnoreCase);
+                var releaseOrder = new List<AssetBundle>();
+                try
+                {
+                    AssetBundle bundle = await OpenProbeBundleAsync(manifest, version, parts[0], opened, releaseOrder, token);
+                    AssetBundleRequest load = bundle.LoadAssetAsync<UnityEngine.Object>(parts[1]);
+                    // Unity 不能撤销已派发的资源请求。结束后再卸载临时探针持有。
+                    while (!load.isDone)
+                    {
+                        await RevTaskScheduler.NextFrame();
+                    }
+                    token.ThrowIfCancelled();
+                    if (load.asset == null)
+                    {
+                        throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "候选包无法打开代表资源：" + key), false);
+                    }
+                }
+                finally
+                {
+                    for (int i = releaseOrder.Count - 1; i >= 0; i--)
+                    {
+                        releaseOrder[i].Unload(true);
+                    }
+                }
+            }
+        }
+
+        /// <summary>按已验清单先加载依赖，再加载目标包。只归还此探针打开的句柄。</summary>
+        private static async RevTask<AssetBundle> OpenProbeBundleAsync(RevHotManifest manifest, string version, string name,
+            Dictionary<string, AssetBundle> opened, List<AssetBundle> releaseOrder, RevCancellationToken token)
+        {
+            token.ThrowIfCancelled();
+            if (opened.TryGetValue(name, out AssetBundle cached))
+            {
+                return cached;
+            }
+            RevHotBundleInfo row = manifest.Find(name);
+            if (row == null)
+            {
+                throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "代表资源引用候选清单外的包：" + name), false);
+            }
+            foreach (string dependency in row.Dependencies)
+            {
+                await OpenProbeBundleAsync(manifest, version, dependency, opened, releaseOrder, token);
+            }
+            token.ThrowIfCancelled();
+            AssetBundle bundle;
+            if (RevHotPlatform.SupportsLocalFiles)
+            {
+                AssetBundleCreateRequest load = AssetBundle.LoadFromFileAsync(Path.Combine(BundlesDir(version), row.Name));
+                while (!load.isDone)
+                {
+                    await RevTaskScheduler.NextFrame();
+                }
+                bundle = load.assetBundle;
+            }
+            else
+            {
+                string url = RevHotUrlBuilder.BundleUrl(_config, _config.RemoteRoot, version, row.Name);
+                using (UnityWebRequest request = UnityWebRequestAssetBundle.GetAssetBundle(url, Hash128.Parse(row.UnityHash), uint.Parse(row.UnityCrc)))
+                {
+                    await SendBundleRequestAsync(request, token);
+                    bundle = DownloadHandlerAssetBundle.GetContent(request);
+                }
+            }
+            if (bundle == null)
+            {
+                throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "无法打开代表资源的候选包：" + name), false);
+            }
+            opened.Add(name, bundle);
+            releaseOrder.Add(bundle);
+            token.ThrowIfCancelled();
+            return bundle;
+        }
+
+        /// <summary>按配置等待候选包请求，取消时中止本次连接并保留原版本。</summary>
         private static async RevTask SendBundleRequestAsync(UnityWebRequest request, RevCancellationToken token)
         {
             request.timeout = _config.TimeoutSeconds;

@@ -29,6 +29,8 @@ description: 在 Revolution Unity 项目中执行真实测试、检查功能完�
 
 ## 把目标变成可执行验证
 
+采用 [业务自动交付契约](../revolution-framework/references/automatic-delivery.md) 的工具校验和重复性能计划。发布前核对当前工程的真实动作及 Schema。连续压力测量由同一 `rev_run` 计划负责每轮造局、条件与复位。
+
 把每项需求对应到“前置状态 → 玩家共用入口 → 精确业务后置 → 失败边界 → 每轮复位/整场收尾”。GM 必须用完整注册名；参数 `arg0/arg1` 来自实时 schema。UI 先 `ui.dump` 再用当次 id 点击，域重载或切场景后重新获取 id。
 
 - 业务动作优先调用实际 Service/Logic 入口的 GM 或注册能力；UI 测试走 EventSystem。禁止直接改期望状态、改存档、绕过业务来制造通过。

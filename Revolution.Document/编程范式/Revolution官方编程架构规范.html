@@ -14,6 +14,7 @@ main{max-width:1040px;margin:26px auto 70px;padding:0 20px}section,.toc{backgrou
 <body>
 <header class="hero"><div class="wrap"><div class="eyebrow">REVOLUTION · OFFICIAL ENGINEERING STANDARD</div><h1>官方编程架构规范</h1><p>框架门面解决常用能力，FSM 管整体流程，RevScope 管各阶段生灭，GM 留可验证业务入口。</p><p>基线：2026-10-16 · <a href="Revolution官方编程架构规范.md">Markdown 权威版</a></p></div></header>
 <main>
+<section id="automatic-delivery"><h2>业务自动交付</h2><p>启动依赖使用 <code>RevStartupPlan</code>。场景交接由 <code>RevSceneHandoffExecution</code> 执行，项目提供目标、首屏就绪、业务提交与恢复策略。异步使用实际域句柄，界面快照和命令随本轮面板释放，同槽保存沿框架文件提交。</p><p>工具契约、资源预检和真实业务验收参见 <a href="https://github.com/Yokino337088/Revolution/blob/main/Skills/revolution-framework/references/automatic-delivery.md">业务自动交付契约</a>。</p></section>
 <nav class="toc" aria-label="本文目录"><b>阅读顺序</b><br><a href="#principles">01 门面优先</a><a href="#flow">02 FSM × 游戏域</a><a href="#gm">03 业务 GM</a><a href="#agent">04 MCP 自动验收</a><a href="#checklist">05 交付检查</a><a href="#services">06 服务注册键</a><a href="#resource-ownership">07 资源导入与 AB 归属</a></nav>
 <section id="principles"><h2>01 · 常用功能统一使用框架现有接口</h2><p>项目仅实现自己的登录协议、玩家数据、关卡规则、流程转移与接线；不重造框架已有的加载、回收、派发或计时。业务不直接调用 <code>Core/Implementation/Support</code> 内核。示意业务接口不是框架 API。</p><div class="table"><table><thead><tr><th>需求</th><th>框架现有入口</th><th>项目责任</th></tr></thead><tbody>
 <tr><td>启动、场景切换</td><td><code>RevInitialize</code>、<code>RevScene</code></td><td>场景选择、失败回退</td></tr>
