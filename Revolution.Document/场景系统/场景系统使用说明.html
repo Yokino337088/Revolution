@@ -363,6 +363,11 @@ RevScene.OnLoadStart += _ =&gt;
     <p>首屏交付时用 <code>CaptureReady()</code> 记录持有情况，退场清理后用 <code>CaptureExit(exitRequestId)</code> 冻结退场快照。通过入场 ID 可读取两份快照，或用 <code>CaptureCurrent()</code> 查现有持有者。旧接口的未具名引用仍显示计数。</p>
     <p>交接终态后读取 <code>handoff.Performance</code>，查询资源预热、场景激活、首屏准备和清理等阶段的实时时长。在 Play 中可启用帧采样，读取 P50、P95、P99、最大帧间隔和 Unity 已分配内存峰值。跨阶段的间隔归给上一帧首次观察时的阶段，无有效样本的字段为空。</p>
   </section>
+  <section id="automatic-domain-lifetime">
+    <h2>交接预热与清理</h2>
+    <p>使用 <code>handoff.Resources.PreloadAsync&lt;T&gt;</code> 预热下一场景的对象。切换业务域后在目标域预建池实例。交接清理或失败结案时由框架归还预热。</p>
+    <p>旧业务域的面板、池及资源随域结束。开启 <code>AutoClearPool</code> 时，Unity 场景切换还会清全局池的空闲实例。</p>
+  </section>
 </main>
 
 <footer>

@@ -717,6 +717,11 @@ RevRefPool.GetPoolNames();                 <span class="c">// 引用池名清单
     </div>
   </section>
 
+  <section id="automatic-domain-lifetime">
+    <h2>域身份与 prefab 键</h2>
+    <p>索引使用实际域句柄和资源键或 prefab 实例 ID。全局实例 ID 支持按创建来源归池，调用方可以从其它域归还同一实例。</p>
+    <p>域索引只记录首次创建的池。退域先摘索引再处理该域的实例和租约，两种异步取用路径都为实际调用计数。</p>
+  </section>
 </main>
 
 <footer>

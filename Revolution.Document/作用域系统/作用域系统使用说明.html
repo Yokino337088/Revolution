@@ -209,7 +209,7 @@ RevLogic.Start&lt;DamageBoardLogic&gt;();                      <span class="c">/
     <p class="lead">长域由"游戏流程"开关；局部段用 <code>using</code>。</p>
 
     <pre><span class="c">// ① 长生命周期的域：进战斗 / 回大厅，由状态机或场景加载完成的回调来开关
-//    第二个参数 = 关域时要整组回收的资源分组（对象池 + 资源），不需要就省略</span>
+//    第二个参数是可选的默认资源分类。退出按域的真实所有权回收。</span>
 RevScope.Enter(RevDomain.Battle, RevResGroup.Battle);
 
 <span class="c">// —— 这一局里，任何脚本注册下面这些东西，只要没写 owner，都自动归战斗域 ——</span>
@@ -309,8 +309,7 @@ RevEvent.AddEventListener(id, cb);      <span class="c">// 同上</span></pre>
           </tbody>
         </table>
       </div>
-      <p style="margin-bottom:0"><b>服务（RevServices）永远不会被自动归域</b>——想让一个服务随域走，必须显式 <code>owner: RevScope.Current</code>。
-      这是刻意的：服务是"全局能力"，默认应该活得久，自动归域反而容易出事故。</p>
+      <p style="margin-bottom:0"><code>RevServices.Register</code> 默认归有效域。全局服务使用长期宿主或 <code>RevScope.GlobalOwner</code>。</p>
     </div>
 
     <p>还有一种写法：<b>注册时写了显式 owner，但又想让它跟着域一起结束</b>——用 <code>Attach</code>：</p>
@@ -573,7 +572,7 @@ RevLog.Info(RevScope.LastCloseReport.ToText());</pre>
           <tr><td class="c">3</td><td><code>Exit</code> 一个不在栈顶的域</td><td>会把压在它上面的域一起关掉（并打警告）。多半是 <code>Exit</code> 顺序写反了，检查调用处</td></tr>
           <tr><td class="c">4</td><td>想暂停战斗，结果计时器也停了</td><td><code>SetTickEnabled</code> 只管每帧回调和 <code>RevLogic.OnTick</code>；计时器是"时间"，不受影响</td></tr>
           <tr><td class="c">5</td><td>全局单例（网络管理器）注册时没写 owner</td><td>一旦战斗域开着，它会被误判成"归战斗域"，战斗一结束就被摘了监听——全局对象永远显式写 owner</td></tr>
-          <tr><td class="c">6</td><td>服务（<code>RevServices</code>）以为也会自动归域</td><td>服务永远不会被自动归域，想随域走必须 <code>owner: RevScope.Current</code> 显式登记</td></tr>
+          <tr><td class="c">6</td><td>跨场景服务随业务域退出</td><td>注册时用长期宿主或 <code>RevScope.GlobalOwner</code></td></tr>
           <tr><td class="c">7</td><td><code>RevLogic.Start&lt;T&gt;()</code> 返回 <code>null</code> 却没看日志</td><td>一定有明确报错：域没开 / 变体不符 / 正在关闭中 / <code>OnStart</code> 抛异常回滚，看 <code>RevLog</code> 输出</td></tr>
           <tr><td class="c">8</td><td>在某个 Logic 的 <code>OnStop</code> 里 <code>Start</code> 新的 Logic</td><td>域正在关闭时不接受新业务单元，会被拒绝——这属于"下一阶段"的事，等域关完再启动</td></tr>
         </tbody>
@@ -658,6 +657,11 @@ RevLog.Info(RevScope.LastCloseReport.ToText());</pre>
     </div>
   </section>
 
+  <section id="domain-ownership">
+    <h2>域的自动归属和交接预热</h2>
+    <p>普通资源引用、面板、对象池、输入订阅和普通音效随域退出。域关门时取消 <code>scope.Cancellation</code>，自有可释放对象通过 <code>scope.Own</code> 登记。</p>
+    <p>用 <code>handoff.Resources.PreloadAsync&lt;T&gt;</code> 保留下一场景的预热。交接清理、失败与取消均归还本次预热。剩余持有者继续使用共享资源。开发态 <code>scope.state</code> 可核对各域的持有和退场耗时。</p>
+  </section>
 </main>
 
 <footer>

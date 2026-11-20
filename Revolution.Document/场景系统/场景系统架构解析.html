@@ -264,7 +264,7 @@ footer{max-width:1000px;margin:0 auto;padding:0 24px 60px;color:var(--text-sub);
         <thead><tr><th style="width:24%">模块</th><th>关系</th></tr></thead>
         <tbody>
           <tr><td><code>RevTask</code></td><td><b>依赖</b>：异步原语（本模块不引第三方异步库）</td></tr>
-          <tr><td><code>RevObjectPool</code></td><td><b>默认清理</b>：切场景前 <code>RevPool.ClearAll()</code>（可用 <code>AutoClearPool = false</code> 关掉）</td></tr>
+          <tr><td><code>RevObjectPool</code></td><td>切场景前可自动清理全局池的空闲对象，业务域独立清理自己的池</td></tr>
           <tr><td><code>RevUISystem</code></td><td><b>不依赖</b>：加载界面是普通面板；想关全部界面就在 <code>OnLoadStart</code> 里 <code>RevUI.ShutdownAll()</code></td></tr>
           <tr><td><code>RevResourceSystem</code></td><td><b>不依赖</b>：按业务域卸资源由你在 <code>OnLoadStart</code> 里 <code>RevResBootstrap.Instance.Shutdown(group)</code></td></tr>
           <tr><td><code>RevSoundSystem</code></td><td><b>不依赖</b>：停音效同理（<code>RevSound.StopAll()</code>）</td></tr>

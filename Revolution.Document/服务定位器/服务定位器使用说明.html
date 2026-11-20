@@ -879,6 +879,10 @@ Assert.Throws&lt;InvalidOperationException&gt;(() =&gt; a.GetRequired&lt;ISessio
     </div>
   </section>
 
+  <section id="automatic-domain-lifetime">
+    <h2>域服务与常驻服务</h2>
+    <p><code>RevServices.Register</code> 省略所有者时归有效域。退域注销这批服务，容器创建的实例同步调用 <code>Dispose</code>。已有实例由提供者释放。游戏级服务指定长期宿主或 <code>RevScope.GlobalOwner</code>。</p>
+  </section>
 </main>
 
 <footer>

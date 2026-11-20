@@ -515,6 +515,10 @@ RevInput.Failed += (reason, detail) =&gt; Debug.LogWarning($<span class="s">"[In
     </ul>
   </section>
 
+  <section id="automatic-domain-lifetime">
+    <h2>输入锁与订阅的域归属</h2>
+    <p>省略 <code>owner</code> 时，<code>Block</code>、动作、手势、轴及连发监听都会归有效域。域退出同时解除这些输入锁和订阅。跨域监听用长期宿主或 <code>RevScope.GlobalOwner</code>。</p>
+  </section>
 </main>
 
 <footer>
