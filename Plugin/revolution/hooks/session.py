@@ -46,7 +46,9 @@ def main():
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "SessionStart",
         "additionalContext": (
-            "Revolution 工程：写业务前查当前安装的公开门面和同类实现。"
+            "Revolution 工程：写业务前读 revolution-framework 的 RevGame 工程实践索引，"
+            "先查职责相近的真实入口、提交和验收，再按当前安装版本、规则、平台及资源归属适配。"
+            "场景交接、域内异步、界面命令、启动、保存和校验交付依业务自动交付契约使用已安装的入口。"
             "写代码按 revolution-framework 的新手注释规范。新增或修改的类型、接口、字段和方法逐项写中文注释。"
             "简单行为一句话，关键实现旁解释原因、顺序、边界与清理。交付前逐项核对 diff 并补齐。"
             "FSM 管阶段，RevScope 管生命周期，业务异步用 RevTask。"
