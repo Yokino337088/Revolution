@@ -2,6 +2,8 @@
 
 Revolution 插件包含框架、编辑器、AI 自动化、性能、scenario、[Revolution-TA](revolution/skills/revolution-ta/SKILL.md) 和 [Gal 剧情创作与自定义接入](revolution/skills/revolution-gal/SKILL.md) 技能，以及 RevCLI、RevMCP。使用 `$revolution-ta` 查 Shader 和材质制作、图集 UV、粉屏、目标 AB 或真机渲染。RevGame 插件会从项目入口找到这套技术美术流程。两个插件的会话 Hook 都会提醒按改动写面向新手的中文注释并逐项核对。RevGame 的项目规则和检查配置由 RevGame 仓库维护。
 
+写战斗、密集 UI/特效及逐帧处理代码时，使用 `$revolution-performance` 核对 CPU、GPU、内存与缓存。它包含 RevGame 的逻辑帧/表现帧、顶点数据分流、缓存失效和按使用范围预加载实践，以及同负载的功能与性能验证方法。 [性能 Skill](revolution/skills/revolution-performance/SKILL.md)
+
 ## 安装和使用
 
 官方 `codex-plugin` 分支发布两个可安装插件及市场清单。开发在 `main` 进行，GitHub Actions 将验证过的插件副本同步到发布分支。可直接用 Codex CLI 添加发布分支：
