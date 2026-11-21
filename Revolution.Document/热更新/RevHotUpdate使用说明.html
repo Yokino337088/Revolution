@@ -563,7 +563,7 @@ RevHotUpdateResult result = <span class="k">await</span> RevHotUpdate.UpdateAsyn
           <tr><td><b>Android</b></td><td><b>必须先落地</b>到 <code>_builtin/{平台}/</code>（APK 里的 <code>jar:</code> 路径不是文件，<code>LoadFromFile</code> 读不了）</td><td>持久化版本目录</td><td>首次启动会拷贝一次，<b>幂等</b>（大小一致就跳过）；因此不要配 <code>ReadFromStreamingAssets</code>（配置校验会直接拦下）</td></tr>
           <tr><td><b>iOS</b></td><td>直接读 <code>StreamingAssets</code>（真实文件目录）</td><td>持久化版本目录</td><td>可把 <code>FirstPackageMode</code> 改成 <code>ReadFromStreamingAssets</code> 省磁盘；审核口径：只做资源，不做代码</td></tr>
           <tr><td><b>PC / 编辑器</b></td><td>直接读 <code>StreamingAssets</code></td><td>持久化版本目录</td><td>编辑器里默认走"直读资源"模式，<b>想验证热更要在打包工具里打开 AB 模式</b></td></tr>
-          <tr><td><b>小游戏 / WebGL</b></td><td>没有"包内 AB"（代码包体积受限），资源全在 CDN</td><td><b>直接是 CDN 的版本化 URL</b></td><td>没有文件系统：不落地、不续传、不做文件级校验；缓存与校验交给引擎（清单里的 <code>unityHash</code> / <code>unityCrc</code> 就是给它的）</td></tr>
+          <tr><td><b>小游戏 / WebGL</b></td><td>从 Player 发布的 StreamingAssets URL 读取首包基线</td><td><b>直接是 CDN 的版本化 URL</b></td><td>AB 缓存与校验交给引擎（清单里的 <code>unityHash</code> / <code>unityCrc</code>）。网页请求取消或达到实时时限后中止</td></tr>
         </tbody>
       </table>
     </div>

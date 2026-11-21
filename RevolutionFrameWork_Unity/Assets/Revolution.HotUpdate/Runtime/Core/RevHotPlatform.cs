@@ -34,9 +34,11 @@ namespace Revolution.HotUpdate
         {
             get
             {
-#if (UNITY_WEIXINMINIGAME || UNITY_BYTEDANCE_MINIGAME || UNITY_WEBGL) && !UNITY_EDITOR
-                return "WebGL";
-#elif UNITY_IOS && !UNITY_EDITOR
+                if (IsWebGL)
+                {
+                    return "WebGL";
+                }
+#if UNITY_IOS && !UNITY_EDITOR
                 return "iOS";
 #elif UNITY_ANDROID && !UNITY_EDITOR
                 return "Android";
@@ -46,14 +48,17 @@ namespace Revolution.HotUpdate
             }
         }
 
-        /// <summary>是不是 WebGL / 小游戏：这类平台没有文件系统，AB 只能走 CDN 的 URL。</summary>
+        /// <summary>网页和小游戏 Player 使用 URL 下载 AB。Editor 即使选择 WebGL 目标也可以读本地包。</summary>
         public static bool IsWebGL
         {
-#if UNITY_WEBGL && !UNITY_EDITOR
-            get { return true; }
+            get
+            {
+#if (UNITY_WEBGL || UNITY_WEIXINMINIGAME || UNITY_BYTEDANCE_MINIGAME || UNITY_BYTEDANCEMINIGAME) && !UNITY_EDITOR
+                return true;
 #else
-            get { return false; }
+                return false;
 #endif
+            }
         }
 
         /// <summary>有没有"本地文件"可用（能 System.IO、能 LoadFromFile）。WebGL 上所有文件相关逻辑都要跳过。</summary>

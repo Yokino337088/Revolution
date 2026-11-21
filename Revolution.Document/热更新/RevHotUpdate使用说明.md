@@ -435,7 +435,7 @@ RevHotUpdateResult result = await RevHotUpdate.UpdateAsync(check, p => bar.Set(p
 | **Android** | **必须先落地**到 `_builtin/{平台}/`（APK 里的 `jar:` 路径不是文件，`LoadFromFile` 读不了） | 持久化版本目录 | 首次启动会拷贝一次，**幂等**（大小一致就跳过）；因此不要配 `ReadFromStreamingAssets`（配置校验会直接拦下） |
 | **iOS** | 直接读 `StreamingAssets`（真实文件目录） | 持久化版本目录 | 可把 `FirstPackageMode` 改成 `ReadFromStreamingAssets` 省磁盘；审核口径：只做资源，不做代码 |
 | **PC / 编辑器** | 直接读 `StreamingAssets` | 持久化版本目录 | 编辑器里默认走"直读资源"模式，**想验证热更要在打包工具里打开 AB 模式** |
-| **小游戏 / WebGL** | 没有"包内 AB"（代码包体积受限），资源全在 CDN | **直接是 CDN 的版本化 URL** | 没有文件系统：不落地、不续传、不做文件级校验；缓存与校验交给引擎（清单里的 `unityHash` / `unityCrc` 就是给它的） |
+| **小游戏 / WebGL** | 从 Player 发布的 StreamingAssets URL 读取首包基线 | **直接是 CDN 的版本化 URL** | AB 缓存与校验交给引擎（清单里的 `unityHash` / `unityCrc`）。网页请求取消或达到实时时限后中止 |
 
 ---
 

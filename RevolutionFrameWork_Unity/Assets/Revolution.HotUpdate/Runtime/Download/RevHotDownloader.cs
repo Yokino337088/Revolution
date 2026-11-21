@@ -77,18 +77,15 @@ namespace Revolution.HotUpdate
             throw last ?? new RevHotException(RevHotError.Of(RevHotErrorCode.ManifestFetchFailed, "所有下载源都失败了（检查网络与 RemoteRoot 配置）"), true);
         }
 
+        /// <summary>拉取一次非空清单。超时和传输失败交给现有的重试与换源策略。</summary>
         private static async RevTask<string> FetchTextOnceAsync(string url, RevHotConfig config, RevCancellationToken token)
         {
             using (UnityWebRequest www = UnityWebRequest.Get(url))
             {
                 ApplyHeaders(www, config);
-                www.timeout = config.TimeoutSeconds;
-
-                var op = www.SendWebRequest();
-                while (op.isDone == false)
+                if (!await SendAndWaitAsync(www, config.TimeoutSeconds, token))
                 {
-                    token.ThrowIfCancelled();
-                    await RevTask.Yield();
+                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.ManifestFetchFailed, "清单拉取超时", url), true);
                 }
 
                 if (www.result != UnityWebRequest.Result.Success)
@@ -104,6 +101,41 @@ namespace Revolution.HotUpdate
                 }
 
                 return text;
+            }
+        }
+
+        /// <summary>
+        /// 发出调用方持有的请求并等传输结束。浏览器和小游戏在实时时限内未完成时返回 false。
+        /// 取消沿用 RevTask 的异常语义。两种退出都中止在途请求，调用方仍负责释放请求并检查 HTTP 结果。
+        /// </summary>
+        internal static async RevTask<bool> SendAndWaitAsync(UnityWebRequest request, int timeoutSeconds, RevCancellationToken token)
+        {
+            token.ThrowIfCancelled();
+            request.timeout = timeoutSeconds;
+            double deadline = RevHotPlatform.IsWebGL && timeoutSeconds > 0
+                ? UnityEngine.Time.realtimeSinceStartupAsDouble + timeoutSeconds
+                : double.PositiveInfinity;
+            UnityWebRequestAsyncOperation operation = request.SendWebRequest();
+            try
+            {
+                while (!operation.isDone)
+                {
+                    token.ThrowIfCancelled();
+                    if (UnityEngine.Time.realtimeSinceStartupAsDouble >= deadline)
+                    {
+                        return false;
+                    }
+                    await RevTaskScheduler.NextFrame();
+                }
+                token.ThrowIfCancelled();
+                return true;
+            }
+            finally
+            {
+                if (!operation.isDone)
+                {
+                    request.Abort();
+                }
             }
         }
 

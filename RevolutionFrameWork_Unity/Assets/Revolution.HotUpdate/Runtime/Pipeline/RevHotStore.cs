@@ -452,22 +452,17 @@ namespace Revolution.HotUpdate
         }
 
         /// <summary>按配置等待候选包请求，取消时中止本次连接并保留原版本。</summary>
+        /// <summary>验证候选 AB 的传输。超时或下载失败时保留原生效版本。</summary>
         private static async RevTask SendBundleRequestAsync(UnityWebRequest request, RevCancellationToken token)
         {
-            request.timeout = _config.TimeoutSeconds;
-            UnityWebRequestAsyncOperation operation = request.SendWebRequest();
-            try
+            if (!await RevHotDownloader.SendAndWaitAsync(request, _config.TimeoutSeconds, token))
             {
-                while (!operation.isDone)
-                {
-                    token.ThrowIfCancelled();
-                    await RevTask.Yield();
-                }
-                if (request.result != UnityWebRequest.Result.Success)
-                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed,
-                        "候选 AB 加载失败（" + request.error + "）", request.url), false);
+                throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "候选 AB 加载超时", request.url), false);
             }
-            finally { if (!operation.isDone) request.Abort(); }
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "候选 AB 加载失败（" + request.error + "）", request.url), false);
+            }
         }
 
         private static async RevTask<string> FindMatchingSourceAsync(RevHotBundleInfo bundle, RevCancellationToken token)
@@ -972,10 +967,10 @@ namespace Revolution.HotUpdate
             return RevHotUrlBuilder.BuiltinManifestPath(_config);
         }
 
-        /// <summary>读一段文本（自动区分 URL 与本地文件）：Android 的 StreamingAssets 只能用 UnityWebRequest 读。</summary>
+        /// <summary>读取内置文本。原生文件直接读，APK、网页和小游戏路径经请求读取并受取消与超时保护。</summary>
         public static async RevTask<string> ReadTextAsync(string pathOrUrl, RevCancellationToken token)
         {
-            bool isUrl = pathOrUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            bool isUrl = RevHotPlatform.IsWebGL || pathOrUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
                          || pathOrUrl.StartsWith("jar:", StringComparison.OrdinalIgnoreCase);
 
             if (isUrl == false)
@@ -985,12 +980,9 @@ namespace Revolution.HotUpdate
 
             using (UnityWebRequest www = UnityWebRequest.Get(pathOrUrl))
             {
-                www.timeout = _config.TimeoutSeconds;
-                var op = www.SendWebRequest();
-                while (op.isDone == false)
+                if (!await RevHotDownloader.SendAndWaitAsync(www, _config.TimeoutSeconds, token))
                 {
-                    token.ThrowIfCancelled();
-                    await RevTask.Yield();
+                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.ManifestFetchFailed, "读取内置文件超时", pathOrUrl), false);
                 }
 
                 if (www.result != UnityWebRequest.Result.Success)

@@ -374,6 +374,7 @@ RevLog.Clear();         <span class="c">// 清空历史（通道不动）</span>
 
     <h3>6.1 落盘：一行，异步，不卡帧</h3>
     <pre>RevLog.EnableFileLog(Application.persistentDataPath + <span class="s">"/revlog"</span>);</pre>
+    <p>浏览器和小游戏 Player 仅使用可用的日志通道。后台文件通道在创建线程与系统等待句柄前报告失能，可从浏览器 Console 或 <code>RevLog.Recent</code> 读取日志。</p>
 
     <div class="table-wrap">
       <table>

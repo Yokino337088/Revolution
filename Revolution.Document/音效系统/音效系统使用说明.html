@@ -175,6 +175,7 @@
 </header>
 
 <main>
+  <section id="webgl-audio"><h2>网页音频</h2><p><code>RevSoundPlatform</code> 按运行宿主报告首次播放策略。桌面 Editor 即使活动目标为 WebGL 也沿用本地音频。在网页中用用户点击触发首次播放，长 BGM 和时序敏感的短音效分别选择适合的导入设置。 <a href="https://docs.unity3d.com/2022.3/Documentation/Manual/webgl-audio.html">Unity WebGL 音频</a></p></section>
 <section id="stability-fix-20261016"><h2>运行稳定性修复 · 2026-10-16</h2><p>Unload(name) 会回收该名称正在等待资源的 Pending 声音槽，并对各旧请求发出 LoadFailed；所有旧槽先回收再通知，失败回调里重播不会被旧批次清理。已经开始播放的声音沿用原卸载行为。</p><p>详见<a href="../问题审查/Revolution框架问题修复记录_2026-10-16.html">问题修复记录</a>（包含编译结果与未运行验证范围）。</p></section>
 
 
