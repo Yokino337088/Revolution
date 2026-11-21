@@ -99,6 +99,24 @@ class MemoryTransportTests(unittest.TestCase):
         self.assertEqual(Handler.posts, 1)
         self.assertEqual(Handler.deletes, 1)
         self.assertFalse((self.client.root / "jobs").exists())
+
+    def test_player_wait_timeout_preserves_original_build(self):
+        """Player 构建首次等待超时后仍可领取真实结果，且无需重发或取消。"""
+        self.client.timeout = .3
+        Handler.mode = "pending"
+        payload = dict(self.payload(), action="build.player")
+        pending = memory_transport.call(self.client, payload)
+        self.assertEqual(pending["error"], "WaitTimeout")
+        self.assertTrue(pending["accepted"] and pending["pending"])
+        ident = pending["id"]
+        receipt = memory_transport.receipt_path(self.client, ident)
+        self.assertTrue(receipt.is_file())
+        self.assertEqual((Handler.posts, Handler.deletes), (1, 0))
+        Handler.mode = "normal"
+        result = self.client.job(ident, wait=True)
+        self.assertTrue(result["success"])
+        self.assertFalse(receipt.exists())
+        self.assertEqual((Handler.posts, Handler.deletes, Handler.acknowledgements), (1, 0, 1))
     def test_post_unknown_result_does_not_fall_back_to_file_transport(self):
         with patch.object(memory_transport, "request", side_effect=[{"success": True}, ConnectionError("lost")]):
             with self.assertRaises(RevError): memory_transport.call(self.client, self.payload())
