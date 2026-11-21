@@ -26,6 +26,17 @@
 - 网页默认铺满视口。浏览器原生全屏要在真实用户手势内请求，处理拒绝和退出，并保留入口。音频也有手势门槛，首个点击同时核对解锁。WebGL 长 BGM 可用 `CompressedInMemory`，短音效按时序、内存和 AB 实际解码选导入方式。见 [Fullscreen 标准](https://fullscreen.spec.whatwg.org/#dom-element-requestfullscreen)、[Unity 2022.3 WebGL 音频](https://docs.unity3d.com/2022.3/Documentation/Manual/webgl-audio.html)。
 - 浏览器 `Application.persistentDataPath` 由 IDBFS 支持。使用 `RevFileSave` 写主档与备份成功后，网页插件请求 IndexedDB 异步写回。记录存档时区分虚拟文件提交与浏览器事务完成。验证重开用同一 origin 和页面目录，存档即时刷新与配额拒绝另做针对性检查。见 [Unity persistentDataPath](https://docs.unity3d.com/2022.3/Documentation/ScriptReference/Application-persistentDataPath.html)、[Emscripten FS.syncfs](https://emscripten.org/docs/api_reference/Filesystem-API.html#FS.syncfs)。
 
+## GitHub Pages
+
+- 只有静态托管能力时，按可实际返回的 HTTP 响应头选格式。Unity 的预压缩 `.br` 需要 `Content-Encoding: br`。可在发布阶段解开 `.br`，同步改入口文件的 URL，或者在 Unity 构建时选择 Decompression Fallback。核对公开 HTTPS 实际返回的 Wasm MIME 和真实 Player 启动。见 [Unity WebGL 部署](https://docs.unity3d.com/2022.3/Documentation/Manual/webgl-deploying.html)。
+- 分支发布可用独立 `gh-pages` 根目录和 `.nojekyll`。保留页面、Build、目标 StreamingAssets 及模板依赖。入口与资源使用相对 URL，确保项目建在 `/<仓库名>/` 时可加载。首次启用后回读 Pages 构建状态与匿名访客页面。见 [GitHub Pages 发布来源](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)。
+
+## C++、P/Invoke 与退出
+
+- Windows DLL 供 Windows 原生宿主调用。Unity WebGL 使用同一版 Editor 自带的 Emscripten，将 C++ 构建为 wasm32 `.o` 的 `.a` 归档并只给 WebGL Player 导入。C# 用 `UNITY_WEBGL && !UNITY_EDITOR` 选择 `DllImport("__Internal")`。Editor 和其它 Player 继续选自己的动态库。先核对 `extern "C"` 与 `llvm-nm` 的实际符号，再看 IL2CPP 链接和网页执行证据。见 [Unity WebGL 原生插件](https://docs.unity3d.com/2022.3/Documentation/Manual/webgl-native-plugins-with-emscripten.html)。
+- C ABI 使用定宽整数、指针或缓冲和显式长度。托管层接管 `IntPtr`，按每局原生实例的所有权释放。跨平台继续复用同一消息序列与定点规则。实体句柄、输出缓冲、检查点与回放分别验证，避免单凭静态归档存在或标题页打开判断 P/Invoke 成功。
+- `.jslib` 同样由 `__Internal` 绑定。调用宿主页时，将请求交给当前 `Module.canvas`，让原生调用栈返回后由模板调用实例 `Quit()`。网页负责界面反馈、清理时限和关闭。用真实点击创建可关闭的同源游戏标签页。浏览器保留手动标签页时，退出后返回启动入口。见 [Unity 网页模板](https://docs.unity3d.com/2022.3/Documentation/Manual/webgl-templates.html)、[HTML Window.close](https://html.spec.whatwg.org/multipage/nav-history-apis.html#dom-window-close-dev)。
+
 ## 交付记录
 
 按任务范围分别记录 WebGL Player 构建、AB 清单、HTTP 预检、编译与浏览器玩法的证据。框架改动在源仓库通过对应流程导出后，以正式 `package` 的 SHA 同步项目，逐项核对快照。可选扩展以其独立导出为准。构建结束后恢复本次约定的开发目标。
