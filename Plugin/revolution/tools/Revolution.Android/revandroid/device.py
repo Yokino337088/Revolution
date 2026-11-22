@@ -7,7 +7,7 @@ import re
 import shlex
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 class AndroidError(RuntimeError):
@@ -26,6 +26,8 @@ class Device:
     model: str | None
     # Linux 等环境可报告 USB 拓扑，缺省时留空。
     usb: str | None
+    # 来自 ADB 的连接类型。没有足够证据时保持 unknown。
+    transport: str = "unknown"
 
 
 def parse_devices(output: str) -> list[Device]:
@@ -36,7 +38,17 @@ def parse_devices(output: str) -> list[Device]:
         if len(cells) < 2 or cells[0] in ("List", "*", "adb:"):
             continue
         fields = dict(cell.split(":", 1) for cell in cells[2:] if ":" in cell)
-        entries.append(Device(cells[0], cells[1], fields.get("model"), fields.get("usb")))
+        serial, state = cells[:2]
+        usb = fields.get("usb")
+        if usb:
+            transport = "usb"
+        elif serial.startswith("emulator-"):
+            transport = "emulator"
+        elif ":" in serial or "._adb-tls-connect._tcp" in serial:
+            transport = "network"
+        else:
+            transport = "unknown"
+        entries.append(Device(serial, state, fields.get("model"), usb, transport))
     return entries
 
 
@@ -104,8 +116,18 @@ class Adb:
         return completed.returncode, output.strip()
 
     def devices(self) -> list[Device]:
-        """用 ADB 清单发现串号和授权状态。"""
-        return parse_devices(self.run("devices", "-l")[1])
+        """用 ADB 清单发现设备，必要时以 ADB 的单 USB 选择器补充连接类型。"""
+        entries = parse_devices(self.run("devices", "-l")[1])
+        if any(item.transport == "unknown" and item.state == "device" for item in entries):
+            # 某些 Windows ADB 输出缺少 usb:。只有 -d 唯一确认的串号才补标为 USB。
+            try:
+                code, serial = self.run("-d", "get-serialno", timeout=5, check=False)
+            except AndroidError:
+                return entries
+            if code == 0:
+                return [replace(item, transport="usb") if item.serial == serial and item.transport == "unknown"
+                        else item for item in entries]
+        return entries
 
     def pids(self, package: str) -> set[int]:
         """读取包的活动进程号，设备断开时不能伪装成应用已退出。"""
