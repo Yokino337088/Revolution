@@ -1,0 +1,157 @@
+{
+  "name": "RevGame Android 第 4 章 81 棋性能",
+  "intent": "同设备用正式攻击路径测两分钟并核对本局资源归还",
+  "steps": [
+    {
+      "id": "identity",
+      "target": "game",
+      "action": "runtime.identity",
+      "expect": [
+        {
+          "path": "/data/platform",
+          "equals": "Android"
+        }
+      ]
+    },
+    {
+      "id": "home",
+      "target": "game",
+      "action": "game.performance.state",
+      "until": {
+        "path": "/data/screen",
+        "equals": "Home",
+        "timeoutSeconds": 90
+      },
+      "expect": [
+        {
+          "path": "/data/isolated",
+          "equals": true
+        }
+      ]
+    },
+    {
+      "id": "prepare",
+      "target": "game",
+      "action": "game.performance.prepare",
+      "arguments": {
+        "chapter": 4,
+        "pieces": 81
+      }
+    },
+    {
+      "id": "battleBefore",
+      "target": "game",
+      "action": "game.performance.state",
+      "until": {
+        "path": "/data/ready",
+        "equals": true,
+        "timeoutSeconds": 90
+      },
+      "expect": [
+        {
+          "path": "/data/screen",
+          "equals": "Battle"
+        },
+        {
+          "path": "/data/pieces",
+          "equals": 81
+        },
+        {
+          "path": "/data/transitioning",
+          "equals": false
+        }
+      ]
+    },
+    {
+      "id": "sampleStarted",
+      "target": "game",
+      "action": "runtime.performance.begin",
+      "arguments": {
+        "seconds": 120,
+        "warmup": 5
+      }
+    },
+    {
+      "id": "performance",
+      "target": "game",
+      "action": "runtime.performance.state",
+      "until": {
+        "path": "/data/status",
+        "equals": "completed",
+        "timeoutSeconds": 155,
+        "intervalSeconds": 1
+      },
+      "expect": [
+        {
+          "path": "/data/success",
+          "equals": true
+        },
+        {
+          "path": "/data/cancelled",
+          "equals": false
+        },
+        {
+          "path": "/data/errors",
+          "equals": 0
+        },
+        {
+          "path": "/data/unfocusedFrames",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "id": "battleAfter",
+      "target": "game",
+      "action": "game.performance.state",
+      "expect": [
+        {
+          "path": "/data/screen",
+          "equals": "Battle"
+        },
+        {
+          "path": "/data/pieces",
+          "equals": 81
+        }
+      ]
+    }
+  ],
+  "finally": [
+    {
+      "target": "game",
+      "action": "runtime.performance.cancel"
+    },
+    {
+      "target": "game",
+      "action": "runtime.performance.disable"
+    },
+    {
+      "target": "game",
+      "action": "game.performance.cleanup"
+    },
+    {
+      "id": "cleaned",
+      "target": "game",
+      "action": "game.performance.state",
+      "until": {
+        "path": "/data/cleaned",
+        "equals": true,
+        "timeoutSeconds": 65
+      },
+      "expect": [
+        {
+          "path": "/data/screen",
+          "equals": "Home"
+        },
+        {
+          "path": "/data/logic",
+          "equals": 0
+        },
+        {
+          "path": "/data/pieceRefs",
+          "equals": 0
+        }
+      ]
+    }
+  ]
+}

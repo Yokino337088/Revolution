@@ -9,6 +9,8 @@
 
 ## 怎样量从冷到热
 
+USB 设备接入、RevMCP 计划与 Unity 独立结果走 [Android 真机测试 Skill](../../revolution-android-testing/SKILL.md)。核对实际运行的构建身份，再在同一部手机采样。
+
 1. 同一设备记录型号、系统、CPU/GPU、图形 API、分辨率与实际绘制尺寸、刷新率和帧率上限。固定画质、亮度、充电和前后台状态，记温度或系统热状态。当目标机支持 Thermal API 或性能分析时，将热状态变化和慢帧对齐，标明缺测项。 [Android Thermal API](https://developer.android.com/games/optimize/adpf/thermal)
 2. 用同一关卡、种子、棋子和攻击负载，分开记冷启动就绪、首个技能与长时间战斗。比较相同热状态或明确的冷段和后段。保留实际时长、FPS、帧间隔 P95/P99、最大值、超线次数、输入与反馈等待。可用时保持 GPU 和 CPU 计数与实际帧时对齐。没有设备且只完成编辑器预览时，标明证据层级。
 3. 先重复原样确认波动，再只切一项画质、有效像素、图形 API 或帧率目标。比较同机同条件的多轮结果，必要时等设备回到相近的起始热状态。打开性能分析器的归因组与轻量验收组分别记录。 [安卓帧率与发热](https://github.com/Yokino337088/RevGame/wiki/%E5%AE%89%E5%8D%93%E5%B8%A7%E7%8E%87%E4%B8%8E%E5%8F%91%E7%83%AD)

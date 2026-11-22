@@ -54,6 +54,7 @@ class RuntimeClient:
             raise RevError(f"Runtime HTTP {exc.code}: {message}") from None
 
     def call(self, action, payload=None, confirm=False, cancel=None):
+        """提交一次动作，等待或取消同一工单，领到结果后按端点协议确认。"""
         # POST 只接单，后续 GET 才读取最终结果。取消时 DELETE 同一个 id，
         # 不重新 POST 一个新 id；否则网络抖动可能让业务动作执行两次。
         if cancel is not None and cancel.is_set():
@@ -61,7 +62,8 @@ class RuntimeClient:
         request_id = uuid.uuid4().hex
         memory = self.endpoint.get("memoryJobs", False)
         body = dict(id=request_id, action=action, payload=payload or {}, confirm=confirm, timeoutSeconds=min(self.timeout, 3600))
-        if memory:
+        # 手机和电脑的壁钟可能有偏差。Android 端点继续 ACK，作业期限从手机收件时算。
+        if memory and self.endpoint.get("relativeDeadlines") is not True:
             body["deadlineUtc"] = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=min(self.timeout, 3600))).isoformat()
         self.request("POST", "/call", body)
         started = time.monotonic()

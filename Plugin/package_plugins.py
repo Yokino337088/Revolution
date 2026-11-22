@@ -13,6 +13,7 @@ REVGAME_PLUGIN = ROOT / "Plugin/revgame"
 SKILLS = (
     "revolution-framework", "revolution-unity-editor", "revolution-ai-automation",
     "revolution-performance", "revolution-automation-tester", "revolution-gal", "revolution-ta",
+    "revolution-android-testing",
 )
 # 两个插件共用源 Skill，RevGame 插件的项目入口仍由各自目录维护。
 SHARED_SKILLS = ("revolution-wiki",)
@@ -33,12 +34,15 @@ def sources():
     for name, entry, package in (
         ("Revolution.RevCLI", "rev.py", "revautomation"),
         ("Revolution.RevMCP", "rev_mcp.py", "revmcp"),
+        ("Revolution.Android", "rev_android.py", "revandroid"),
     ):
         source = ROOT / name
         target = PLUGIN / "tools" / name
         for path in [source / entry, *sorted((source / package).glob("*.py"))]:
             yield path, target / path.relative_to(source)
     yield ROOT / "Revolution.RevCLI/commands.json", PLUGIN / "tools/Revolution.RevCLI/commands.json"
+    for name in ("README.md", "examples/revgame-perf.json"):
+        yield ROOT / "Revolution.Android" / name, PLUGIN / "tools/Revolution.Android" / name
     yield ROOT / "LICENSE", PLUGIN / "LICENSE"
     yield ROOT / "LICENSE", REVGAME_PLUGIN / "LICENSE"
 
