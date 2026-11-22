@@ -57,9 +57,13 @@ py -3 -c "import sys;print(sys.executable)"         找到 3.10+ 解释器，不
 
 执行 [增量 AB 配方](references/incremental-ab.md)。先在目标工程发现 `ab.build-incremental` 和 `ab.publish-incremental`。RevCLI 和 Codex 插件共用同一组 Unity 动作，可以构建后检查再发布，也可以单独重试发布。
 
+## 使用当前编辑器出包
+
+项目交付包一律用用户当前打开的目标工程和 RevCLI `--mode live`。先用 `editor status` 核对实际工程路径，确认编辑态，检查已加载场景的保存状态。平台切换、资源包发布和 Player 构建顺序提交，通过 `editor wait` 与 `build settings` 核对切换后的状态。这个流程禁止另起后台 Unity、使用 batch 或转到临时工程副本。当前工程或工具链卡住时，保留真实报错和当前进度给用户。
+
 ## Android 构建、签名与手机预览
 
-出 Android 包或排查 ASCII 路径、D8/Gradle/NDK、ARM64、16 KB、签名、AB 串包与横屏启动配置时，先读 [Android 构建与验包](references/android-build-and-verification.md)。宽屏和触点用 Game、Device Simulator 与真机分层验收。
+出 Android 包或排查路径、D8/Gradle/NDK、ARM64、16 KB、签名、AB 串包与横屏启动配置时，先读 [Android 构建与验包](references/android-build-and-verification.md)。本次 APK 只带 Android 的平台 AB。打包时可逆隔离其他平台的 AB 与同名 `.meta`，Unity 完成或确认退出构建后恢复。宽屏和触点用 Game、Device Simulator 与真机分层验收。
 
 ## WebGL 构建与网页交付
 

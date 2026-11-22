@@ -12,7 +12,7 @@
 ## 1. 先验线和测试包
 
 - 准备 **Python 3.10+** 和 Android SDK 的 platform-tools。启用手机 USB 调试，用支持数据的线连电脑，在手机上允许这台电脑调试。多台设备时按实际串号选择一次。工具使用现有 ADB 服务，保留其他会话的映射。
-- 从已打开的 Unity 工程用 RevCLI 检查编辑态，切到 Android，等导入与编译稳定。按项目原流程更新 Android 资源包，再用 `build.player` 的 `--automation --frame-timing` 出测试 APK。构建路径用本次空目录，核对 `rev-build.json`。如果 Unity 的 Android 工具拒绝含中文的工程路径，按项目构建规范用独立 ASCII 副本。 [Android 构建与验包](https://github.com/Yokino337088/Revolution/blob/main/Skills/revolution-unity-editor/references/android-build-and-verification.md)
+- 从用户当前打开的 Unity 工程用 RevCLI `--mode live` 检查编辑态，切到 Android，等导入与编译稳定。按项目原流程更新 Android 资源包，隔离其他平台 AB，再用 `build.player` 的 `--automation --frame-timing` 出测试 APK。构建路径用本次空目录，核对 `rev-build.json` 和包中实际 AB。 [Android 构建与验包](https://github.com/Yokino337088/Revolution/blob/main/Skills/revolution-unity-editor/references/android-build-and-verification.md)
 - 测试构建含 `REV_AUTOMATION` 或 `DEVELOPMENT_BUILD`。`build.player` 会为本次安卓测试包确保 `INTERNET` 权限，并恢复工程原值。测试 Activity 保留 Android 的 Intent 参数。项目若通过自定义 Activity 处理 Unity 启动参数，要保留传给 Unity 的 `unity` 参数。 [Unity 自定义 Android Activity](https://docs.unity3d.com/2022.3/Documentation/Manual/android-custom-activity.html)
 - 示例用 RevGame 已登记的 `game.performance.*`。它需要 `--isolate`，计划启动前还会核对游戏确实使用隔离会话。其他游戏按自己的存档隔离和能力注册配对。测试包用独立应用标识便于把测试与正式存档分开。
 
