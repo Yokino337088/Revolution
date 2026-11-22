@@ -433,6 +433,13 @@ def validate_action(action, payload, allow_refs=False):
         nodes = payload.get("nodes")
         if not unresolved(nodes) and (not isinstance(nodes, list) or not nodes):
             raise RevError("scene.compose 需要非空 nodes 数组；节点字段见 commands --action scene.compose。")
+    if action == "prefab.compose":
+        nodes = payload.get("nodes")
+        if not unresolved(nodes) and (not isinstance(nodes, list) or len(nodes) != 1):
+            raise RevError("prefab.compose 需要只含一个根节点的 nodes 数组。")
+        path = payload.get("path")
+        if not unresolved(path) and (not isinstance(path, str) or not path.startswith("Assets/") or not path.lower().endswith(".prefab")):
+            raise RevError("prefab.compose 的 path 需要 Assets 下的新 .prefab 路径。")
     if action == "scene.capture":
         view = payload.get("view", "iso")
         if not unresolved(view) and view not in ("iso", "top", "front", "side", "camera", "sceneview"):

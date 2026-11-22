@@ -1212,6 +1212,15 @@
       "environment": "edit"
     },
     {
+      "id": "prefab.compose",
+      "keys": [
+        "path",
+        "nodes"
+      ],
+      "description": "从单根 JSON 对象树直接创建新 Prefab，复用 scene.compose 节点与同批引用，不改现有场景或覆盖资产",
+      "environment": "edit"
+    },
+    {
       "id": "prefab.apply",
       "keys": [
         "id",
