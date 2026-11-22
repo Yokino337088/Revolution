@@ -9,15 +9,12 @@
     <SolidColorBrush x:Key="Accent" Color="#2C58B7" />
     <SolidColorBrush x:Key="Tint" Color="#EAF1FF" />
 
-    <Style TargetType="TextBlock">
-        <Setter Property="Foreground" Value="{StaticResource Ink}" />
-    </Style>
-    <Style x:Key="Caption" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+    <Style x:Key="Caption" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource SecondaryInk}" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
-    <Style x:Key="SectionTitle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+    <Style x:Key="SectionTitle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="17" />
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
@@ -47,7 +44,8 @@
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="7" Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          TextElement.Foreground="{TemplateBinding Foreground}" RecognizesAccessKey="True" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">

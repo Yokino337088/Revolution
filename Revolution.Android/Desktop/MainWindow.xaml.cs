@@ -498,7 +498,8 @@ public partial class MainWindow : Window
     {
         if (IsLoaded)
         {
-            string? folder = Path.GetDirectoryName(ApkPath.Text.Trim());
+            string apk = ApkPath.Text.Trim();
+            string? folder = File.Exists(apk) ? Path.GetDirectoryName(apk) : null;
             string sidecar = string.IsNullOrEmpty(folder) ? "" : Path.Combine(folder, "rev-build.json");
             BuildReportPath.Text = File.Exists(sidecar) ? sidecar : "";
             UpdateControls();
