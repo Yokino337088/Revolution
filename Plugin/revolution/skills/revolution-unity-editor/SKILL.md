@@ -45,6 +45,7 @@ py -3 -c "import sys;print(sys.executable)"         找到 3.10+ 解释器，不
 | 搭场景、摆物体、一次建很多对象 | `scene.compose`（一份 JSON，失败全回滚），`scene.capture` 看结果 |
 | 写脚本、挂脚本 | `script.create` → `editor wait` → `script.attach`，或写进 compose 的 `components` |
 | UI 面板、Prefab、材质、动画 | `ui.create` / `prefab.*` / `material.*` / `clip.*` `animator.*` |
+| 从 JSON 新建 Prefab | `prefab.compose` → `prefab.inspect`，无需在业务场景搭临时物体 |
 | 导表、打 AB、出包 | `excel.*` / `ab.*`，整包用 `ship` |
 | 增量构建与替换 AB | `ab build-incremental` → `ab check-map` → `ab publish-incremental`，显式指定同一平台 |
 | Play 中调 GM、点 UI、看状态 | `editor play` → `runtime start` → `game gms` 查 → `game gm <名称> 参数...` → `editor stop` |

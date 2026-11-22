@@ -429,6 +429,14 @@ class SurfaceTests(unittest.TestCase):
         for action in ("scene.compose", "script.create", "package.add", "lighting.bake", "ab.extract-shared"):
             self.assertFalse(specs[action].get("readOnly", False), action)
 
+    def test_prefab_compose_requires_new_prefab_path_shape_and_one_root(self):
+        valid = dict(path="Assets/UI/Panel.prefab", nodes=[dict(name="Panel")])
+        cli.validate_action("prefab.compose", valid)
+        for payload in (dict(valid, nodes=[]), dict(valid, nodes=[dict(name="A"), dict(name="B")]),
+                        dict(valid, path="Packages/Panel.prefab"), dict(valid, path="Assets/UI/Panel.unity")):
+            with self.assertRaises(RevError, msg=payload):
+                cli.validate_action("prefab.compose", payload)
+
     def test_validation_of_new_actions(self):
         cli.validate_action("scene.compose", dict(nodes=[dict(name="A")]))
         cli.validate_action("scene.capture", dict(view="top", width=64, height=64))

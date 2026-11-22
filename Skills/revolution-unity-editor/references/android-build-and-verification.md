@@ -9,7 +9,7 @@
 3. 分开 Mono 开发包和 IL2CPP Release，固定 ABI、SDK 与签名。RevGame 使用 Unity 2022.3.15f1c1 时，Mono 测试交付为 ARMv7，正式包为 IL2CPP ARM64。对 C++ 插件核对 PluginImporter 的平台/CPU、APK 内 ELF ABI、导出符号、同版本配置和真机 P/Invoke。
 4. 旧 D8 遇到 API 35 的 android.jar 抛 NPE，desugarDebugFileDependencies 失败时先查导出的 AGP 和 Gradle。该轮临时 Mono Debug 工程使用 API 32 完成测试出包。正式 Release 单独导出，采用 JDK 17、Gradle 8.9、AGP 8.7.3、API 35 的实测组合。迁移旧工程时逐模块确认 namespace、旧 manifest package 声明、Java UTF-8、仓库解析和 debug signingConfig，兼容变更落在导出副本。正式发布要按自身目标选版本。
 5. 遇到 CXX1100 或随后出现 NDK is not installed，比较 ndkVersion、ndkPath 和目标目录的 source.properties。案例中 AGP 默认期望 27，实际 Unity IL2CPP NDK 为 23.1.7779620。显式对齐两个模块后通过。限制 Gradle 与 IL2CPP 工作者，预热依赖后再用 offline。只复用相同后端、ABI、工具链的可重建缓存。代理配置与凭据留本机。
-6. 如果 build.target 在 HTTP 模式仍报 jobs/<id>/target-started，检查动作内部是否还用旧标记。可用项目受控动作发起异步切换，等 editor.wait 后核对 build.settings 的目标和编译状态，再重新发现 Play 能力并恢复原目标。编辑器崩溃时先保留日志，重连后再复测。
+6. build.target 跨重载用 SessionState 保存同一请求，只等待已发起的切换。旧快照若在 HTTP 模式报 jobs/<id>/target-started，优先同步新版桥。等待完成后用 build.settings 读回目标并检查编译状态，再重新发现 Play 能力并恢复原目标。编辑器崩溃时先保留日志，重连后再复测。
 
 ## 2. AB、宽屏与签名
 
