@@ -78,9 +78,11 @@ class GameClient:
         return self.request("GET", "/health")
 
     def call(self, action, payload=None, confirm=False):
+        """发送一次运行时工单，等待结果并按端点协议确认消费。"""
         request_id = uuid.uuid4().hex
         body = dict(id=request_id, action=action, payload=payload or {}, confirm=bool(confirm), timeoutSeconds=min(self.timeout, 3600))
-        if self.endpoint.get("memoryJobs"):
+        # USB 端点可以让手机按收件时刻计算期限，结果仍沿内存工单协议 ACK。
+        if self.endpoint.get("memoryJobs") and self.endpoint.get("relativeDeadlines") is not True:
             body["deadlineUtc"] = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=min(self.timeout, 3600))).isoformat()
         accepted = self.request("POST", "/call", body)
         if not accepted.get("success"):

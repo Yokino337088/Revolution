@@ -175,7 +175,7 @@ class PluginTests(unittest.TestCase):
             {path.parent.name for path in (FRAMEWORK / "skills").glob("*/SKILL.md")},
             {"revolution-framework", "revolution-unity-editor", "revolution-ai-automation",
              "revolution-performance", "revolution-automation-tester", "revolution-gal", "revolution-ta",
-             "revolution-wiki"},
+             "revolution-wiki", "revolution-android-testing"},
         )
         self.assertEqual(
             {path.parent.name for path in (ROOT / "revgame/skills").glob("*/SKILL.md")},
