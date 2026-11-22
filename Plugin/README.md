@@ -4,6 +4,8 @@ Revolution 插件包含框架、编辑器、AI 自动化、性能、scenario、[
 
 写战斗、密集 UI/特效及逐帧处理代码时，使用 `$revolution-performance` 核对 CPU、GPU、内存与缓存。它包含 RevGame 的逻辑帧/表现帧、顶点数据分流、缓存失效和按使用范围预加载实践，以及同负载的功能与性能验证方法。 [性能 Skill](revolution/skills/revolution-performance/SKILL.md)
 
+两个插件都随包提供 `$revolution-wiki`。攻坚和高技术含量任务用它写项目 Wiki，把读者看得见的问题、定位过程和实测证据讲给零基础读者。 [Wiki Skill](revolution/skills/revolution-wiki/SKILL.md)
+
 ## 安装和使用
 
 官方 `codex-plugin` 分支发布两个可安装插件及市场清单。开发在 `main` 进行，GitHub Actions 将验证过的插件副本同步到发布分支。可直接用 Codex CLI 添加发布分支：

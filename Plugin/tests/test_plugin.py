@@ -162,7 +162,7 @@ class PluginTests(unittest.TestCase):
     """Use the installed layout and the real RevMCP stdio worker."""
 
     def test_manifests_and_packaged_components(self):
-        """Every marketplace entry and manifest reference resolves inside its package."""
+        """检查两个插件的清单入口与安装后实际能发现的 Skill。"""
         market = json.loads((ROOT.parent / ".agents/plugins/marketplace.json").read_text(encoding="utf-8"))
         for entry in market["plugins"]:
             root = ROOT.parent / entry["source"]["path"]
@@ -174,7 +174,12 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(
             {path.parent.name for path in (FRAMEWORK / "skills").glob("*/SKILL.md")},
             {"revolution-framework", "revolution-unity-editor", "revolution-ai-automation",
-             "revolution-performance", "revolution-automation-tester", "revolution-gal", "revolution-ta"},
+             "revolution-performance", "revolution-automation-tester", "revolution-gal", "revolution-ta",
+             "revolution-wiki"},
+        )
+        self.assertEqual(
+            {path.parent.name for path in (ROOT / "revgame/skills").glob("*/SKILL.md")},
+            {"revgame-workflow", "revolution-wiki"},
         )
 
     def test_mcp_binds_explicitly_and_retains_binding_on_error(self):
