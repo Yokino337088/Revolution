@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from rev_android import backends, unity_results
-from revandroid.device import Adb, AndroidError, parse_devices, select_device
+from revandroid.device import Adb, AndroidError, apk_package, parse_devices, select_device
 from revandroid.session import DeviceSession, Launch
 
 
@@ -186,6 +186,27 @@ class AndroidTests(unittest.TestCase):
                                "192.0.2.1:5555": "network", "emulator-5554": "emulator"})
         with patch.object(runner, "run", side_effect=[(0, output), (1, "")]):
             self.assertEqual(runner.devices()[0].transport, "unknown")
+
+    def test_unicode_apk_path_can_use_temporary_inspection_copy(self):
+        """aapt 拒绝中文路径时，核对同样的 APK 内容并清掉临时副本。"""
+        attempts = []
+        def inspect(argv, **_):
+            """模拟旧 aapt 的文件名限制，第二次仍需读到同一份 APK。"""
+            path = Path(argv[-1])
+            attempts.append(path)
+            if len(attempts) == 1:
+                return Mock(returncode=1, stdout=b"")
+            self.assertEqual(path.read_bytes(), b"apk bytes")
+            return Mock(returncode=0, stdout=b"package: name='com.demo.game'\n")
+
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "安卓测试.apk"
+            source.write_bytes(b"apk bytes")
+            with patch("revandroid.device.subprocess.run", side_effect=inspect):
+                self.assertEqual(apk_package(source, "adb", "aapt"), "com.demo.game")
+            self.assertEqual(attempts[0], source)
+            self.assertFalse(attempts[1].exists())
+            self.assertTrue(source.exists())
 
     def test_release_only_owned_forward_and_shell_quotes(self):
         """保留不属于本会话的 ADB 转发，Activity 的 $ 原样送到远端。"""

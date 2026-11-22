@@ -26,7 +26,7 @@ dotnet build Revolution.Android/Desktop/Revolution.Android.Desktop.csproj -c Rel
 ```
 
 1. **插线、解锁、扫描设备。** 开启手机 USB 调试并允许这台电脑。列表会显示串号、连接方式和授权状态，无法确认线路时写「连接方式待确认」。如果找不到 ADB，在「工具路径与构建报告」里选 Unity Android SDK 的 `platform-tools/adb.exe`。
-2. **选需要连的 Unity 工程和 APK。** Unity 工程选含 `ProjectSettings` 的目录，检查编辑器可以单独进行。选 APK 后会读取包名，并填写它旁边存在的 `rev-build.json`。手机已装好同一测试包时，只填包名和相应构建报告。隔离测试存档、覆盖安装、重开已运行应用由用户选择。
+2. **选需要连的 Unity 工程和 APK。** Unity 工程选含 `ProjectSettings` 的目录，检查编辑器可以单独进行。选 APK 后会读取包名，并填写它旁边存在的 `rev-build.json`。碰到旧版 aapt 读中文路径失败时，工作台会用临时副本完成验包。手机已装好同一测试包时，只填包名和相应构建报告。隔离测试存档、覆盖安装、重开已运行应用由用户选择。
 3. **点击连接并启动。** 确认 MCP 和手机回执都通过后，按需发现动作、关心的时间窗外读取设备采样，或选择计划并运行。取消后等待计划的 `finally` 回执。结果可以复制或保存 JSON。断开会等待本轮的转发与测试进程收尾。
 
 「复制 MCP 配置」会把选择好的启动参数复制为 Codex 配置。关闭桌面会话后，可以用同一个设备和同一份 APK 开自己的 Agent 会话。

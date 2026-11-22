@@ -7,6 +7,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass, replace
 
 
@@ -218,12 +219,24 @@ def apk_package(apk: Path, adb: str, explicit_aapt: str | None) -> str:
             tool = str(max(choices, key=lambda entry: tuple(int(part) for part in re.findall(r"\d+", entry.parent.name))))
     if not tool:
         raise AndroidError("安装前需用 aapt 校验 APK 包名，请指定 --aapt 或配置 Android Build Tools")
-    try:
-        result = subprocess.run([tool, "dump", "badging", str(apk)], capture_output=True, timeout=20)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise AndroidError(f"aapt 无法读取 APK（{type(exc).__name__}）") from None
-    text = result.stdout.decode("utf-8", errors="replace")
-    found = re.search(r"(?m)^package:\s+name='([^']+)'", text)
-    if result.returncode or not found:
+    def inspect_file(path: Path) -> str | None:
+        """只返回工具明确识别出的包名，失败允许调用者换一个文件路径重试。"""
+        try:
+            result = subprocess.run([tool, "dump", "badging", str(path)], capture_output=True, timeout=20)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise AndroidError(f"aapt 无法读取 APK（{type(exc).__name__}）") from None
+        text = result.stdout.decode("utf-8", errors="replace")
+        found = re.search(r"(?m)^package:\s+name='([^']+)'", text)
+        return found[1] if not result.returncode and found else None
+
+    package = inspect_file(apk)
+    if package is None and not str(apk).isascii():
+        # Windows 的部分 aapt 版本用本地代码页打开文件。仅在原路径失败后暂存同一份 APK。
+        # 临时副本只用于验包，退出后自动删除。安装和结果仍指向用户选中的原文件。
+        with tempfile.TemporaryDirectory(prefix="rev-apk-") as folder:
+            local = Path(folder) / "inspect.apk"
+            shutil.copyfile(apk, local)
+            package = inspect_file(local)
+    if package is None:
         raise AndroidError("aapt 无法取得 APK 的实际包名")
-    return package_name(found[1])
+    return package_name(package)
