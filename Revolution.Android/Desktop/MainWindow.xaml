@@ -1,0 +1,179 @@
+<Window x:Class="Revolution.Android.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Revolution Android · 安卓真机测试" Width="1152" Height="850"
+        MinWidth="900" MinHeight="660" Language="zh-CN"
+        WindowStartupLocation="CenterScreen" FontFamily="Segoe UI, Microsoft YaHei UI"
+        FontSize="13" Background="{StaticResource Canvas}" Foreground="{StaticResource Ink}"
+        Loaded="OnLoaded" Closing="OnClosing">
+    <DockPanel Margin="26,20,26,16">
+        <!-- 顶部汇总只反映已经检查过的连接。 -->
+        <Grid DockPanel.Dock="Top" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Border Width="46" Height="46" Background="{StaticResource Tint}" CornerRadius="12" VerticalAlignment="Center">
+                <Path Width="23" Height="23" Stretch="Uniform" Stroke="{StaticResource Accent}" StrokeThickness="1.75"
+                      HorizontalAlignment="Center" VerticalAlignment="Center" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                      Data="M 8,2 H 17 Q 20,2 20,5 V 21 Q 20,24 17,24 H 8 Q 5,24 5,21 V 5 Q 5,2 8,2 M 10,20 H 15 M 10,6 H 15 M 12.5,9 V 16 M 10,13 L 12.5,16 L 15,13" />
+            </Border>
+            <StackPanel Grid.Column="1" Margin="14,0,16,0">
+                <TextBlock FontSize="27" FontWeight="SemiBold" Text="Revolution Android" />
+                <TextBlock Style="{StaticResource Caption}" Text="安卓真机自动化" Margin="0,2,0,0" />
+            </StackPanel>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="DisconnectButton" Content="断开" Click="OnDisconnect" Margin="0,0,8,0" />
+                <Button x:Name="ConnectButton" Style="{StaticResource PrimaryButton}" Content="连接并启动" Click="OnConnect" />
+            </StackPanel>
+        </Grid>
+
+        <Border DockPanel.Dock="Top" Style="{StaticResource Card}" Padding="14,11" Margin="0,0,0,14">
+            <UniformGrid Columns="3">
+                <StackPanel Margin="4,0,14,0">
+                    <TextBlock FontWeight="SemiBold" Text="安卓设备" />
+                    <TextBlock x:Name="PhoneStatus" Style="{StaticResource Caption}" Text="待扫描" Margin="0,3,0,0" />
+                </StackPanel>
+                <Border BorderBrush="{StaticResource Stroke}" BorderThickness="1,0,0,0" Padding="16,0,12,0">
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Unity 编辑器" />
+                        <TextBlock x:Name="EditorStatus" Style="{StaticResource Caption}" Text="待检查" Margin="0,3,0,0" />
+                    </StackPanel>
+                </Border>
+                <Border BorderBrush="{StaticResource Stroke}" BorderThickness="1,0,0,0" Padding="16,0,0,0">
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="RevMCP" />
+                        <TextBlock x:Name="McpStatus" Style="{StaticResource Caption}" Text="未连接" Margin="0,3,0,0" />
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
+        </Border>
+
+        <Grid DockPanel.Dock="Bottom" Margin="1,11,1,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <ProgressBar x:Name="BusyProgress" Width="64" Height="4" IsIndeterminate="True"
+                         Foreground="{StaticResource Accent}" Visibility="Collapsed" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <TextBlock Grid.Column="1" x:Name="FooterStatus" Style="{StaticResource Caption}" Text="选择设备和测试包后启动会话。" />
+        </Grid>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="4*" MinWidth="348" MaxWidth="458" />
+                <ColumnDefinition Width="14" />
+                <ColumnDefinition Width="6*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{StaticResource Card}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="0,0,5,0">
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="连接设置" Margin="0,0,0,13" />
+                        <StackPanel x:Name="ConnectionSettings">
+                            <Label Style="{StaticResource FieldLabel}" Target="{Binding ElementName=Devices}" Content="设备" />
+                            <DockPanel Margin="0,0,0,5">
+                                <Button DockPanel.Dock="Right" Content="扫描设备" Click="OnScan" Margin="8,0,0,0" />
+                                <ComboBox x:Name="Devices" DisplayMemberPath="Label" SelectionChanged="OnDeviceChanged" />
+                            </DockPanel>
+                            <TextBlock x:Name="DeviceHint" Style="{StaticResource Caption}" Margin="0,0,0,12"
+                                       Text="可显示 USB、网络设备和调试授权状态。" />
+                            <StackPanel x:Name="SessionInputs">
+                            <Label Style="{StaticResource FieldLabel}" Target="{Binding ElementName=ProjectPath}" Content="Unity 工程（可选）" />
+                            <DockPanel Margin="0,0,0,11">
+                                <Button DockPanel.Dock="Right" Content="选工程" Click="OnChooseProject" Margin="8,0,0,0" />
+                                <TextBox x:Name="ProjectPath" TextChanged="OnProjectChanged" />
+                            </DockPanel>
+                            <Label Style="{StaticResource FieldLabel}" Target="{Binding ElementName=ApkPath}" Content="APK（手机已安装时可留空）" />
+                            <DockPanel Margin="0,0,0,11">
+                                <Button DockPanel.Dock="Right" Content="选 APK" Click="OnChooseApk" Margin="8,0,0,0" />
+                                <TextBox x:Name="ApkPath" TextChanged="OnApkChanged" />
+                            </DockPanel>
+                            <Label Style="{StaticResource FieldLabel}" Target="{Binding ElementName=PackageName}" Content="安卓包名" />
+                            <DockPanel Margin="0,0,0,13">
+                                <Button DockPanel.Dock="Right" Content="读取包名" Click="OnInspectApk" Margin="8,0,0,0" />
+                                <TextBox x:Name="PackageName" TextChanged="OnSetupChanged" />
+                            </DockPanel>
+                            <StackPanel>
+                                <CheckBox x:Name="Isolate" Content="隔离测试存档（项目需支持）" IsChecked="True" Margin="0,0,0,9" />
+                                <WrapPanel Margin="0,0,0,13">
+                                    <CheckBox x:Name="Replace" Content="允许覆盖安装" Margin="0,0,18,0" />
+                                    <CheckBox x:Name="Restart" Content="允许重开已运行应用" />
+                                </WrapPanel>
+                            </StackPanel>
+                            <Expander Header="工具路径与构建报告" Foreground="{StaticResource SecondaryInk}">
+                                <StackPanel Margin="0,11,0,0">
+                                    <Label Style="{StaticResource FieldLabel}" Target="{Binding ElementName=AdbPath}" Content="ADB 路径（留空自动查找）" />
+                                    <DockPanel Margin="0,0,0,9">
+                                        <Button DockPanel.Dock="Right" Content="选择" Click="OnChooseAdb" Margin="8,0,0,0" />
+                                        <TextBox x:Name="AdbPath" />
+                                    </DockPanel>
+                                    <Label Style="{StaticResource FieldLabel}" Target="{Binding ElementName=PythonPath}" Content="Python 启动命令或可执行文件" />
+                                    <DockPanel Margin="0,0,0,9">
+                                        <Button DockPanel.Dock="Right" Content="选择" Click="OnChoosePython" Margin="8,0,0,0" />
+                                        <TextBox x:Name="PythonPath" Text="py" />
+                                    </DockPanel>
+                                    <Label Style="{StaticResource FieldLabel}" Target="{Binding ElementName=BuildReportPath}" Content="构建报告 rev-build.json（可选）" />
+                                    <DockPanel>
+                                        <Button DockPanel.Dock="Right" Content="选择" Click="OnChooseReport" Margin="8,0,0,0" />
+                                        <TextBox x:Name="BuildReportPath" />
+                                    </DockPanel>
+                                </StackPanel>
+                            </Expander>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="14" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="测试操作" Margin="0,0,0,9" />
+                        <WrapPanel Margin="0,0,0,9">
+                            <Button x:Name="CheckEditorButton" Content="检查编辑器" Click="OnCheckEditor" Margin="0,0,7,5" />
+                            <Button x:Name="IdentityButton" Content="验证手机回执" Click="OnReadIdentity" Margin="0,0,7,5" />
+                            <Button x:Name="DiscoverButton" Content="发现可用动作" Click="OnDiscover" Margin="0,0,7,5" />
+                            <Button x:Name="DeviceSampleButton" Content="读取设备采样" Click="OnReadDeviceSample" Margin="0,0,7,5" />
+                            <Button x:Name="CopyConfigButton" Content="复制 MCP 配置" Click="OnCopyConfig" Margin="0,0,0,5" />
+                        </WrapPanel>
+                        <Label Style="{StaticResource FieldLabel}" Target="{Binding ElementName=PlanPath}" Content="RevMCP 测试计划" />
+                        <DockPanel Margin="0,0,0,11">
+                            <Button x:Name="ChoosePlanButton" DockPanel.Dock="Right" Content="选计划" Click="OnChoosePlan" Margin="8,0,0,0" />
+                            <TextBox x:Name="PlanPath" TextChanged="OnSetupChanged" />
+                        </DockPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="RunButton" Style="{StaticResource PrimaryButton}" Content="运行计划" Click="OnRun" Margin="0,0,8,0" />
+                            <Button x:Name="CancelButton" Content="取消计划" Click="OnCancel" Margin="0,0,8,0" />
+                            <Button x:Name="ExampleButton" Content="载入 RevGame 压测示例" Click="OnExample" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="2" Style="{StaticResource Card}" Padding="14">
+                    <DockPanel>
+                        <DockPanel DockPanel.Dock="Top" Margin="2,0,1,9">
+                            <Button x:Name="SaveResultButton" DockPanel.Dock="Right" Content="保存 JSON" Click="OnSaveResult" />
+                            <Button x:Name="CopyResultButton" DockPanel.Dock="Right" Content="复制结果" Click="OnCopyResult" Margin="0,0,8,0" />
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="会话记录" VerticalAlignment="Center" />
+                        </DockPanel>
+                        <TabControl Background="{StaticResource Surface}" BorderBrush="{StaticResource Stroke}">
+                            <TabItem Header="结果">
+                                <TextBox x:Name="ResultText" Style="{StaticResource OutputText}" AutomationProperties.Name="结构化测试结果" />
+                            </TabItem>
+                            <TabItem Header="连接日志">
+                                <TextBox x:Name="LogText" Style="{StaticResource OutputText}" AutomationProperties.Name="会话连接日志" />
+                            </TabItem>
+                        </TabControl>
+                    </DockPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </DockPanel>
+</Window>

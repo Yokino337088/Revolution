@@ -16,6 +16,21 @@
 - 测试构建含 `REV_AUTOMATION` 或 `DEVELOPMENT_BUILD`。`build.player` 会为本次安卓测试包确保 `INTERNET` 权限，并恢复工程原值。测试 Activity 保留 Android 的 Intent 参数。项目若通过自定义 Activity 处理 Unity 启动参数，要保留传给 Unity 的 `unity` 参数。 [Unity 自定义 Android Activity](https://docs.unity3d.com/2022.3/Documentation/Manual/android-custom-activity.html)
 - 示例用 RevGame 已登记的 `game.performance.*`。它需要 `--isolate`，计划启动前还会核对游戏确实使用隔离会话。其他游戏按自己的存档隔离和能力注册配对。测试包用独立应用标识便于把测试与正式存档分开。
 
+### Windows 图形界面
+
+WPF 桌面程序位于源仓库的 [Revolution.Android/Desktop](https://github.com/Yokino337088/Revolution/tree/main/Revolution.Android/Desktop)。在 Windows 使用 .NET 8 SDK 和 Python 3.10+，从框架仓库根运行下面的命令。编译输出的 EXE 和旁边的 `tools` 目录一起使用，其中已经包含同版本的三个 Python 工具。
+
+```powershell
+dotnet build Revolution.Android/Desktop/Revolution.Android.Desktop.csproj -c Release
+& Revolution.Android/Desktop/bin/Release/net8.0-windows/Revolution.Android.Desktop.exe
+```
+
+1. **插线、解锁、扫描设备。** 开启手机 USB 调试并允许这台电脑。列表会显示串号、连接方式和授权状态，无法确认线路时写「连接方式待确认」。如果找不到 ADB，在「工具路径与构建报告」里选 Unity Android SDK 的 `platform-tools/adb.exe`。
+2. **选需要连的 Unity 工程和 APK。** Unity 工程选含 `ProjectSettings` 的目录，检查编辑器可以单独进行。选 APK 后会读取包名，并填写它旁边存在的 `rev-build.json`。手机已装好同一测试包时，只填包名和相应构建报告。隔离测试存档、覆盖安装、重开已运行应用由用户选择。
+3. **点击连接并启动。** 确认 MCP 和手机回执都通过后，按需发现动作、关心的时间窗外读取设备采样，或选择计划并运行。取消后等待计划的 `finally` 回执。结果可以复制或保存 JSON。断开会等待本轮的转发与测试进程收尾。
+
+「复制 MCP 配置」会把选择好的启动参数复制为 Codex 配置。关闭桌面会话后，可以用同一个设备和同一份 APK 开自己的 Agent 会话。
+
 在框架仓库根运行。下面的设备串号、包名、APK 与工程路径换成自己的实物。若 ADB 已在 PATH 或通过 `ANDROID_SDK_ROOT`、`ANDROID_HOME` 配置，`--adb` 可省略。
 
 工具默认取相邻的 RevCLI 和 RevMCP。单独复制工具目录或从其它工程调用时，可用 `--tools-root` 指向同版本的框架仓库根或官方插件的 `tools` 目录。

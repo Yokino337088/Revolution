@@ -24,3 +24,12 @@ jobs:
       - run: python Revolution.RevCLI/rev.py --no-daemon --full contract
       - run: python -m unittest discover -s Plugin/tests
       - run: python -m unittest discover -s Revolution.Android/tests
+
+  android-desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet build Revolution.Android/Desktop/Revolution.Android.Desktop.csproj -c Release -warnaserror

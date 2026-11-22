@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <!-- 随桌面程序交付同一次构建的 Python 工具，插件缓存和工程版本可以独立更新。 -->
+  <ItemGroup>
+    <Content Include="..\rev_android.py;..\README.md" Link="tools\Revolution.Android\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\revandroid\*.py" Link="tools\Revolution.Android\revandroid\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\examples\revgame-perf.json" Link="tools\Revolution.Android\examples\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\Revolution.RevCLI\rev.py;..\..\Revolution.RevCLI\commands.json" Link="tools\Revolution.RevCLI\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\Revolution.RevCLI\revautomation\*.py" Link="tools\Revolution.RevCLI\revautomation\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\Revolution.RevMCP\revmcp\*.py" Link="tools\Revolution.RevMCP\revmcp\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

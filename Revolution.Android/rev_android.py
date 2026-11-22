@@ -10,7 +10,7 @@ from pathlib import Path
 import sys
 from xml.etree import ElementTree
 
-from revandroid.device import Adb, AndroidError, locate_adb, select_device
+from revandroid.device import Adb, AndroidError, apk_package, locate_adb, package_name, select_device
 from revandroid.session import DeviceSession, Launch
 
 
@@ -87,6 +87,10 @@ def main() -> int:
     parser.add_argument("--tools-root", type=Path, default=TOOLS_ROOT, help="可选，同版本 RevCLI 和 RevMCP 所在的目录")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("devices", help="列出 ADB 设备与授权状态")
+    inspect = sub.add_parser("inspect-apk", help="读取 APK 的实际应用包名，无需安装")
+    inspect.add_argument("apk", type=Path)
+    sample = sub.add_parser("device-sample", help="按需读取手机进程内存、热状态和电池温度")
+    sample.add_argument("--package", required=True)
     mcp = sub.add_parser("mcp", help="经 USB 启动 RevMCP 标准输入输出服务")
     launch_arguments(mcp)
     mcp.add_argument("--compact-tools", action="store_true", help="只发现当前工程和手机的实际能力")
@@ -106,11 +110,22 @@ def main() -> int:
             write_result(result)
             return 0 if result["success"] else 1
         base = Adb(locate_adb(args.adb))
+        if args.command == "inspect-apk":
+            apk = args.apk.resolve()
+            if not apk.is_file() or apk.suffix.lower() != ".apk":
+                raise AndroidError("请选择实际存在的 .apk 文件")
+            write_result({"success": True, "applicationId": apk_package(apk, base.exe, None), "path": str(apk)})
+            return 0
         entries = base.devices()
         if args.command == "devices":
             write_result({"success": True, "devices": [asdict(item) for item in entries]})
             return 0
         device = select_device(entries, args.serial)
+        if args.command == "device-sample":
+            package = package_name(args.package)
+            observations = Adb(base.exe, device.serial).observations(package)
+            write_result({"success": True, "device": asdict(device), "applicationId": package, "observations": observations})
+            return 0
         if not math.isfinite(args.timeout) or not 0 < args.timeout <= 3600:
             raise AndroidError("--timeout 须在 0 到 3600 秒之间")
         if not math.isfinite(args.startup_timeout) or not 0 < args.startup_timeout <= 900:

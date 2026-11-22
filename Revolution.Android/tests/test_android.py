@@ -175,6 +175,18 @@ class AndroidTests(unittest.TestCase):
         with self.assertRaises(AndroidError):
             select_device(rows, "B")
 
+    def test_usb_detection_with_missing_adb_metadata(self):
+        """Windows 缺少 USB 描述时，只把 ADB -d 实际选择的设备标成 USB。"""
+        runner = Adb("adb")
+        output = ("List of devices attached\nWIRED device model:Android\n"
+                  "MISSING unauthorized\n192.0.2.1:5555 device\nemulator-5554 device\n")
+        with patch.object(runner, "run", side_effect=[(0, output), (0, "WIRED")]):
+            rows = {device.serial: device.transport for device in runner.devices()}
+        self.assertEqual(rows, {"WIRED": "usb", "MISSING": "unknown",
+                               "192.0.2.1:5555": "network", "emulator-5554": "emulator"})
+        with patch.object(runner, "run", side_effect=[(0, output), (1, "")]):
+            self.assertEqual(runner.devices()[0].transport, "unknown")
+
     def test_release_only_owned_forward_and_shell_quotes(self):
         """保留不属于本会话的 ADB 转发，Activity 的 $ 原样送到远端。"""
         runner = Adb("adb", "test-usb")

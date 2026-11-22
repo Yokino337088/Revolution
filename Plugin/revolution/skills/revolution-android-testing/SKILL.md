@@ -12,6 +12,7 @@ description: 用 USB ADB 连接 Unity Android 测试 APK 与 Revolution RevMCP�
 1. 查项目规则与真实注册表。用 Android 目标的 APK 和正确资源包，保留实际 BuildReport、包名和 Unity 版本。测试包用 `build.player` 的 `automation`、`frameTiming` 配置。切目标、签名、ASCII 副本与 AB 验证沿 [Android 构建配方](../revolution-unity-editor/references/android-build-and-verification.md)。
 2. 用 `devices` 读真实 ADB 状态，再锁定已授权的串号。复用用户已配置的 ADB。先确认设备与包身份，按用户授权安装、替换或重开。已有正式进程应保留，测试优先独立包和隔离存档。RevGame 使用 `--isolate` 并在计划中断言隔离。
 3. `mcp --project <工程> --package <包名>` 可同时接已打开的 Editor 和 USB 真机。先 `rev_discover`，分别核对 Editor 与游戏的 action。手机使用 `game`／`gm`。`run` 可直接执行同一份 RevMCP 计划，支持 stdin JSON。连接的 `/health` 只证明到了正确运行时。
+4. Windows 用户手动操作时可构建 [WPF 测试工作台](https://github.com/Yokino337088/Revolution/tree/main/Revolution.Android/Desktop)。先扫描授权与连接方式，再核对 APK 包名和编辑器。选择「连接并启动」后确认手机回执，运行计划及取消沿用 RevMCP。若用户表示接线后另行通知，先准备工具和 APK，等其通知再启动手机测试。
 
 ## 真机性能验收
 
