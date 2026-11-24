@@ -297,7 +297,8 @@ class Handler(BaseHTTPRequestHandler):
                 submitted = None
                 if self.command == "POST" and self.path == "/call":
                     with suppress(Exception):
-                        submitted = channel.operations.submit(body, mcp_context(self.headers.get("X-Rev-MCP", "")))
+                        context = mcp_context(self.headers.get("X-Rev-MCP", ""), self.headers.get("X-Rev-Intent", ""))
+                        submitted = channel.operations.submit(body, context)
                 status, response = channel.call(self.command, self.path, body)
                 # 记录错误不应影响已发出的操作，也不能导致 Agent 重试。
                 with suppress(Exception):
@@ -529,11 +530,6 @@ def run(args):
                 if not getattr(args, "stay_open", False) or not channel.session:
                     raise
                 note("本轮已结束：" + str(error))
-            finally:
-                if channel.session:
-                    counts = channel.operations.counts()
-                    channel.operations.emit("安卓", f"会话结束 · 转交操作 {counts['operations']} 条 · "
-                                                     f"手机请求记录 {counts['activityReads']} 次")
             if not getattr(args, "stay_open", False):
                 return
             note("等待手机开始下一轮测试。")
