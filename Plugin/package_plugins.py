@@ -41,7 +41,9 @@ def sources():
         for path in [source / entry, *sorted((source / package).glob("*.py"))]:
             yield path, target / path.relative_to(source)
     yield ROOT / "Revolution.RevCLI/commands.json", PLUGIN / "tools/Revolution.RevCLI/commands.json"
-    for name in ("README.md", "examples/revgame-perf.json"):
+    # 插件内保留电脑服务端及性能计划，手机 APK 由 Android 工程独立构建。
+    for name in ("README.md", "examples/revgame-perf.json", "Android_APP/connect.py",
+                 "Android_APP/requirements.txt", "Android_APP/README.md", "Android_APP/examples/android-performance.json"):
         yield ROOT / "Revolution.Android" / name, PLUGIN / "tools/Revolution.Android" / name
     yield ROOT / "LICENSE", PLUGIN / "LICENSE"
     yield ROOT / "LICENSE", REVGAME_PLUGIN / "LICENSE"
