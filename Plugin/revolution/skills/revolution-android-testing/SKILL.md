@@ -9,7 +9,7 @@ description: 用 USB ADB 连接 Unity Android 测试 APK 与 Revolution RevMCP�
 
 ## 构建和设备
 
-原生手机测试台支持无 USB 真机压测。电脑先在 `Revolution.Android/Android_APP` 安装 `requirements.txt` 并运行 `python connect.py lan`。手机选择游戏、输入电脑地址和配对码、核对指纹并启动。Agent 以真实工程和电脑输出的 `runtime.json` 执行 `rev_bind` → `rev_discover` → `rev_run`。通过游戏的 `runtime.android.device` 读取进程 PSS、热态和电池温度，用 `runtime.performance.begin/state` 取得对应 runId 的 FPS 和帧时间分位数，最后取消并关闭采样。使用项目真实压力负载和隔离策略。 [手机测试台与性能计划](https://github.com/Yokino337088/Revolution/tree/main/Revolution.Android/Android_APP)
+原生手机测试台支持无 USB 真机压测。Windows 双击 `Revolution.Android/Android_APP/start-test-service.cmd`，使用屏幕上显示的电脑 IP 和端口。手机选择游戏并连接，首次核对指纹和配对码并授权，以后可直接连接同一台电脑。需要在游戏上操作时，从测试台启用悬浮窗并允许系统许可。Agent 以真实工程和电脑输出的 `runtime.json` 执行 `rev_bind` → `rev_discover` → `rev_run`。通过游戏的 `runtime.android.device` 读取进程 PSS、热态和电池温度，用 `runtime.performance.begin/state` 取得对应 runId 的 FPS 和帧时间分位数，最后取消并关闭采样。使用项目真实压力负载和隔离策略。 [手机测试台与性能计划](https://github.com/Yokino337088/Revolution/tree/main/Revolution.Android/Android_APP)
 
 1. 查项目规则与真实注册表。出测试包使用当前打开的目标工程，通过 RevCLI `--mode live` 执行 `build.player` 并核对 BuildReport、包名和 Unity 版本。按需启用 `automation`、`frameTiming`，只随包交付 Android AB。切目标、隔离其他平台 AB 和签名沿 [Android 构建配方](../revolution-unity-editor/references/android-build-and-verification.md)。
 2. 用 `devices` 读真实 ADB 状态，再锁定已授权的串号。复用用户已配置的 ADB。先确认设备与包身份，按用户授权安装、替换或重开。已有正式进程应保留，测试优先独立包和隔离存档。RevGame 使用 `--isolate` 并在计划中断言隔离。

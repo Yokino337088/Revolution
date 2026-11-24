@@ -42,8 +42,10 @@ def sources():
             yield path, target / path.relative_to(source)
     yield ROOT / "Revolution.RevCLI/commands.json", PLUGIN / "tools/Revolution.RevCLI/commands.json"
     # 插件内保留电脑服务端及性能计划，手机 APK 由 Android 工程独立构建。
-    for name in ("README.md", "examples/revgame-perf.json", "Android_APP/connect.py",
-                 "Android_APP/requirements.txt", "Android_APP/README.md", "Android_APP/examples/android-performance.json"):
+    for name in ("README.md", "examples/revgame-perf.json", "Android_APP/connect.py", "Android_APP/host_trust.py",
+                 "Android_APP/operation_log.py",
+                 "Android_APP/start-test-service.cmd", "Android_APP/requirements.txt", "Android_APP/README.md",
+                 "Android_APP/examples/android-performance.json"):
         yield ROOT / "Revolution.Android" / name, PLUGIN / "tools/Revolution.Android" / name
     yield ROOT / "LICENSE", PLUGIN / "LICENSE"
     yield ROOT / "LICENSE", REVGAME_PLUGIN / "LICENSE"

@@ -101,12 +101,13 @@ class Server:
         return dict(tools=tools)
 
     def call(self, params, token):
+        """在当前线程附上实际调用的 MCP 工具名，供安卓测试台的电脑端显示。"""
         arguments = params.get("arguments", {})
         intent = arguments.get("intent", "") if isinstance(arguments, dict) else ""
         if params.get("name") == "rev_run" and isinstance(arguments, dict) and isinstance(arguments.get("plan"), dict):
             intent = arguments["plan"].get("intent", "")
         # 元数据只记录，不能被解释成需要执行的命令。旧客户端不传 intent 也仍可调用。
-        with self.hub.activity.scope(intent=intent if isinstance(intent, str) else ""):
+        with self.hub.activity.scope(intent=intent if isinstance(intent, str) else "", mcpTool=params.get("name", "")):
             return self._trace_call(params, token)
 
     def _trace_call(self, params, token):
@@ -145,6 +146,9 @@ class Server:
         elif name == "rev_run":
             validate(arguments, RUN_SCHEMA)
             result = run_with_reports(self.hub, arguments["plan"], token)
+            report_android = getattr(self.hub, "report_android_plan", None)
+            if report_android:
+                report_android(result)
         else:
             if name not in self.dynamic:
                 self.tools(token)
