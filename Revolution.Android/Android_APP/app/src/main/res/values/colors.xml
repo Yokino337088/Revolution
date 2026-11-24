@@ -1,0 +1,12 @@
+<resources>
+    <color name="surface">#F0F5F3</color>
+    <color name="card">#FFFFFF</color>
+    <color name="ink">#132D27</color>
+    <color name="muted">#46625A</color>
+    <color name="accent">#006453</color>
+    <color name="accent_soft">#DFF0E8</color>
+    <color name="outline">#D2E0DB</color>
+    <color name="hero_dark">#0D3129</color>
+    <color name="overlay_ink">#EFF8F2</color>
+    <color name="overlay_muted">#C5DFD1</color>
+</resources>

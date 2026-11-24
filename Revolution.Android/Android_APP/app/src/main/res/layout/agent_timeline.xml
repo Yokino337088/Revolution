@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <ListView android:id="@+id/agent_rows" android:layout_width="match_parent" android:layout_height="match_parent"
+            android:divider="@color/outline" android:dividerHeight="1dp" />
+        <TextView android:id="@+id/agent_empty" style="@style/Detail" android:layout_height="match_parent"
+            android:gravity="center" android:padding="12dp" android:text="@string/agent_empty" />
+    </FrameLayout>
+    <Button android:id="@+id/agent_latest" style="@style/QuietButton" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:text="@string/agent_latest" android:enabled="false" />
+</merge>

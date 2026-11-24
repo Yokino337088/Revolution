@@ -9,7 +9,7 @@ import org.json.JSONObject;
 /** 手机作为客户端发起 HTTPS 长轮询，在选定游戏的回环接口和电脑 Agent 之间往返传递同一工单。 */
 final class PhoneSession implements AutoCloseable
 {
-    /** 用户先确认电脑指纹，再冷启动游戏；只有 READY 阶段可执行游戏操作。 */
+    /** 复用已保存的电脑授权或完成首次确认后冷启动游戏，READY 才能执行游戏操作。 */
     enum Phase { CONNECTING, CONFIRM, PAIRING, PAIRED, STARTING, READY, CLOSED }
     // 唯一持有本轮通知和生命周期的前台服务。
     private final BridgeService service;
@@ -25,8 +25,8 @@ final class PhoneSession implements AutoCloseable
     volatile JSONObject identity;
     // 首次无凭据握手取得的电脑公钥证书摘要，供用户与电脑屏幕核对。
     volatile String fingerprint = "";
-    // 用户输入的一次性配对码，配对完成或会话终止后释放引用。
-    private String code;
+    // 提示授权来自哪里，或为什么要让用户重新确认，并随状态一起发布。
+    volatile String authorizationMessage = "";
     // 电脑在配对成功后签发给本轮手机的短期凭据。
     private volatile String bearer;
     // 只能用于本包本轮冷启动的 Unity 回环连接。
@@ -38,23 +38,23 @@ final class PhoneSession implements AutoCloseable
     // 电脑已经领取游戏确认成功的退出工单，用来区分正常结束和进程意外失联。
     private boolean quitCompleted;
 
-    /** 固定用户选择，网络和系统端口分配在后台完成。 */
-    PhoneSession(BridgeService service, String packageId, String address, String code, boolean isolate)
+    /** 固定用户选择，证书探测、授权和系统端口分配在后台完成。 */
+    PhoneSession(BridgeService service, String packageId, String address, boolean isolate)
     {
         this.service = service;
         this.packageId = packageId;
         this.address = address;
-        this.code = code;
         this.isolate = isolate;
     }
 
-    /** 首次连接只取电脑证书，等待手机操作者核对指纹才可发送配对码。 */
+    /** 先取电脑证书，完整指纹匹配才发送长期凭据，首次连接等待用户核对。 */
     void connect()
     {
         try
         {
             GameEndpoint endpoint = new GameEndpoint(packageId);
             DesktopConnection peer = new DesktopConnection(address);
+            String saved = TrustedComputers.read(service, peer.fingerprint);
             synchronized (this)
             {
                 if (phase == Phase.CLOSED)
@@ -65,7 +65,11 @@ final class PhoneSession implements AutoCloseable
                 game = endpoint;
                 computer = peer;
                 fingerprint = peer.fingerprint;
-                phase = Phase.CONFIRM;
+                phase = saved == null ? Phase.CONFIRM : Phase.PAIRING;
+            }
+            if (saved != null)
+            {
+                authenticate(saved, true);
             }
         }
         catch (Exception error)
@@ -74,13 +78,87 @@ final class PhoneSession implements AutoCloseable
         }
     }
 
-    /** 经手机用户明确核对后开始认证，防止向错误的局域网电脑提交配对码。 */
-    synchronized void confirm()
+    /** 操作者核对后提交八位短码，仅在首次授权阶段发送并请求保存凭据。 */
+    synchronized void confirm(String code)
     {
         if (phase == Phase.CONFIRM)
         {
             phase = Phase.PAIRING;
-            new Thread(this::exchange, "RevPhone-Exchange").start();
+            new Thread(() -> authenticate(code, false), "RevPhone-Pair").start();
+        }
+    }
+
+    /** 认证成功后换领短期会话令牌，再开始转交请求；被撤销时回到可见的授权步骤。 */
+    private void authenticate(String credential, boolean resumed)
+    {
+        try
+        {
+            JSONObject ticket = computer.control(resumed ? "/phone/resume" : "/phone/pair", credential, game.id,
+                new JSONObject().put("applicationId", packageId).put("protocol", 1).put("remember", !resumed));
+            synchronized (this)
+            {
+                if (phase == Phase.CLOSED)
+                {
+                    return;
+                }
+                String token = ticket.getString("token");
+                if (!token.matches("[a-f0-9]{64}") || !game.id.equals(ticket.getString("sessionId")))
+                {
+                    throw new IOException("电脑配对回执无效");
+                }
+                bearer = token;
+                String durable = ticket.optString("trustToken");
+                if (resumed)
+                {
+                    authorizationMessage = "已使用保存的电脑授权。";
+                }
+                else if (durable.matches("[a-f0-9]{64}") && TrustedComputers.remember(service, fingerprint, durable))
+                {
+                    authorizationMessage = "已授权这台电脑，下次可直接连接。";
+                }
+                else
+                {
+                    authorizationMessage = "本次连接成功，未能保存下次连接的授权。";
+                }
+                phase = Phase.PAIRED;
+            }
+        }
+        catch (DesktopConnection.Rejected rejected)
+        {
+            if (resumed && (rejected.status == 401 || rejected.status == 404))
+            {
+                awaitConfirmation("保存的授权已失效，请重新核对指纹并输入配对码。", true);
+            }
+            else if (!resumed && (rejected.status == 403 || rejected.status == 410))
+            {
+                awaitConfirmation(rejected.status == 403 ? "配对码不正确，请核对电脑窗口。" :
+                    "此配对码已失效，请使用电脑窗口最新显示的配对码。", false);
+            }
+            else
+            {
+                end(rejected.status == 409 ? "电脑已有测试连接，或所选游戏与电脑指定的包名不同。" : rejected.getMessage());
+            }
+            return;
+        }
+        catch (Exception error)
+        {
+            end("电脑授权失败：" + error.getMessage());
+            return;
+        }
+        exchange();
+    }
+
+    /** 拒绝的授权不留会话令牌，用户可在当前页面再次输入。 */
+    private synchronized void awaitConfirmation(String message, boolean revoked)
+    {
+        if (phase == Phase.PAIRING)
+        {
+            if (revoked)
+            {
+                TrustedComputers.forget(service, fingerprint);
+            }
+            authorizationMessage = message;
+            phase = Phase.CONFIRM;
         }
     }
 
@@ -89,23 +167,6 @@ final class PhoneSession implements AutoCloseable
     {
         try
         {
-            JSONObject ticket = computer.control("/phone/pair", code, game.id,
-                new JSONObject().put("applicationId", packageId).put("protocol", 1));
-            synchronized (this)
-            {
-                if (phase == Phase.CLOSED)
-                {
-                    return;
-                }
-                code = null;
-                String token = ticket.getString("token");
-                if (!token.matches("[a-f0-9]{64}") || !game.id.equals(ticket.getString("sessionId")))
-                {
-                    throw new IOException("电脑配对回执无效");
-                }
-                bearer = token;
-                phase = Phase.PAIRED;
-            }
             String resultId = null;
             Wire.Reply reply = new Wire.Reply(200, new byte[0]);
             int missedHealth = 0;
@@ -156,7 +217,7 @@ final class PhoneSession implements AutoCloseable
         }
     }
 
-    /** 同一条已领取的命令仅执行一次，断线后的不确定结果不自动重试。 */
+    /** 原样转交游戏工单。仅为正常退出回执保留必要的身份字段。 */
     private Wire.Reply execute(DesktopConnection.Message next)
     {
         if (phase != Phase.READY || next.method == null || next.path == null ||
@@ -171,7 +232,7 @@ final class PhoneSession implements AutoCloseable
                 return new Wire.Reply(200, game.health(identity).toString().getBytes(StandardCharsets.UTF_8));
             }
             Wire.Reply reply = game.request(next.method, next.path, next.body);
-            if (next.path.equals("/call") && reply.status == 202)
+            if (next.path.equals("/call") && reply.status == 202 && next.body.length <= 4096)
             {
                 JSONObject call = new JSONObject(new String(next.body, StandardCharsets.UTF_8));
                 if ("runtime.quit".equals(call.optString("action")))
@@ -193,6 +254,19 @@ final class PhoneSession implements AutoCloseable
         }
     }
 
+    /** 只有打开记录列表的后台线程持有租约，才可从已配对电脑读取一个页面。 */
+    OperationPage readOperations(long before, long revision, DesktopConnection.RequestLease lease) throws Exception
+    {
+        String token = bearer;
+        if (phase != Phase.READY || token == null)
+        {
+            throw new IOException("游戏测试连接尚未就绪");
+        }
+        JSONObject page = computer.control("/phone/activity", token, game.id,
+            new JSONObject().put("before", before).put("revision", revision), lease);
+        return new OperationPage(page);
+    }
+
     /** 从可见 Activity 启动选定游戏，前台服务留在后台转交请求。 */
     synchronized void launch(MainActivity activity)
     {
@@ -211,6 +285,7 @@ final class PhoneSession implements AutoCloseable
         try
         {
             activity.startActivity(intent);
+            service.gameStarted(this);
             new Thread(this::verify, "RevGame-Health").start();
         }
         catch (RuntimeException failed)
@@ -292,7 +367,6 @@ final class PhoneSession implements AutoCloseable
             return;
         }
         phase = Phase.CLOSED;
-        code = null;
         DesktopConnection peer = computer;
         String token = bearer;
         bearer = null;

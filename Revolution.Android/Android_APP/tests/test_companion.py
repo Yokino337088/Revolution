@@ -12,6 +12,7 @@ from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import connect
+import operation_log
 
 
 class CompanionTests(unittest.TestCase):
@@ -24,7 +25,8 @@ class CompanionTests(unittest.TestCase):
         info = dict(protocol=1, sessionId=sid, launchId=sid, memoryJobs=True, applicationId="dev.test",
                     platform="Android", pid=17, buildId="b" * 32)
         with tempfile.TemporaryDirectory() as directory, connect.ExitStack() as stack:
-            tls, pin = connect.server_tls(Path(directory), "127.0.0.1")
+            folder = Path(directory)
+            tls, pin = connect.server_tls(folder, connect.HostTrust(folder / "trust"))
             port = connect.serve_on(stack, ("127.0.0.1", 0), channel, tls)
             local = connect.serve_on(stack, ("127.0.0.1", 0), channel)
             stack.callback(channel.close, "测试结束")
@@ -46,6 +48,7 @@ class CompanionTests(unittest.TestCase):
                         connection.close()
 
                 payload = b'{"protocol":1,"applicationId":"dev.test"}'
+                self.assertEqual(device("/phone/activity", b"{}", "incorrect")[0], 401)
                 self.assertEqual(device("/phone/pair", payload, "incorrect")[0], 403)
                 code = channel.code
                 result = device("/phone/pair", payload, code)
@@ -54,6 +57,9 @@ class CompanionTests(unittest.TestCase):
                 self.assertEqual(device("/phone/pair", payload, code)[0], 409)
                 self.assertEqual(device("/phone/ready", json.dumps(dict(info, launchId="old")), token)[0], 400)
                 self.assertEqual(device("/phone/ready", json.dumps(info), token)[0], 200)
+                activity = device("/phone/activity", b'{"before":0,"revision":-1}', token)
+                self.assertEqual(activity[0], 200)
+                self.assertEqual(json.loads(activity[2])["events"], [])
                 poll = executor.submit(device, "/phone/exchange", b"", token)
 
                 def agent():
@@ -79,6 +85,43 @@ class CompanionTests(unittest.TestCase):
                 self.assertEqual(followup.result()[0], 410)
                 self.assertEqual(device("/phone/ready", json.dumps(info), token)[0], 401)
 
+    def test_activity_pages_keep_real_mcp_context_and_ack_lifecycle(self):
+        """真实 GM 的接单和终态更新同一行，分页与性能预览保留实际数据。"""
+        console = Mock()
+        history = operation_log.OperationLog(console)
+        session = "a" * 32
+        for index in range(47):
+            job = f"{index:032x}"
+            body = json.dumps(dict(id=job, action="gm.exec", payload={"command": f"fixture.set {index}"})).encode()
+            self.assertEqual(history.submit(body, {"tool": "rev_run", "plan": "安卓校验", "phase": "steps"}), job)
+            history.response("POST", "/call", job, 202, b"{}", session)
+            if index == 46:
+                self.assertEqual(history.page({})["events"][0]["state"], "accepted")
+            result = json.dumps(dict(id=job, sessionId=session, success=True, message="完成",
+                                     data={"message": f"value={index}"})).encode()
+            history.response("GET", "/jobs/" + job, None, 200, result, session)
+        head = history.page({})
+        self.assertEqual(len(head["events"]), 40)
+        self.assertEqual(head["events"][0]["tool"], "rev_run")
+        self.assertEqual(head["events"][0]["arguments"], "fixture.set 46")
+        self.assertEqual(head["events"][0]["state"], "success")
+        self.assertEqual(head["events"][0]["message"], "value=46")
+        older = history.page({"before": head["events"][-1]["seq"]})
+        self.assertEqual([event["seq"] for event in older["events"]], [7, 6, 5, 4, 3, 2, 1])
+        self.assertTrue(history.page({"revision": head["revision"]})["unchanged"])
+        self.assertGreater(len(console.emit.call_args_list), 47)
+        label, message = operation_log.describe_result("runtime.performance.state",
+            {"status": "completed", "fps": 59.5, "frames": 178, "p95Ms": 18.02}, 100)
+        self.assertEqual(label, "性能")
+        self.assertIn("FPS 59.50", message)
+        self.assertIn("P95(ms) 18.02", message)
+
+    def test_activity_never_decodes_large_game_artifact(self):
+        """含截图等大字段时只取接单头部，ANSI 控制符不会跟随消息输出。"""
+        raw = b'{"success":true,"id":"abc","data":{"base64":"' + b'x' * 90000 + b'"}}'
+        self.assertEqual(operation_log.envelope(raw, b"data"), {"success": True, "id": "abc"})
+        self.assertNotIn("\x1b", operation_log.line("cmd\x1b[31m\nline"))
+
     def test_timeout_never_redelivers_mutation(self):
         """丢失变更回执时只放弃等待，不能把已经领取的 POST 再发给游戏。"""
         channel = connect.Channel()
@@ -97,13 +140,41 @@ class CompanionTests(unittest.TestCase):
         key = channel.code
         for _ in range(5):
             self.assertEqual(channel.pair(b"wrong", "a" * 32, {})[0], 403)
-        self.assertEqual(channel.pair(("Bearer " + key).encode(), "a" * 32, {})[0], 409)
+        self.assertEqual(channel.pair(("Bearer " + key).encode(), "a" * 32, {})[0], 410)
         adb = Mock()
         adb.run.return_value = (0, "usb tcp:18767 tcp:1234")
         connect.undo_reverse(adb, 4321)
         self.assertEqual(adb.run.call_count, 1)
         connect.undo_reverse(adb, 1234)
         adb.run.assert_called_with("reverse", "--remove", "tcp:18767")
+
+    def test_trust_survives_listener_restart_and_can_be_revoked(self):
+        """同一电脑重启后可接受已授权手机，即使短码已过期；长期凭据不能直接下工单。"""
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            initial = connect.HostTrust(folder / "trust")
+            _, first_pin = connect.server_tls(folder, initial)
+            first = connect.Channel("dev.test", trust=initial)
+            payload = {"applicationId": "dev.test", "protocol": 1, "remember": True}
+            status, enrolled = first.pair(("Bearer " + first.code).encode(), "a" * 32, payload)
+            self.assertEqual(status, 200)
+            secret = enrolled["trustToken"]
+            self.assertNotIn(secret.encode(), initial.path.read_bytes())
+
+            reopened = connect.HostTrust(folder / "trust")
+            self.assertEqual(connect.server_tls(folder, reopened)[1], first_pin)
+            second = connect.Channel("dev.test", trust=reopened)
+            second.started -= connect.PAIR_WINDOW + 1
+            self.assertEqual(second.pair(("Bearer " + second.code).encode(), "b" * 32, payload)[0], 410)
+            status, resumed = second.pair(("Bearer " + secret).encode(), "b" * 32, payload, resume=True)
+            self.assertEqual(status, 200)
+            self.assertEqual(resumed["sessionId"], "b" * 32)
+            self.assertNotEqual(resumed["token"], enrolled["token"])
+            self.assertNotIn("trustToken", resumed)
+            self.assertFalse(second.authorized({"Authorization": "Bearer " + secret, "X-Rev-Session": "b" * 32}))
+            self.assertEqual(reopened.revoke(), 1)
+            third = connect.Channel("dev.test", trust=reopened)
+            self.assertEqual(third.pair(("Bearer " + secret).encode(), "c" * 32, payload, resume=True)[0], 401)
 
     def test_private_endpoint_does_not_clobber(self):
         """私有端点中途被替换时保留新文件，并发启动不可覆盖其它会话。"""

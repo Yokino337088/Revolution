@@ -1,20 +1,55 @@
 <resources>
     <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#006B5D</item>
-        <item name="android:windowBackground">#F6F9F8</item>
-        <item name="android:statusBarColor">#F6F9F8</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:windowBackground">@color/surface</item>
+        <item name="android:statusBarColor">@color/surface</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:navigationBarColor">#13312D</item>
+        <item name="android:navigationBarColor">@color/hero_dark</item>
     </style>
     <style name="GroupTitle">
-        <item name="android:layout_width">match_parent</item><item name="android:layout_height">wrap_content</item>
-        <item name="android:textSize">18sp</item><item name="android:textStyle">bold</item>
-        <item name="android:textColor">#13312D</item><item name="android:layout_marginTop">20dp</item>
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/ink</item>
     </style>
     <style name="Detail">
-        <item name="android:layout_width">match_parent</item><item name="android:layout_height">wrap_content</item>
-        <item name="android:textSize">15sp</item><item name="android:textColor">#385651</item>
-        <item name="android:layout_marginTop">6dp</item><item name="android:lineSpacingExtra">2dp</item>
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">@color/muted</item>
+        <item name="android:lineSpacingExtra">2dp</item>
+    </style>
+    <style name="QuietButton" parent="@android:style/Widget.Material.Light.Button.Borderless">
+        <item name="android:minHeight">48dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">@color/accent</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="SecondaryButton" parent="QuietButton">
+        <item name="android:background">@drawable/soft_button</item>
+        <item name="android:paddingStart">10dp</item>
+        <item name="android:paddingEnd">10dp</item>
+    </style>
+    <style name="PrimaryButton" parent="QuietButton">
+        <item name="android:background">@drawable/accent_button</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:textColor">@android:color/white</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+    <style name="AddressField" parent="@android:style/Widget.Material.Light.EditText">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/text_field</item>
+        <item name="android:minHeight">49dp</item>
+        <item name="android:paddingStart">14dp</item>
+        <item name="android:paddingEnd">14dp</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textColorHint">@color/muted</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:singleLine">true</item>
     </style>
 </resources>

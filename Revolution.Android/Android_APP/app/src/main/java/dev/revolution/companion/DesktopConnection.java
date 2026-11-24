@@ -24,7 +24,7 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 import org.json.JSONObject;
 
-/** 手机主动连接用户填写的电脑；首次握手只读证书，确认指纹后才发送配对码和数据。 */
+/** 手机主动连接用户填写的电脑。先读取证书，按完整指纹复用授权或交给用户确认。 */
 final class DesktopConnection implements AutoCloseable
 {
     // 电脑的固定 HTTPS 源，URL 只由用户选择的 IPv4 和端口组成。
@@ -37,6 +37,47 @@ final class DesktopConnection implements AutoCloseable
     private final Set<HttpsURLConnection> active = ConcurrentHashMap.newKeySet();
     // 用户断开后禁止新网络请求。
     private volatile boolean closed;
+
+    /** 界面只撤销自己的 HTTPS 记录读取，游戏长轮询继续使用当前连接。 */
+    static final class RequestLease implements AutoCloseable
+    {
+        // 尚在读取的日志请求，由此订阅单独拥有。
+        private HttpsURLConnection pending;
+        // 订阅撤销后拒绝后台晚启动的请求。
+        private boolean cancelled;
+
+        /** 起网前认领连接，列表已经关闭时告知后台直接返回。 */
+        synchronized boolean attach(HttpsURLConnection connection)
+        {
+            if (cancelled)
+            {
+                return false;
+            }
+            pending = connection;
+            return true;
+        }
+
+        /** 只归还当前请求，保留仍可用于下一页的订阅。 */
+        synchronized void detach(HttpsURLConnection connection)
+        {
+            if (pending == connection)
+            {
+                pending = null;
+            }
+        }
+
+        /** 收起页面立即废弃订阅，正在读取的连接在后台断开。 */
+        @Override public synchronized void close()
+        {
+            cancelled = true;
+            HttpsURLConnection connection = pending;
+            pending = null;
+            if (connection != null)
+            {
+                new Thread(connection::disconnect, "RevPhone-CancelActivity").start();
+            }
+        }
+    }
 
     /** 首次握手只留存叶证书并主动拒绝；所有携带数据的请求另用 Android 的正式证书验证器。 */
     @SuppressLint("CustomX509TrustManager")
@@ -158,7 +199,18 @@ final class DesktopConnection implements AutoCloseable
     /** 通过固定证书 POST 结果并等待下一条指令；不重试状态不明的业务操作。 */
     Message post(String path, String bearer, String session, String resultId, Wire.Reply value) throws Exception
     {
+        return post(path, bearer, session, resultId, value, null);
+    }
+
+    /** 仅日志请求绑定可撤销订阅，并使用比长轮询更短的读取期限。 */
+    private Message post(String path, String bearer, String session, String resultId, Wire.Reply value,
+        RequestLease subscription) throws Exception
+    {
         HttpsURLConnection conn = (HttpsURLConnection)new URL(origin, path).openConnection(Proxy.NO_PROXY);
+        if (subscription != null && !subscription.attach(conn))
+        {
+            throw new IOException("操作记录已经收起");
+        }
         boolean drained = false;
         active.add(conn);
         try
@@ -182,7 +234,7 @@ final class DesktopConnection implements AutoCloseable
             });
             conn.setInstanceFollowRedirects(false);
             conn.setConnectTimeout(5000);
-            conn.setReadTimeout(18000);
+            conn.setReadTimeout(subscription == null ? 18000 : 3500);
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "application/json");
             conn.setRequestProperty("Accept-Encoding", "identity");
@@ -214,6 +266,10 @@ final class DesktopConnection implements AutoCloseable
         finally
         {
             active.remove(conn);
+            if (subscription != null)
+            {
+                subscription.detach(conn);
+            }
             // 读完的定长响应已交回系统连接池，半途失败的连接必须关闭。
             if (!drained)
             {
@@ -222,13 +278,34 @@ final class DesktopConnection implements AutoCloseable
         }
     }
 
+    /** 控制请求收到的非成功状态，消息可直接交给会话界面。 */
+    static final class Rejected extends IOException
+    {
+        // 供会话区分凭据被撤销、短码过期和网络错误。
+        final int status;
+
+        /** 保存公开的 HTTP 状态，用于显示下一步而无需打印令牌或正文。 */
+        Rejected(int status)
+        {
+            super("电脑拒绝请求（HTTP " + status + "）");
+            this.status = status;
+        }
+    }
+
     /** 给配对、就绪和断开控制请求编码 JSON，并校验电脑确认的状态。 */
     JSONObject control(String path, String bearer, String session, JSONObject data) throws Exception
     {
-        Message response = post(path, bearer, session, null, new Wire.Reply(200, data.toString().getBytes(StandardCharsets.UTF_8)));
+        return control(path, bearer, session, data, null);
+    }
+
+    /** 读取独立控制回执，可选订阅在列表收起后取消这一次网络读取。 */
+    JSONObject control(String path, String bearer, String session, JSONObject data, RequestLease lease) throws Exception
+    {
+        Message response = post(path, bearer, session, null,
+            new Wire.Reply(200, data.toString().getBytes(StandardCharsets.UTF_8)), lease);
         if (response.status != 200)
         {
-            throw new IOException("电脑拒绝请求（HTTP " + response.status + "）");
+            throw new Rejected(response.status);
         }
         return new JSONObject(new String(response.body, StandardCharsets.UTF_8));
     }

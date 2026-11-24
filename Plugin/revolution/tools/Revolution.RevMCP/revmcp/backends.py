@@ -29,7 +29,8 @@ from revautomation import player
 
 class RuntimeClient:
     """读取 Unity 产生的凭据连接一个 session；不自动重试已提交的变更。"""
-    def __init__(self, endpoint_file, timeout=120):
+    def __init__(self, endpoint_file, timeout=120, activity_context=None):
+        """绑定本机端点。安卓接线器用可选上下文显示实际 MCP 工具与计划步骤。"""
         self.endpoint_file, self.timeout = Path(endpoint_file), timeout
         self.endpoint = read_json(self.endpoint_file)
         url = urllib.parse.urlsplit(self.endpoint["url"])
@@ -38,11 +39,22 @@ class RuntimeClient:
         if self.endpoint.get("protocol") != 1 or not self.endpoint.get("token") or not self.endpoint.get("sessionId"):
             raise RevError("Invalid runtime endpoint file")
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+        # 元数据只用于声明支持的接线器，普通 Unity Player 继续使用原有 HTTP 协议。
+        self.activity_context = activity_context or {}
 
     def request(self, method, path, data=None):
+        """发送有长度限制的运行时请求，工单元数据不进入业务参数。"""
         body = json.dumps(data, ensure_ascii=False, allow_nan=False).encode("utf-8") if data is not None else None
-        req = urllib.request.Request(self.endpoint["url"].rstrip("/") + path, body, method=method,
-            headers={"Authorization": "Bearer " + self.endpoint["token"], "X-Rev-Session": self.endpoint["sessionId"], "Content-Type": "application/json"})
+        headers = {"Authorization": "Bearer " + self.endpoint["token"], "X-Rev-Session": self.endpoint["sessionId"],
+                   "Content-Type": "application/json"}
+        if method == "POST" and path == "/call" and self.endpoint.get("companionActivity") is True:
+            metadata = {name: self.activity_context[key][:64] for name, key in (
+                ("tool", "mcpTool"), ("plan", "plan"), ("phase", "phase"), ("step", "step"))
+                if isinstance(self.activity_context.get(key), str)}
+            if metadata:
+                headers["X-Rev-MCP"] = urllib.parse.quote(
+                    json.dumps(metadata, ensure_ascii=False, separators=(",", ":")), errors="replace")
+        req = urllib.request.Request(self.endpoint["url"].rstrip("/") + path, body, method=method, headers=headers)
         try:
             with self.opener.open(req, timeout=min(5, self.timeout)) as response:
                 raw = response.read(24 * 1024 * 1024 + 1)
@@ -253,8 +265,9 @@ class Hub:
         return result
 
     def game_call(self, action, arguments, confirm=False, cancel=None):
+        """向已绑定的 Player 或 Editor 转交动作，并保留实际 MCP 来源。"""
         if self.runtime_endpoint:
-            runtime = RuntimeClient(self.runtime_endpoint, self.timeout)
+            runtime = RuntimeClient(self.runtime_endpoint, self.timeout, getattr(self.activity.context, "values", {}))
             project = runtime.endpoint.get("project")
             if self.editor and project and Path(project).resolve() != self.editor.project:
                 raise RevError("Runtime endpoint belongs to another Unity project")
@@ -264,6 +277,24 @@ class Hub:
         if action == "gm.exec":
             return self.editor.call(action, arguments, confirm, cancel=cancel)
         return self.editor.call("runtime.call", {"runtimeAction": action, "argumentsJson": json.dumps(arguments, ensure_ascii=False)}, confirm, cancel=cancel)
+
+    def report_android_plan(self, result):
+        """向安卓接线器补充主机侧断言和收尾状态，旁路失败不修改测试结果。"""
+        if not self.runtime_endpoint:
+            return
+        try:
+            runtime = RuntimeClient(self.runtime_endpoint, min(2, self.timeout))
+            if runtime.endpoint.get("companionActivity") is not True:
+                return
+            steps = result.get("steps", [])
+            cleanup = result.get("cleanup", [])
+            failed = next((row.get("response", row) for row in [*steps, *cleanup]
+                           if row.get("response", row).get("success") is False or row.get("error")), {})
+            runtime.request("POST", "/mcp/activity", {"name": result.get("name", ""), "success": result.get("success") is True,
+                            "steps": len(steps), "cleanup": len(cleanup),
+                            "failure": failed.get("error") or failed.get("message") or ""})
+        except (OSError, RevError, ValueError, TypeError, AttributeError):
+            pass
 
     def discover(self, cancel=None, editor_only=False):
         self._editor_catalog = None

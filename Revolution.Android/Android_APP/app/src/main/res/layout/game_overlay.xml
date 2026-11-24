@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="vertical"
+    android:background="@drawable/hero_surface" android:padding="6dp">
+
+    <TextView android:id="@+id/overlay_handle" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:background="?android:attr/selectableItemBackground" android:minWidth="56dp" android:minHeight="48dp"
+        android:gravity="center" android:paddingStart="14dp" android:paddingEnd="14dp"
+        android:text="@string/overlay_bubble" android:contentDescription="@string/overlay_expand"
+        android:clickable="true" android:focusable="true" android:textColor="@color/overlay_ink"
+        android:textSize="15sp" android:textStyle="bold" />
+
+    <LinearLayout android:id="@+id/overlay_panel" android:layout_width="264dp" android:layout_height="wrap_content"
+        android:orientation="vertical" android:paddingStart="10dp" android:paddingEnd="10dp"
+        android:paddingBottom="7dp" android:visibility="gone">
+        <LinearLayout android:id="@+id/overlay_summary" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:orientation="vertical">
+            <TextView android:id="@+id/overlay_game" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:textColor="@color/overlay_ink" android:textStyle="bold" android:textSize="16sp" />
+            <TextView android:id="@+id/overlay_state" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="5dp" android:textColor="@color/overlay_muted" android:textSize="14sp"
+                android:accessibilityLiveRegion="polite" />
+            <TextView android:id="@+id/overlay_address" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="3dp" android:textColor="@color/overlay_muted" android:textSize="13sp"
+                android:fontFamily="monospace" />
+            <Button android:id="@+id/overlay_open" style="@style/SecondaryButton"
+                android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp"
+                android:text="@string/dashboard_return" />
+            <Button android:id="@+id/overlay_disconnect" style="@style/QuietButton"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:textColor="@color/overlay_ink" android:text="@string/disconnect" />
+        </LinearLayout>
+        <Button android:id="@+id/overlay_log_toggle" style="@style/QuietButton"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textColor="@color/overlay_ink" android:text="@string/agent_history" />
+        <dev.revolution.companion.AgentLogView android:id="@+id/overlay_timeline"
+            android:layout_width="match_parent" android:layout_height="224dp"
+            android:background="@drawable/card_surface" android:visibility="gone" />
+    </LinearLayout>
+</LinearLayout>

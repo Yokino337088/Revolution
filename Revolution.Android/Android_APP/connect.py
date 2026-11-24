@@ -6,7 +6,7 @@ import argparse
 from collections import deque
 from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+import hashlib
 import hmac
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import ipaddress
@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import secrets
 import socket
+import sqlite3
 import ssl
 import sys
 import tempfile
@@ -27,6 +28,8 @@ import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from revandroid.device import Adb, AndroidError, locate_adb, select_device
 from revandroid.session import read_build_identity
+from host_trust import HostTrust, default_directory
+from operation_log import Console, OperationLog, mcp_context
 
 # 手机必须输入电脑界面显示的端口，USB 的设备侧使用这个固定值。
 PORT = 18767
@@ -34,6 +37,8 @@ PORT = 18767
 MAX_REQUEST = 4 * 1024 * 1024
 # 与 RevMCP 截图及 JSON 回执上限相同。
 MAX_RESULT = 24 * 1024 * 1024
+# 首次授权窗口为三分钟，已有授权的手机不依赖短码时钟。
+PAIR_WINDOW = 180
 
 
 def note(message: str) -> None:
@@ -81,7 +86,7 @@ class Command:
 class Channel:
     """一个电脑监听实例接受一台手机，条件变量把 Agent 的指令即时送到手机挂起的请求。"""
 
-    def __init__(self, expected_package=None, expected_build=None):
+    def __init__(self, expected_package=None, expected_build=None, trust=None, console=None):
         """准备三分钟配对窗口和两组彼此独立的认证凭据。"""
         # 电脑端显示的临时口令。
         self.code = f"{secrets.randbelow(100000000):08d}"
@@ -93,6 +98,10 @@ class Channel:
         self.expected_package = expected_package
         # 由成功的 Android BuildReport 提取的 Build ID。
         self.expected_build = expected_build
+        # 电脑持久授权库与本轮临时令牌分开。
+        self.trust = trust
+        # 工单历史只在电脑，按实际收到的请求与回执更新。
+        self.operations = OperationLog(console)
         # 以下状态和挂起请求都在同一条件变量下发布。
         self.changed = threading.Condition()
         # 配对成功后绑定到所选游戏的唯一启动号。
@@ -118,26 +127,48 @@ class Channel:
         # 五次失败或配对超时后废弃本轮口令。
         self.attempts = 0
 
-    def pair(self, authorization, session, data):
-        """验证一次性口令和预期包名，完成后只接受这台手机的令牌及启动号。"""
+    def next_code(self, now):
+        """等待首次授权时轮换短码，过期和超过试错次数的码不能再次提交。"""
         with self.changed:
-            if self.closed or self.session or time.monotonic() - self.started >= 180:
+            if self.session or self.closed or now - self.started < PAIR_WINDOW:
+                return None
+            self.code = f"{secrets.randbelow(100000000):08d}"
+            self.attempts = 0
+            self.started = now
+            return self.code
+
+    def pair(self, authorization, session, data, resume=False):
+        """用短码首次授权或用保存的手机凭据重连，两条路径都签发本轮临时令牌。"""
+        with self.changed:
+            if self.closed or self.session:
                 return 409, {}
-            if not hmac.compare_digest(authorization, ("Bearer " + self.code).encode()):
+            if resume:
+                # 长期凭据只能进入重连接口，不能调用测试或接管已经开始的游戏会话。
+                token = authorization.removeprefix(b"Bearer ")
+                if (not authorization.startswith(b"Bearer ") or not re.fullmatch(rb"[0-9a-f]{64}", token)
+                        or self.trust is None or not self.trust.recognizes(token)):
+                    return 401, {}
+            elif not self.code or time.monotonic() - self.started >= PAIR_WINDOW:
+                return 410, {}
+            elif not hmac.compare_digest(authorization, ("Bearer " + self.code).encode()):
                 self.attempts += 1
                 if self.attempts >= 5:
-                    self.close("配对码连续错误，已关闭配对窗口")
+                    self.code = ""
                 return 403, {}
             package = data.get("applicationId")
             if (data.get("protocol") != 1 or not re.fullmatch(r"[a-f0-9]{32}", session) or
                     not isinstance(package, str) or not re.fullmatch(r"[A-Za-z][\w]*(?:\.[A-Za-z][\w]*)+", package) or
                     (self.expected_package and self.expected_package != package)):
                 return 409, {}
+            ticket = {"sessionId": session, "token": self.phone_token}
+            if not resume and self.trust is not None and data.get("remember") is True:
+                ticket["trustToken"] = self.trust.remember()
             self.package, self.session = package, session
             self.code = ""
             self.last_seen = time.monotonic()
             self.changed.notify_all()
-            return 200, {"sessionId": session, "token": self.phone_token}
+            self.operations.emit("安卓", f"{package} · {'已授权直连' if resume else '首次授权成功'}")
+            return 200, ticket
 
     def authorized(self, headers, local=False):
         """分别校验手机与本地 Agent 的令牌，已撤销会话立即拒绝。"""
@@ -255,17 +286,34 @@ class Handler(BaseHTTPRequestHandler):
             if self.server.local:
                 if not channel.authorized(self.headers, local=True):
                     return self.reply(401)
+                if self.command == "GET" and self.path == "/mcp/activity":
+                    return self.reply(200, json.dumps(channel.operations.counts()).encode())
+                if self.command == "POST" and self.path == "/mcp/activity":
+                    channel.operations.plan_finished(self.json_body())
+                    return self.reply(200, b"{}")
                 if not route(self.command, self.path):
                     return self.reply(404)
-                return self.reply(*channel.call(self.command, self.path, self.read_body(MAX_REQUEST)))
+                body = self.read_body(MAX_REQUEST)
+                submitted = None
+                if self.command == "POST" and self.path == "/call":
+                    with suppress(Exception):
+                        submitted = channel.operations.submit(body, mcp_context(self.headers.get("X-Rev-MCP", "")))
+                status, response = channel.call(self.command, self.path, body)
+                # 记录错误不应影响已发出的操作，也不能导致 Agent 重试。
+                with suppress(Exception):
+                    channel.operations.response(self.command, self.path, submitted, status, response, channel.session)
+                return self.reply(status, response)
             if self.command != "POST":
                 return self.reply(405)
-            if self.path == "/phone/pair":
+            if self.path in {"/phone/pair", "/phone/resume"}:
                 code, info = channel.pair(self.headers.get("Authorization", "").encode(),
-                    self.headers.get("X-Rev-Session", ""), self.json_body())
+                    self.headers.get("X-Rev-Session", ""), self.json_body(), resume=self.path == "/phone/resume")
                 return self.reply(code, json.dumps(info).encode())
             if not channel.authorized(self.headers):
                 return self.reply(401)
+            if self.path == "/phone/activity":
+                data = channel.operations.page(self.json_body())
+                return self.reply(200, json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
             if self.path == "/phone/ready":
                 channel.ready(self.json_body())
                 return self.reply(200, b"{}")
@@ -286,6 +334,8 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(code, job.body, {"X-Rev-Command": job.id, "X-Rev-Method": job.method, "X-Rev-Path": job.path})
         except (ValueError, AndroidError):
             self.reply(400, b'{"error":"Invalid request or device identity"}')
+        except sqlite3.Error:
+            self.reply(503, b'{"error":"Computer authorization store unavailable"}')
 
     def json_body(self):
         """配对和就绪只需要小型 JSON 对象，不分配截图大小的控制缓冲。"""
@@ -340,33 +390,25 @@ class Listener(ThreadingHTTPServer):
         """提前离线的客户端只结束该请求，不打印可能包含私有参数的堆栈。"""
 
 
-def server_tls(folder, address):
-    """为此次电脑服务生成短期自签证书，载入系统 TLS 后删除临时私钥。"""
+def server_tls(folder, trust):
+    """加载电脑的固定证书供 TLS 握手，载入后删除本次生成的临时 PEM 副本。"""
     from cryptography import x509
-    from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import ec
-    from cryptography.x509.oid import NameOID
-    key = ec.generate_private_key(ec.SECP256R1())
-    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Revolution Android test host")])
-    now = datetime.now(timezone.utc)
-    cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
-            .serial_number(x509.random_serial_number()).not_valid_before(now - timedelta(minutes=10))
-            .not_valid_after(now + timedelta(days=2)).add_extension(
-                x509.SubjectAlternativeName([x509.IPAddress(ipaddress.IPv4Address(address))]), critical=False)
-            .sign(key, hashes.SHA256()))
+    from cryptography.hazmat.primitives import serialization
+
+    identity = trust.identity()
+    cert = x509.load_pem_x509_certificate(identity)
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     with tempfile.NamedTemporaryFile(dir=folder, delete=False) as pem:
         path = Path(pem.name)
         try:
-            pem.write(cert.public_bytes(serialization.Encoding.PEM) + key.private_bytes(
-                serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+            pem.write(identity)
             pem.close()
             ctx.load_cert_chain(str(path))
         finally:
             pem.close()
             path.unlink(missing_ok=True)
-    return ctx, cert.fingerprint(hashes.SHA256()).hex()
+    return ctx, hashlib.sha256(cert.public_bytes(serialization.Encoding.DER)).hexdigest()
 
 
 @contextmanager
@@ -415,19 +457,10 @@ def serve_on(stack, address, channel, tls=None):
     return server.server_port
 
 
-def run(args):
-    """电脑先监听，手机主动配对并登记所选游戏；Agent 全程通过既有 RevMCP 工作。"""
-    channel = Channel(args.package, read_build_identity(args.build_report))
+def serve_session(args, path, address, tls, pin, channel):
+    """承接一个手机会话并独占发布本轮端点，关闭后释放监听和已有映射。"""
     with ExitStack() as stack:
-        folder = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="rev-phone-")))
-        path = args.endpoint.expanduser().resolve() if args.endpoint else folder / "runtime.json"
-        if path.name != "runtime.json" or path.exists() or not path.parent.is_dir():
-            raise AndroidError("--endpoint 需要现有私有目录中尚未使用的 runtime.json")
         usb = args.mode == "usb"
-        address = "127.0.0.1" if usb else str(ipaddress.IPv4Address(args.listen or lan_address()))
-        if address == "0.0.0.0":
-            raise AndroidError("请指定手机可直达的电脑网卡 IPv4 地址")
-        tls, pin = server_tls(folder, address)
         host_port = serve_on(stack, (address, 0 if usb else args.port), channel, tls)
         if usb:
             base = Adb(locate_adb(args.adb))
@@ -436,14 +469,16 @@ def run(args):
             reverse(adb, host_port)
             stack.callback(undo_reverse, adb, host_port)
         stack.callback(channel.close, "电脑已结束会话")
+        note(f"电脑监听 IP {address}  端口 {host_port}")
         note(f"手机连接电脑 {address}:{PORT if usb else host_port}")
         note("电脑证书指纹 " + pin[:16].upper())
+        note("首次连接需要授权，已授权的手机可直接连接。")
         note("一次性配对码 " + channel.code)
         with channel.changed:
             while not channel.identity and not channel.closed:
                 now = time.monotonic()
-                if not channel.session and now - channel.started >= 180:
-                    raise AndroidError("三分钟内未收到手机配对")
+                if code := channel.next_code(now):
+                    note("一次性配对码 " + code)
                 if channel.session and now - channel.last_seen > 40:
                     raise AndroidError("手机已离线，未收到游戏身份")
                 channel.changed.wait(1)
@@ -453,7 +488,8 @@ def run(args):
             raise AndroidError(channel.closed)
         info = channel.identity
         port = serve_on(stack, ("127.0.0.1", 0), channel)
-        data = dict(info, url=f"http://127.0.0.1:{port}", token=channel.local_token, relativeDeadlines=True)
+        data = dict(info, url=f"http://127.0.0.1:{port}", token=channel.local_token, relativeDeadlines=True,
+                    companionActivity=True)
         stack.enter_context(endpoint_file(path, data))
         note(f"已连接 {channel.package} / PID {info['pid']} / Build {info['buildId']}")
         note("把下面路径作为 rev_bind 的 runtimeEndpoint 或 RevMCP 的 --runtime-endpoint。按 Ctrl+C 断开。")
@@ -469,22 +505,66 @@ def run(args):
             raise AndroidError(channel.closed)
 
 
+def run(args):
+    """开启电脑接线器；常驻模式为下一轮连接更新会话身份，继续使用同一份电脑授权。"""
+    trust = HostTrust(args.trust_dir)
+    build = read_build_identity(args.build_report)
+    with ExitStack() as resources:
+        private_dir = resources.enter_context(tempfile.TemporaryDirectory(prefix="rev-phone-"))
+        console = Console(args.color)
+        resources.callback(console.close)
+        folder = Path(private_dir)
+        path = args.endpoint.expanduser().resolve() if args.endpoint else folder / "runtime.json"
+        if path.name != "runtime.json" or path.exists() or not path.parent.is_dir():
+            raise AndroidError("--endpoint 需要现有私有目录中尚未使用的 runtime.json")
+        address = "127.0.0.1" if args.mode == "usb" else str(ipaddress.IPv4Address(args.listen or lan_address()))
+        if address == "0.0.0.0":
+            raise AndroidError("请指定手机可直达的电脑网卡 IPv4 地址")
+        tls, pin = server_tls(folder, trust)
+        while True:
+            channel = Channel(args.package, build, trust, console)
+            try:
+                serve_session(args, path, address, tls, pin, channel)
+            except AndroidError as error:
+                if not getattr(args, "stay_open", False) or not channel.session:
+                    raise
+                note("本轮已结束：" + str(error))
+            finally:
+                if channel.session:
+                    counts = channel.operations.counts()
+                    channel.operations.emit("安卓", f"会话结束 · 转交操作 {counts['operations']} 条 · "
+                                                     f"手机请求记录 {counts['activityReads']} 次")
+            if not getattr(args, "stay_open", False):
+                return
+            note("等待手机开始下一轮测试。")
+
+
 def main(argv=None):
-    """命令行入口；手机侧证书和口令只为本次运行有效。"""
+    """启动接线器，或在电脑端撤销需要重新授权的手机。"""
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_subparsers(dest="mode", required=True)
     lan = modes.add_parser("lan", help="监听电脑局域网网卡，手机主动接入")
     lan.add_argument("--listen", help="电脑指定网卡的 IPv4，默认按系统路由选择")
     lan.add_argument("--port", type=int, default=PORT, help="电脑 HTTPS 端口")
+    lan.add_argument("--stay-open", action="store_true", help="一轮结束后继续等待下一台手机")
     usb = modes.add_parser("usb", help="通过 ADB reverse 使用同一套手机客户端协议")
     usb.add_argument("--adb", help="SDK adb 路径")
     usb.add_argument("--serial", help="多台设备时指定串号")
+    revoke = modes.add_parser("revoke", help="撤销所有手机已保存的重连授权")
+    for mode in (usb, lan, revoke):
+        mode.add_argument("--trust-dir", type=Path, default=default_directory(), help="电脑私有授权目录")
     for mode in (usb, lan):
+        mode.add_argument("--color", choices=("auto", "always", "never"), default="auto",
+                          help="控制台高亮，默认根据终端能力决定")
         mode.add_argument("--endpoint", type=Path, help="可选的私有 runtime.json 绝对路径")
         mode.add_argument("--package", help="可选，仅接受此游戏包名")
         mode.add_argument("--build-report", type=Path, help="可选，核对 Android rev-build.json")
     try:
         args = parser.parse_args(argv)
+        if args.mode == "revoke":
+            count = HostTrust(args.trust_dir).revoke()
+            note(f"已撤销 {count} 份手机重连授权，新的连接需要首次授权。")
+            return 0
         if args.mode == "lan" and not 1 <= args.port <= 65535:
             raise AndroidError("电脑监听端口应在 1 到 65535 之间")
         run(args)
@@ -497,7 +577,7 @@ def main(argv=None):
             raise
         note("请先运行 python -m pip install -r requirements.txt 安装证书依赖")
         return 1
-    except (OSError, ValueError, AndroidError) as error:
+    except (OSError, ValueError, AndroidError, sqlite3.Error) as error:
         note("接线失败：" + str(error))
         return 1
 

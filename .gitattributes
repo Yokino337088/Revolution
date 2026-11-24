@@ -19,6 +19,9 @@
 
 *.png  binary
 *.jpg  binary
+*.webp binary
 *.xlsx binary
 *.dll  binary
 *.pdb  binary
+Revolution.Android/Android_APP/start-test-service.cmd text eol=crlf
+Plugin/revolution/tools/Revolution.Android/Android_APP/start-test-service.cmd text eol=crlf
