@@ -12,7 +12,8 @@ Agent → RevMCP → 电脑接线器（HTTPS 服务端） ← 主动连接 ← �
 
 ## 安装
 
-- 下载本次构建的 `Revolution-Android-Test-Companion` 制品，解压取得 `app-debug.apk`，在 Android 8.0 或以上设备上通过系统安装。每次推送源代码后可以从对应工作流取得安装包。[APK 构建与下载](https://github.com/Yokino337088/Revolution/actions/workflows/android-companion.yml)
+- 仓库随附可直接安装的调试 APK，支持 Android 8.0 或以上。[下载仓库 APK](https://github.com/Yokino337088/Revolution/raw/refs/heads/main/Revolution.Android/Android_APP/dist/Revolution-Android-Test-Companion.apk)
+- GitHub Actions 也会生成 `Revolution-Android-Test-Companion` 制品，解压后可取得 `app-debug.apk`。[APK 构建记录](https://github.com/Yokino337088/Revolution/actions/workflows/android-companion.yml)
 - 从本目录自行构建可用 Android Studio 或 JDK 17、SDK Platform 35、Build Tools 34.0.0 和仓库自带的 Gradle Wrapper。Windows 运行 `.\gradlew.bat :app:assembleDebug`，macOS 或 Linux 运行 `./gradlew :app:assembleDebug`。输出文件为 `app/build/outputs/apk/debug/app-debug.apk`。CI 和本机均使用调试签名。不同签名无法覆盖安装，更新时应沿用同一签名。
 - 电脑需要 Python 3.10+。在本目录运行 `python -m pip install -r requirements.txt`。接线器使用 cryptography 为每次会话生成临时 TLS 证书。安装游戏测试包时，使用带 `DEVELOPMENT_BUILD` 或 `REV_AUTOMATION`、保留启动 Intent 且有 INTERNET 权限的 Android Player。现有 `build.player --automation` 会准备网络权限，GPU 帧时另受平台、图形驱动和 Frame Timing Stats 支持限制。[框架 Android 构建说明](https://github.com/Yokino337088/Revolution/blob/main/Revolution.Android/README.md)
 

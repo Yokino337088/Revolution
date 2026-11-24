@@ -5,3 +5,5 @@
 /app/build/
 *.iml
 *.apk
+# 仓库提供这一份可直接安装的测试台 APK。
+!/dist/Revolution-Android-Test-Companion.apk
