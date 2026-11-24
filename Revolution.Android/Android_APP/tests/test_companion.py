@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import Mock
+from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import connect
@@ -109,12 +110,47 @@ class CompanionTests(unittest.TestCase):
         older = history.page({"before": head["events"][-1]["seq"]})
         self.assertEqual([event["seq"] for event in older["events"]], [7, 6, 5, 4, 3, 2, 1])
         self.assertTrue(history.page({"revision": head["revision"]})["unchanged"])
-        self.assertGreater(len(console.emit.call_args_list), 47)
-        label, message = operation_log.describe_result("runtime.performance.state",
-            {"status": "completed", "fps": 59.5, "frames": 178, "p95Ms": 18.02}, 100)
-        self.assertEqual(label, "性能")
-        self.assertIn("FPS 59.50", message)
-        self.assertIn("P95(ms) 18.02", message)
+        self.assertEqual(console.emit.call_count, 47)
+
+    def test_console_prints_only_final_gm_with_declared_intent(self):
+        """非 GM 请求、接单、轮询、确认和计划报告不刷屏，终态每条只打印一次。"""
+        console = Mock()
+        history = operation_log.OperationLog(console)
+        session = "a" * 32
+        gm = "b" * 32
+        wire = json.dumps(dict(id=gm, action="gm.exec", payload={"command": 'RevGame/选奖励 "0"'})).encode()
+        context = operation_log.mcp_context(quote('{"tool":"rev_call"}'), quote("核对领奖覆盖"))
+        self.assertEqual(history.submit(wire, context), gm)
+        history.response("POST", "/call", gm, 202, b"{}", session)
+        history.response("GET", "/jobs/" + gm, None, 200, json.dumps(dict(id=gm, pending=True)).encode(), session)
+        for number, action in enumerate(("runtime.capabilities", "story.state", "runtime.performance.state"), 1):
+            other = f"{number:032x}"
+            history.submit(json.dumps(dict(id=other, action=action, payload={})).encode(), context)
+            result = json.dumps(dict(id=other, sessionId=session, success=True, data={"details": "机读回执"})).encode()
+            history.response("GET", "/jobs/" + other, None, 200, result, session)
+        history.page({})
+        history.plan_finished(dict(success=False, steps=1, cleanup=2))
+        console.emit.assert_not_called()
+        final = json.dumps(dict(id=gm, sessionId=session, success=True,
+                                data={"success": True, "elapsedMs": 1.25, "message": "详细数据"})).encode()
+        history.response("GET", "/jobs/" + gm, None, 200, final, session)
+        history.response("GET", "/jobs/" + gm, None, 200, final, session)
+        history.response("POST", "/jobs/" + gm + "/ack", None, 200, b"{}", session)
+        console.emit.assert_called_once_with("RevGM", 'RevGame/选奖励 "0" · 意图 核对领奖覆盖 · 成功 · 1.25 ms')
+        gm_row = next(row for row in history.page({})["events"] if row["action"] == "gm.exec")
+        self.assertEqual((gm_row["tool"], gm_row["message"]), ("rev_call", "详细数据"))
+
+    def test_long_command_and_missing_receipt_still_get_one_short_line(self):
+        """长参数省略正文，拿不到回执要明确展示状态和等待时间。"""
+        console = Mock()
+        history = operation_log.OperationLog(console)
+        job = "c" * 32
+        command = 'RevGame/自动化开始 "' + "Z" * 80000 + '"'
+        body = json.dumps(dict(id=job, action="gm.exec", payload={"command": command})).encode()
+        self.assertEqual(history.submit(body, {}), job)
+        history.response("POST", "/call", job, 504, b"{}", "a" * 32)
+        console.emit.assert_called_once()
+        self.assertRegex(console.emit.call_args.args[1], r"^RevGame/自动化开始 \[长参数略\] · 意图 未提供 · 未获回执 · 等待 \d+ ms$")
 
     def test_activity_never_decodes_large_game_artifact(self):
         """含截图等大字段时只取接单头部，ANSI 控制符不会跟随消息输出。"""

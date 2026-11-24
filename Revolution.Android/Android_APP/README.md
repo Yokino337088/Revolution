@@ -53,7 +53,13 @@ python Revolution.RevMCP/rev_mcp.py --runtime-endpoint $endpoint --full run Revo
 
 ## 电脑控制台
 
-服务窗口用不同颜色标出 MCP、RevGM、安卓、回执、性能和失败。连接时显示监听地址、包名、进程和 Build ID。工单日志使用真实的 MCP 工具名、计划步骤、GM 命令、耗时及游戏返回数据，`rev_run` 完成后显示实际断言和收尾结论。性能采样完成后打印 FPS、P50/P95/P99、样本数、真实时长、失焦及错误。旧版 RevMCP 只提供游戏动作和回执，升级至同版本插件可显示 MCP 来源。终端重定向时默认为纯文本，可用 `--color always` 或 `--color never` 切换。
+连接时显示监听地址、配对提示和可供 Agent 绑定的端点。测试开始后，**每条 RevGM 指令只在结案时打印一行**，内容是实际命令、Agent 声明的意图、结果和耗时。示例：
+
+```text
+22:24:06 [RevGM] RevGame/快照 · 意图 核对当前大厅 · 成功 · 1.25 ms
+```
+
+命令时间优先使用游戏报告的 GM 执行毫秒。失败或缺少执行时长时显示电脑等待时间。旧版 RevMCP 或调用者未提供意图时显示「未提供」。状态轮询和计划断言的结果在 RevMCP 回执中查看，手机仍可打开「Agent 操作记录」。终端重定向时默认为纯文本，可用 `--color always` 或 `--color never` 切换。
 
 ## 真机性能压测
 

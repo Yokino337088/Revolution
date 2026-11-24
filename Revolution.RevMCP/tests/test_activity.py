@@ -6,11 +6,12 @@ import tempfile
 import threading
 import unittest
 from unittest.mock import patch
+from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT.parent / "Revolution.RevCLI")]
 from revmcp.activity import Activity
-from revmcp.backends import Hub
+from revmcp.backends import Hub, RuntimeClient
 from revmcp.workflow import run
 from revmcp.schema import object_schema
 from revmcp.server import Server
@@ -23,6 +24,23 @@ def rows(folder):
 
 
 class ActivityTests(unittest.TestCase):
+    def test_android_gm_intent_is_only_sent_in_a_local_request_header(self):
+        """真实 RuntimeClient 组装中文意图，保留原业务载荷，非 GM 查询不带该头。"""
+        with tempfile.TemporaryDirectory() as folder:
+            endpoint = Path(folder) / "runtime.json"
+            endpoint.write_text(json.dumps(dict(url="http://127.0.0.1:1234", protocol=1, token="test",
+                                                sessionId="test", companionActivity=True)), encoding="utf-8")
+            client = RuntimeClient(endpoint, activity_context={"intent": "核对当前大厅", "mcpTool": "rev_call"})
+            with patch.object(client.opener, "open") as transport:
+                transport.return_value.__enter__.return_value.read.return_value = b"{}"
+                action = dict(action="gm.exec", payload={"command": "RevGame/快照"})
+                client.request("POST", "/call", action)
+                request = transport.call_args.args[0]
+                self.assertEqual(unquote(request.get_header("X-rev-intent")), "核对当前大厅")
+                self.assertEqual(json.loads(request.data), action)
+                client.request("POST", "/call", dict(action="story.state", payload={}))
+                self.assertIsNone(transport.call_args.args[0].get_header("X-rev-intent"))
+
     def test_start_is_visible_before_completion_and_updates_same_identity(self):
         with tempfile.TemporaryDirectory() as folder:
             activity = Activity(folder)

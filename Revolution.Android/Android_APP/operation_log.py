@@ -9,6 +9,7 @@ import re
 import sys
 import threading
 import time
+from urllib.parse import unquote
 
 # 仓库和官方插件将 Android 工具和 RevMCP 并排放置，共用脱敏规则。
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "Revolution.RevMCP"))
@@ -23,6 +24,8 @@ READ_LIMIT = 64 * 1024
 CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]")
 # 游戏返回的请求编号固定为 32 位十六进制。
 JOB_ID = re.compile(r"[0-9a-f]{32}")
+# 控制台只输出 GM 的终态。等待中的状态仍用于手机历史。
+OUTCOMES = {"success": "成功", "failed": "失败", "cancelled": "取消或超时", "unknown": "未获回执"}
 
 
 def line(text, limit=384):
@@ -73,8 +76,7 @@ class Console:
     """后台写入彩色控制台；终端慢时最多缓存 512 行，不拖慢游戏工单。"""
 
     # 颜色只分配给接线器自己的短标签。
-    COLORS = {"MCP": "96", "RevGM": "95", "安卓": "36", "回执": "92",
-              "性能": "93", "警告": "33", "失败": "91"}
+    COLORS = {"RevGM": "95", "安卓": "36"}
 
     def __init__(self, color):
         """启动一个轻量终端写线程，游戏的网络线程只投递短行。"""
@@ -144,6 +146,8 @@ class Event:
     arguments: str
     # 接单时关联的本地 MCP 工具名，可为空。
     tool: str
+    # Agent 为本次 GM 声明的意图。旧客户端没有这个字段时留空。
+    intent: str
     # 转交、接单和终态字面值由手机列表映射。
     state: str = "delivering"
     # Unity 返回的结果摘要。
@@ -181,37 +185,38 @@ class OperationLog:
             self.console.emit(tag, value)
 
     def submit(self, body, context):
-        """记录电脑实际提交的业务工单及合法 MCP 上下文。"""
+        """记录已提交的工单供手机查询，控制台等到 GM 有终态才输出。"""
         request = envelope(body, b"payload")
         job, action = request.get("id"), request.get("action")
         if not isinstance(job, str) or not JOB_ID.fullmatch(job) or not isinstance(action, str) or not action:
             return None
         payload = request.get("payload")
+        if action == "gm.exec" and payload is None and len(body) > READ_LIMIT:
+            # 电脑接线器已限制请求体大小。长 GM 仍需取到合法命令名，长结果继续只看外层。
+            try:
+                payload = json.loads(body).get("payload")
+            except (ValueError, RecursionError):
+                payload = None
         arguments = ""
         if isinstance(payload, dict) and payload:
             arguments = line(payload.get("command")) if action == "gm.exec" else json_preview(payload, 384)
         tool = line(context.get("tool"), 128)
-        plan = line(context.get("plan"), 120)
-        step = line(context.get("step"), 100)
-        phase = line(context.get("phase"), 32)
+        intent = line(context.get("intent"), 256) if action == "gm.exec" else ""
         with self.lock:
             if job in self.jobs:
                 return job
             self.latest += 1
             self.revision += 1
             self.events[self.latest] = (job, Event(self.latest, time.time_ns() // 1_000_000,
-                                                    time.monotonic(), line(action), arguments, tool))
+                                                    time.monotonic(), line(action), arguments, tool, intent))
             self.jobs[job] = self.events[self.latest][1]
             expired = self.events.pop(self.latest - CAPACITY, None)
             if expired:
                 self.jobs.pop(expired[0], None)
-        prefix = " ".join(part for part in (tool or "运行时 HTTP", plan, phase, step) if part)
-        self.emit("RevGM" if action == "gm.exec" else "MCP",
-                  f"{job[:8]} {prefix} · {arguments if action == 'gm.exec' else action + ' ' + arguments}")
         return job
 
     def response(self, method, path, submitted, status, body, session):
-        """收集游戏真实终态，不把 HTTP 202 或轮询中状态显示成成功。"""
+        """核对实际工单终态。HTTP 202、轮询和确认只更新原记录。"""
         if submitted:
             if status == 202:
                 self._update(submitted, "accepted")
@@ -245,37 +250,42 @@ class OperationLog:
             state = "cancelled"
         elif error == "ResultExpired":
             state = "unknown"
-        self._update(job, state, reply.get("message") or error or "",
-                     reply.get("data"), original_bytes=len(body))
+        self._update(job, state, reply.get("message") or error or "", reply.get("data"))
 
-    def _update(self, job, state, message="", data=None, original_bytes=0):
-        """以同一序号更新工单，只在取到终态时打印耗时和结果。"""
-        done = state in {"success", "failed", "cancelled", "unknown"}
+    def _update(self, job, state, message="", data=None):
+        """更新手机历史。GM 到达终态时只写一次具体命令、意图、结果和耗时。"""
         with self.lock:
             item = self.jobs.get(job)
-            if item is None or item.state == state or item.state in {"success", "failed", "cancelled", "unknown"}:
+            if item is None or item.state == state or item.state in OUTCOMES:
                 return
             message = line(message)
-            if item.action == "gm.exec" and isinstance(data, dict) and data.get("message"):
-                message = line(data["message"])
+            if item.action == "gm.exec" and isinstance(data, dict):
+                if state == "success" and data.get("success") is False:
+                    state = "failed"
+                if data.get("message"):
+                    message = line(data["message"])
             item.state = state
             item.message = "" if state == "success" and message == "完成" else message
             self.revision += 1
-        if done:
-            tag, result = describe_result(item.action, data, original_bytes)
-            if state != "success":
-                tag = "失败" if state == "failed" else "警告"
-            elapsed = round((time.monotonic() - item.started) * 1000)
-            caption = {"success": "完成", "failed": "失败", "cancelled": "取消或超时", "unknown": "未获回执"}[state]
-            self.emit(tag, f"{job[:8]} {item.action} · {caption} · {elapsed} ms {item.message} {result}".rstrip())
+        outcome = OUTCOMES.get(state)
+        if outcome and item.action == "gm.exec" and item.arguments:
+            # 普通参数保留原命令行。很长的计划正文只显示命令名，避免每条 GM 再刷屏。
+            command = item.arguments
+            if len(command) > 120:
+                command = command.split(maxsplit=1)[0] + " [长参数略]"
+            # 有游戏回执时优先读 Unity 的 GM 耗时。无该字段时标明电脑实际等待时间。
+            elapsed = data.get("elapsedMs") if isinstance(data, dict) else None
+            if type(elapsed) in (int, float) and 0 <= elapsed < float("inf"):
+                duration = f"{elapsed:.2f} ms"
+            else:
+                duration = f"等待 {round((time.monotonic() - item.started) * 1000)} ms"
+            self.emit("RevGM", f"{command} · 意图 {item.intent or '未提供'} · {outcome} · {duration}")
 
     def page(self, data):
         """首次读取或回到顶部取最新一页，向下滚动按 before 取更早的记录。"""
         before, revision = data.get("before", 0), data.get("revision", -1)
         if type(before) is not int or type(revision) is not int or before < 0 or revision < -1:
             raise ValueError("Invalid activity cursor")
-        if before == 0 and revision == -1:
-            self.emit("安卓", "手机请求操作记录首屏")
         with self.lock:
             self.reads += 1
             oldest = max(1, self.latest - CAPACITY + 1)
@@ -291,56 +301,24 @@ class OperationLog:
             return {"operations": self.latest, "activityReads": self.reads}
 
     def plan_finished(self, data):
-        """打印 RevMCP 的计划及断言结论，与来自游戏的单条操作回执一起显示。"""
+        """继续接收旧 RevMCP 的计划结论，终端只显示单条 GM 的终态。"""
         if type(data.get("success")) is not bool:
             raise ValueError("Invalid MCP plan summary")
-        success = data["success"]
         steps, cleanup = data.get("steps", 0), data.get("cleanup", 0)
         if type(steps) is not int or type(cleanup) is not int or min(steps, cleanup) < 0:
             raise ValueError("Invalid MCP plan counts")
-        self.emit("MCP" if success else "失败",
-                  f"rev_run · {line(data.get('name'), 160)} · {'通过' if success else '未通过'} · "
-                  f"业务步骤 {steps}，收尾步骤 {cleanup} "
-                  f"{line(data.get('failure'), 300)}".rstrip())
 
 
-def describe_result(action, data, original_bytes):
-    """让性能、设备、能力目录和普通测试回执都在控制台显示重点字段。"""
-    if data is None:
-        return "回执", f"回执 {original_bytes:,} 字节，完整内容见 RevMCP" if original_bytes > READ_LIMIT else ""
-    if not isinstance(data, dict):
-        return "回执", json_preview(data)
-    if action == "runtime.capabilities":
-        return "MCP", f"注册动作 {len(data.get('actions', []))} 项，RevGM {len(data.get('commands', []))} 条"
-    if action.startswith("runtime.performance."):
-        keys = (("status", "状态"), ("runId", "编号"), ("seconds", "实测秒数"), ("frames", "帧"),
-                ("fps", "FPS"), ("p50Ms", "P50(ms)"), ("p95Ms", "P95(ms)"), ("p99Ms", "P99(ms)"),
-                ("maxMs", "最长(ms)"), ("gpuP95Ms", "GPU P95(ms)"), ("gpuSamples", "GPU样本"),
-                ("unfocusedFrames", "失焦"),
-                ("errors", "错误"))
-        if data.get("status") in {"running", "idle"}:
-            # 统计窗未结束时，报告中的默认零值不代表实际帧率。
-            keys = keys[:4]
-        fields = []
-        for key, label in keys:
-            if key in data:
-                value = data[key]
-                fields.append(f"{label} {value:.2f}" if type(value) is float else f"{label} {value}")
-        if fields:
-            kind = "固定采样" if "status" in data or "runId" in data else "滚动窗口"
-            return "性能", " · ".join([kind, *fields])
-    return ("安卓" if action == "runtime.android.device" else "回执"), json_preview(data)
-
-
-def mcp_context(header):
-    """接收可选的 MCP 工具标识。未知或非 ASCII 的头不会影响游戏请求。"""
-    from urllib.parse import unquote
+def mcp_context(header, intent_header=""):
+    """读取电脑 RevMCP 发来的有界记录头。缺失或无效头不影响游戏请求。"""
+    result = {}
     if len(header) <= 2048:
         try:
             context = json.loads(unquote(header))
-            if isinstance(context, dict):
-                return {key: context.get(key) for key in ("tool", "plan", "step", "phase")
-                        if isinstance(context.get(key), str)}
+            if isinstance(context, dict) and isinstance(context.get("tool"), str):
+                result["tool"] = context["tool"]
         except (ValueError, RecursionError):
             pass
-    return {}
+    if 0 < len(intent_header) <= 4096:
+        result["intent"] = unquote(intent_header)
+    return result

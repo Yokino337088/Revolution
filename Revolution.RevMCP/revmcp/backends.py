@@ -22,7 +22,7 @@ import uuid
 from revautomation.client import RevClient, RevError, RevCancelled, read_json
 from revautomation.cli import editor_outcome, validate_action
 from .schema import validate, check_schema, object_schema
-from .activity import Activity
+from .activity import Activity, safe_text
 from .reporting import check_output_path, workspace_for
 from revautomation import player
 
@@ -43,7 +43,7 @@ class RuntimeClient:
         self.activity_context = activity_context or {}
 
     def request(self, method, path, data=None):
-        """发送有长度限制的运行时请求，工单元数据不进入业务参数。"""
+        """发送有长度限制的运行时请求，GM 意图只随电脑端的记录头传递。"""
         body = json.dumps(data, ensure_ascii=False, allow_nan=False).encode("utf-8") if data is not None else None
         headers = {"Authorization": "Bearer " + self.endpoint["token"], "X-Rev-Session": self.endpoint["sessionId"],
                    "Content-Type": "application/json"}
@@ -54,6 +54,10 @@ class RuntimeClient:
             if metadata:
                 headers["X-Rev-MCP"] = urllib.parse.quote(
                     json.dumps(metadata, ensure_ascii=False, separators=(",", ":")), errors="replace")
+            # 分开承载意图，保留老接线器对既有 MCP 上下文头的读取能力。
+            intent = self.activity_context.get("intent")
+            if isinstance(data, dict) and data.get("action") == "gm.exec" and isinstance(intent, str) and intent.strip():
+                headers["X-Rev-Intent"] = urllib.parse.quote(safe_text(intent.strip(), 256), safe="", errors="replace")
         req = urllib.request.Request(self.endpoint["url"].rstrip("/") + path, body, method=method, headers=headers)
         try:
             with self.opener.open(req, timeout=min(5, self.timeout)) as response:
