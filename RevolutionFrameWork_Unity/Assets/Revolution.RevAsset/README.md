@@ -6,10 +6,12 @@ RevAsset 是 Revolution 的可选资源后端。它用 Unity 原生 AssetBundle 
 
 需要 Unity 2022.3 LTS 与含 RevAsset 后端装配 API 的 Revolution 框架。放入 `Assets/Revolution.RevAsset`，或在 Package Manager 添加 Git URL `https://github.com/Yokino337088/Revolution.git?path=/RevolutionFrameWork_Unity/Assets/Revolution.RevAsset#main`。框架可以从本仓库的原生 package 导出安装。
 
-1. 打开 `Revolution.Tools → 资源 → RevAsset`，选择 RevAsset。
-2. 选择真实资源目录并预览分包。已有原生标签会参与采集，细粒度规则可覆盖文件、子目录、变体或逻辑地址。
-3. 初次使用可在编辑器打开模拟。真实 AB 使用对应平台的「构建并准备首包」，关闭模拟后再次进入 Play。
-4. 使用 Unity 或 RevCLI 选择目标平台构建 Player。框架保留该目标首包的脚本和对象。切换到「Revolution 内置」可恢复已有项目的资源工作流。
+1. 打开 `Revolution.Tools → 资源 → RevAsset`，在「项目设置」选择 RevAsset。第一次可开启「编辑器模拟」。
+2. 在「分包规则」设置资源目录并点「预览分包」。用「原生包」和「逻辑地址」分别核对包的归属及业务使用的地址。
+3. 在「构建与发布」选择本机平台并点「构建并准备首包」。回到「项目设置」关闭模拟，再进入 Play 验证真实 AB。
+4. 使用 Unity 或 RevCLI 选择正式目标并构建 Player。框架保留该平台首包的脚本和对象。项目后端可切回「Revolution 内置」。
+
+顶部「使用说明」可打开按「总论、分论、总结」编排的新手文档。 [RevAsset Wiki 目录](https://github.com/Yokino337088/Revolution/wiki/RevAsset)
 
 ## 从逻辑路径加载
 
