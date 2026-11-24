@@ -9,6 +9,198 @@
     "play": "图形编辑器中未暂停的 Play"
   },
   "actions": [
+    {
+      "id": "revasset.status",
+      "description": "查询项目资源后端、模拟模式、内容包与分包规则",
+      "environment": "either",
+      "keys": [],
+      "readOnly": true,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "revasset.select",
+      "description": "选择 RevAsset 或框架自带资源后端",
+      "environment": "edit",
+      "keys": [
+        "enabled",
+        "simulation"
+      ],
+      "readOnly": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "simulation": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "revasset.configure",
+      "description": "设置资源根、包名、兼容代号、首包标签与热更新频道",
+      "environment": "edit",
+      "keys": [
+        "addressRoot",
+        "package",
+        "compatibility",
+        "channel",
+        "publicKey",
+        "builtinTags"
+      ],
+      "readOnly": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "addressRoot": {
+            "type": "string"
+          },
+          "package": {
+            "type": "string"
+          },
+          "compatibility": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "publicKey": {
+            "type": "string"
+          },
+          "builtinTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "revasset.rule",
+      "description": "保存或更新单条资源采集、地址和分包规则",
+      "environment": "edit",
+      "keys": [
+        "path",
+        "packing",
+        "bundle",
+        "variant",
+        "address",
+        "tags"
+      ],
+      "readOnly": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "packing": {
+            "type": "string"
+          },
+          "bundle": {
+            "type": "string"
+          },
+          "variant": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "path",
+          "packing"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "revasset.plan",
+      "description": "预览资源采集、包归属、地址、标签与隐式共享依赖",
+      "environment": "edit",
+      "keys": [
+        "offset",
+        "limit"
+      ],
+      "readOnly": true,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "offset": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "revasset.build",
+      "description": "使用原生 AB 构建并准备首包或签名频道",
+      "environment": "edit",
+      "keys": [
+        "version",
+        "revision",
+        "target",
+        "builtin",
+        "destination",
+        "signingKeyPath"
+      ],
+      "readOnly": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "target": {
+            "type": "string"
+          },
+          "builtin": {
+            "type": "boolean"
+          },
+          "destination": {
+            "type": "string"
+          },
+          "signingKeyPath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "revision"
+        ],
+        "additionalProperties": false
+      }
+    },
     {"id":"gal.story.create","keys":["path","id","title","bundle"],"description":"创建 Revolution.Gal 剧情 SO 模板","environment":"edit","readOnly":false},
     {"id":"gal.story.quickstart","keys":["path","id","title","bundle","checkOnly"],"description":"根据现存资源根创建或重新打开两条路线的入门剧情 SO","environment":"edit","readOnly":false},
     {"id":"gal.story.generate","keys":["document","path","bundle","checkOnly","overwrite"],"description":"校验剧情 JSON，按剧情 ID 生成 SO 并回传逻辑路径和 AB 名","environment":"edit","readOnly":false},
@@ -1954,7 +2146,20 @@
     "operations": "string[]",
     "redirect": "string",
     "expectedHash": "string",
-    "font": "string"
+    "font": "string",
+    "version": "string",
+    "revision": "int",
+    "builtin": "bool",
+    "signingKeyPath": "string",
+    "addressRoot": "string",
+    "builtinTags": "string[]",
+    "compatibility": "string",
+    "publicKey": "string",
+    "address": "string",
+    "packing": "string",
+    "tags": "string[]",
+    "variant": "string",
+    "simulation": "bool"
   },
   "configFields": {
     "ab": [
