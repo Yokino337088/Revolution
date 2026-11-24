@@ -34,7 +34,10 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests
-      - run: sdkmanager "platforms;android-35" "build-tools;34.0.0"
+      - name: 准备 Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;34.0.0'
       - run: ./gradlew --no-daemon :app:lintDebug :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
