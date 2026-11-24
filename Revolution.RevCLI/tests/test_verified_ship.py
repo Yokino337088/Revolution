@@ -66,6 +66,28 @@ class VerifiedShipTests(unittest.TestCase):
         actual["keys"] += ["extra"]
         self.assertFalse(contracts.audit(offline, {"protocol": 1, "actions": [actual]})["success"])
 
+    def test_ship_uses_selected_resource_backend(self):
+        """已安装的扩展只在项目选择后成为首包构建入口。"""
+        for selected, expected in (("revasset", "revasset.build"), ("builtin", "ab.build")):
+            calls = []
+
+            def invoke(client, action, payload, confirm):
+                """使用实际发现动作与项目选择的回执结构。"""
+                calls.append((action, payload))
+                responses = {
+                    "editor.capabilities": {"actions": [{"id": "revasset.status"}]},
+                    "revasset.status": {"backend": selected},
+                    "revasset.build": {"builtin": True, "bundles": 1},
+                }
+                return {"success": True, "data": responses.get(action, {})}
+
+            result = ship.run(None, invoke=invoke, discover_resource_backend=True,
+                              revasset_version="1.1", revasset_revision=2)
+            self.assertTrue(result["success"])
+            self.assertEqual(calls[-1][0], expected)
+            if selected == "revasset":
+                self.assertEqual(calls[-1][1], {"version": "1.1", "revision": 2, "builtin": True})
+
     def test_failed_smoke_still_closes_owned_play(self):
         """动作回执失败后仍关闭本次启动的 Play，阻止构建 Player。"""
         actions = []

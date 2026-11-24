@@ -1,0 +1,9 @@
+{
+  "name": "com.revolution.revasset",
+  "displayName": "Revolution RevAsset",
+  "version": "0.1.0",
+  "unity": "2022.3",
+  "description": "可选的原生 AssetBundle 采集、分包、加载与签名热更新后端。需要 Revolution 框架。",
+  "license": "MIT",
+  "dependencies": {}
+}

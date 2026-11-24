@@ -1,0 +1,8 @@
+{
+    "name": "Revolution.RevAsset",
+    "rootNamespace": "Revolution.RevAsset",
+    "references": [
+        "Revolution.Runtime"
+    ],
+    "includePlatforms": []
+}

@@ -855,6 +855,7 @@ RevResBootstrap.Instance.ShutdownAll();           <span class="c">// 回登录�
     <p>热更在候选校验时关联清单、映射和对应包。活动版本使用完整快照，可配置发布公钥让下载和重启恢复都验证来源。</p>
     <p><code>RevResMap</code> 建表时拆好包名和包内名称，并归并重复包名。普通 AB 冷请求直接使用共享地址，热缓存直接返回句柄。在途合并复用已经算出的键和逻辑路径。<code>RealPath</code> 继续为诊断提供文本。</p>
   </section>
+<section id="revasset"><h2>可选后端的装配与换版</h2><p>可选后端同时提供逻辑地址和只读包来源。原生加载器记录本次取得的依赖，随资源句柄归还。空闲交接按真实租约和在途请求选择何时换版。<a href="https://github.com/Yokino337088/Revolution/blob/main/Revolution.Document/RevAsset/资源热更新如何安全换版.md">RevAsset 实测案例</a>。</p></section>
 </main>
 
 <footer>

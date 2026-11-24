@@ -415,6 +415,10 @@ finally
 
 🔎 导表之后，数据文件仍要进入项目的 AB 规则和 `ResMap`。这样编辑器直读、真包加载和资源热更都能沿同一个逻辑路径找到表。RevGame 的新台词案例把这条链从源表核到了实际 AB 画面，策划就能明确这次改动已经到了游戏哪一步。📦
 
+### 📦 RevAsset · 可选资源后端
+
+RevAsset 将资源采集、原生 AB、首包分配与签名热更新装在同一个可选扩展中。项目可以在编辑器面板选择后端，并用 RevCLI 预览、分包和发布。业务接着用 RevResManager、RevUI 和 RevScope 持有、预热与释放资源。 [安装与使用](RevolutionFrameWork_Unity/Assets/Revolution.RevAsset/README.md) · [开发 Skill](Skills/revolution-revasset/SKILL.md)
+
 ### 🔄 RevHotUpdate · 把资源更新送到客户端
 
 📡 **RevHotUpdate** 是可选的资源热更新扩展。它读取远端清单，比对版本与包的变化，下载需要的 AB，核对尺寸与 SHA-256，再按完整性检查激活资源版本。已有的 `RevResManager` 逻辑路径继续使用，图、音频和配置因此可以随资源版本更新。客户端 C# 代码仍按自己的构建交付流程发布。 [资源热更使用说明](Revolution.Document/热更新/RevHotUpdate使用说明.md)

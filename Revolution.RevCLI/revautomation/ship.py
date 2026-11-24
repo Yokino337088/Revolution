@@ -49,7 +49,7 @@ def smoke_runner(entry, project, plan, timeout):
 
 def run(client, target=None, excel="none", ab=True, player=None, backend="current", development=False,
         automation=False, frame_timing=False, confirm=False, force=False, skip_invalid=False, invoke=None,
-        verified=False, smoke=None) -> dict:
+        verified=False, smoke=None, discover_resource_backend=False, revasset_version="local", revasset_revision=1) -> dict:
     """执行常规出包；verified 使用本次完整编译和同平台 AB 回执，smoke 为业务真实验收。"""
     if excel not in EXCEL_MODES:
         raise RevError("excel 必须为 none/full/data。")
@@ -85,6 +85,20 @@ def run(client, target=None, excel="none", ab=True, player=None, backend="curren
     ok, _ = step("等待编辑器就绪", "editor.wait")
     if not ok:
         return finish(False, "编辑器未就绪，未执行任何构建步骤")
+    use_revasset = False
+    if ab and discover_resource_backend:
+        # 只使用当前工程实际注册的扩展，离线工具的命令清单不代表扩展已经安装。
+        ok, directory = step("发现资源构建动作", "editor.capabilities")
+        if not ok:
+            return finish(False, "读取工程资源能力失败")
+        actions = (directory.get("data") or {}).get("actions", ())
+        if any(action.get("id") == "revasset.status" for action in actions):
+            ok, state = step("读取项目资源后端", "revasset.status")
+            resource_backend = ((state or {}).get("data") or {}).get("backend")
+            if not ok or resource_backend not in ("builtin", "revasset"):
+                steps[-1]["success"] = False
+                return finish(False, "项目资源后端状态不可用")
+            use_revasset = resource_backend == "revasset"
     if player or verified:
         # 放在最前面：Player 构建会拒绝未保存场景。不提前查的话，要等导表和 AB 跑完几分钟才失败。
         ok, opened = step("检查场景已保存", "scene.list")
@@ -116,7 +130,7 @@ def run(client, target=None, excel="none", ab=True, player=None, backend="curren
             if (report.get(key) or {}).get("level") == "Error":
                 steps[-1]["success"] = False
                 return finish(False, f"导表输出目录有问题（{key}）：{report[key].get('message')}")
-        if ab and not report.get("bundle") and not report.get("autoByFolder"):
+        if ab and not use_revasset and not report.get("bundle") and not report.get("autoByFolder"):
             # 数据目录不在任何包里，运行时读不到表，AB 校验也会拦下。
             steps[-1]["success"] = False
             return finish(False, "数据目录没有 AB 标记：先 excel.mark（参数 bundle）标记后再打包")
@@ -151,7 +165,16 @@ def run(client, target=None, excel="none", ab=True, player=None, backend="curren
         if not ok or diagnostic.get("requestId") != request["id"] or diagnostic.get("finished") is not True or diagnostic.get("failed") is not False:
             steps[-1]["success"] = False
             return finish(False, "编译诊断与工单不符或编译失败")
-    if ab and verified:
+    if ab and use_revasset:
+        payload = dict(version=revasset_version, revision=revasset_revision, builtin=True)
+        if target:
+            payload["target"] = target
+        ok, response = step("构建 RevAsset 首包", "revasset.build", payload)
+        data = (response or {}).get("data") or {}
+        if not ok or data.get("builtin") is not True or data.get("bundles", 0) <= 0 or (target and data.get("target") != target):
+            steps[-1]["success"] = False
+            return finish(False, "RevAsset 首包构建失败或回执不符")
+    elif ab and verified:
         payload = dict(target=target)
         for name, action in (("校验平台资源", "ab.validate"), ("增量构建 AB", "ab.build-incremental"),
                              ("检查映射", "ab.check-map"), ("增量发布 AB", "ab.publish-incremental")):

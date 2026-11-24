@@ -1,0 +1,15 @@
+{
+    "name": "Revolution.RevAsset.Tests",
+    "rootNamespace": "Revolution.RevAsset.Tests",
+    "references": [
+        "Revolution.RevAsset",
+        "Revolution.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "autoReferenced": false
+}

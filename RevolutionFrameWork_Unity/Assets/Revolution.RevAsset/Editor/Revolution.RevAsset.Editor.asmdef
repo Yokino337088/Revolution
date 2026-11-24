@@ -1,0 +1,12 @@
+{
+    "name": "Revolution.RevAsset.Editor",
+    "rootNamespace": "Revolution.RevAsset.Editor",
+    "references": [
+        "Revolution.RevAsset",
+        "Revolution.Runtime",
+        "Revolution.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ]
+}

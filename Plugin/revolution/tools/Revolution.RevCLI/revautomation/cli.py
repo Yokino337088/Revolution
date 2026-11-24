@@ -60,6 +60,8 @@ def _build_parser():
     shipping.add_argument("--target", help="如 StandaloneWindows64 / Android；不给则用当前平台")
     shipping.add_argument("--excel", choices=("none", "full", "data"), default="none", help="导表方式；full 会生成代码并等待编译")
     shipping.add_argument("--no-ab", action="store_true", help="跳过 AB 打包")
+    shipping.add_argument("--revasset-version", default="local", help="选用 RevAsset 时的首包显示版本")
+    shipping.add_argument("--revasset-revision", type=int, default=1, help="选用 RevAsset 时的首包发布序号")
     shipping.add_argument("--player", type=Path, help="Player 输出的完整路径，必须在新建空目录下；不给则不构建 Player")
     shipping.add_argument("--backend", choices=("current", "mono", "il2cpp"), default="current")
     shipping.add_argument("--development", action="store_true")
@@ -204,8 +206,17 @@ def _build_parser():
                 action.add_argument("--" + flag)
             for flag in ("offset", "limit", "index"):
                 action.add_argument("--" + flag, type=int)
-            if family in ("ab", "hot", "build", "platform"):
+            if family in ("ab", "hot", "build", "platform") or (family, operation) == ("revasset", "build"):
                 action.add_argument("--target", help="如 StandaloneWindows64 / Android / WebGL")
+            if (family, operation) == ("revasset", "build"):
+                action.add_argument("--version", help="显示给玩家和发行人员的内容版本")
+                action.add_argument("--revision", type=int, help="每次内容发布递增的序号")
+                action.add_argument("--builtin", action=argparse.BooleanOptionalAction, default=None, help="是否准备 Player 首包")
+                action.add_argument("--signing-key-path", help="项目资产外的本地 RSA XML 私钥")
+            if (family, operation) == ("revasset", "rule"):
+                action.add_argument("--packing", choices=("NativeOrFolder", "Together", "ByFolder", "ByAsset", "Exclude"))
+                action.add_argument("--bundle")
+                action.add_argument("--tag", dest="revasset_tags", action="append")
             if family == "build" and operation == "player":
                 action.add_argument("--backend", choices=("current", "mono", "il2cpp"))
                 action.add_argument("--development", action="store_true", default=None)
@@ -248,6 +259,12 @@ def payload_of(args):
                       *((key, key) for key in ("id", "query", "type", "name", "destination", "parent", "property", "text", "value", "kind", "offset", "limit", "index", "tag", "layer"))):
         value = getattr(args, attr, None)
         if value is not None:
+            data[key] = value
+    for attr, key in (("version", "version"), ("revision", "revision"), ("builtin", "builtin"),
+                      ("signing_key_path", "signingKeyPath"), ("packing", "packing"), ("bundle", "bundle"),
+                      ("revasset_tags", "tags")):
+        value = getattr(args, attr, None)
+        if getattr(args, "family", None) == "revasset" and value is not None:
             data[key] = value
     for key, attr in (("dataOnly", "data_only"), ("force", "force"), ("validateOnly", "validate_only")):
         if getattr(args, attr, False):
@@ -657,7 +674,8 @@ def main(argv=None):
                 smoke = ship.smoke_runner(ROOT.parent / "Revolution.RevMCP/rev_mcp.py", client.project, read_json(args.verify_plan), client.timeout)
             result = ship.run(client, args.target, args.excel, not args.no_ab, args.player, args.backend, args.development,
                               args.automation, args.frame_timing, args.confirm, args.force, args.skip_invalid, quiet,
-                              verified=args.verified or smoke is not None, smoke=smoke)
+                              verified=args.verified or smoke is not None, smoke=smoke, discover_resource_backend=True,
+                              revasset_version=args.revasset_version, revasset_revision=args.revasset_revision)
         elif args.family == "game":
             from . import game
             payload = None
