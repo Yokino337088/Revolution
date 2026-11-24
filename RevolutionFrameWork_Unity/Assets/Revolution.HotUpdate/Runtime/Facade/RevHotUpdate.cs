@@ -205,11 +205,10 @@ namespace Revolution.HotUpdate
                 Func<RevHotSource, string> manifestUrl = delegate(RevHotSource source) { return RevHotUrlBuilder.ManifestUrl(config, source.Root); };
                 string manifestText = await RevHotDownloader.FetchTextAsync(config, manifestUrl, token);
 
-                RevHotManifest remote = RevHotManifest.Parse(manifestText, out string parseError);
+                RevHotManifest remote = ParsePublishedManifest(manifestText, config, out string parseError);
                 if (remote == null)
                 {
-                    string detail = "清单前 200 字：" + (manifestText.Length > 200 ? manifestText.Substring(0, 200) : manifestText);
-                    RevHotError invalid = RevHotError.Of(RevHotErrorCode.ManifestInvalid, "版本清单格式错误：" + parseError, detail);
+                    RevHotError invalid = RevHotError.Of(RevHotErrorCode.ManifestInvalid, "版本清单无法验证：" + parseError);
                     return Fail(onProgress, invalid);
                 }
                 string manifestError = remote.ValidateForActivation(config.Platform, config.Channel, config.Env);
@@ -246,6 +245,19 @@ namespace Revolution.HotUpdate
                         ManifestText = manifestText,
                         Config = config,
                     };
+                }
+
+                // 同版本必须保持不可变。版本号被复用时无法安全依赖目录隔离或浏览器缓存。
+                RevHotManifest knownVersion = localBaseline ?? RevHotStore.ActiveManifest;
+                if (knownVersion != null && RevHotVersion.AreEqual(remote.ResVersion, knownVersion.ResVersion) &&
+                    !RevHotPlanner.Build(remote, knownVersion).IsEmpty)
+                {
+                    return Fail(onProgress, RevHotError.Of(RevHotErrorCode.ManifestInvalid, "同一资源版本的内容已变化，请发布新的资源版本"));
+                }
+                if (!string.IsNullOrEmpty(config.ManifestPublicKey) && knownVersion != null &&
+                    RevHotVersion.Compare(remote.ResVersion, knownVersion.ResVersion) < 0)
+                {
+                    return Fail(onProgress, RevHotError.Of(RevHotErrorCode.ManifestInvalid, "远端资源版本低于已验证版本"));
                 }
 
                 // ---------- ⑤ 版本比对 ----------
@@ -331,7 +343,11 @@ namespace Revolution.HotUpdate
             //   业务主路径不经过 InitializeAsync —— 不装的话，更新成功了但加载路径钩子没挂上，
             //   随后加载资源走的还是 StreamingAssets 旧路径（热更"成功"却读不到新内容）。幂等，重复装无害。
             RevHotResBridge.Install();
-            RevHotManifest remote = check.RemoteManifest;
+            RevHotManifest remote = ParsePublishedManifest(check.ManifestText, config, out string manifestParseError);
+            if (remote == null)
+            {
+                return Fail(onProgress, RevHotError.Of(RevHotErrorCode.ManifestInvalid, manifestParseError), clock);
+            }
             string updateManifestError = remote.ValidateForActivation(config.Platform, config.Channel, config.Env);
             if (updateManifestError != null)
                 return Fail(onProgress, RevHotError.Of(RevHotErrorCode.ManifestInvalid, "待激活清单无效：" + updateManifestError), clock);
@@ -339,7 +355,9 @@ namespace Revolution.HotUpdate
             string previousVersion = _localResVersion;
             RevHotManifest previousManifest = RevHotStore.ActiveManifest;
             if (previousManifest == null && RevHotPlatform.SupportsLocalFiles && !string.IsNullOrEmpty(previousVersion))
-                previousManifest = TryParseFile(RevHotStore.ManifestPath(previousVersion));
+            {
+                previousManifest = TryParseFile(RevHotStore.ManifestPath(previousVersion), config);
+            }
             Dictionary<string, string> previousResMap = RevHotStore.ActiveMemoryResMap;
             bool activating = false;
 
@@ -384,13 +402,8 @@ namespace Revolution.HotUpdate
                     await RevHotDownloader.DownloadPlanAsync(check.Plan, config, resVersion, onProgress, token);
                 }
 
-                // URL 型平台：确保"热更映射表"已在内存里（资源系统 Init 时通过钩子取走）。
-                // ★ 不能只在 ResMapChanged 时拉：重启后的新会话内存表必然为空 —— 那时就算本版本
-                //   的表没变，也必须补拉一次，否则热更新增的资源在本次会话全部加载不到。
-                // strict=true：首次安装/更新语义 —— 新版本的表拉不到就算更新失败（可重试）。
-                // force=ResMapChanged：表变了就必须重拉 —— 同一会话的第二次热更时内存里还是旧表，
-                // "已就位就跳过"会让新版本的新增资源全部加载不到（这是文件平台没有的坑：那边的表落盘按版本隔离）。
-                await EnsureWebGLResMapAsync(config, resVersion, true, check.Plan.ResMapChanged, token, remote.ResMap.Sha256);
+                // URL 平台的候选映射在提交前单独持有。任何失败都不会提前改写活动版本。
+                Dictionary<string, string> candidateMap = await ReadWebGLResMapAsync(config, remote, token);
 
                 // ---------- ③ 版本目录补齐（清单副本 + 映射表） ----------
                 _state = RevHotState.Applying;
@@ -399,7 +412,7 @@ namespace Revolution.HotUpdate
                     // 清单原文存一份进版本目录：它是"下次差量计算的基线"，也是回滚 / 排查的证据
                     Directory.CreateDirectory(RevHotStore.VersionDir(resVersion));
                     File.WriteAllText(RevHotStore.ManifestPath(resVersion), check.ManifestText);
-                    await EnsureResMapSnapshotAsync(check, config, resVersion, token);
+                    await EnsureResMapSnapshotAsync(config, remote, token);
                 }
 
                 // ---------- ④ 先验完整候选：每个包/ResMap SHA 与目标清单一致、主包可装载 ----------
@@ -410,8 +423,11 @@ namespace Revolution.HotUpdate
                     RevHotStore.EnsureDiskSpace(remote.TotalBytes());
                     await RevHotStore.ValidateSnapshotAsync(remote, resVersion, token);
                 }
-                else await RevHotStore.ValidateWebGLCandidateAsync(remote, resVersion, token);
-                await RevHotStore.ProbeRequiredAssetsAsync(remote, resVersion, config.RequiredAssets, token);
+                else
+                {
+                    await RevHotStore.ValidateWebGLCandidateAsync(remote, resVersion, token, candidateMap);
+                }
+                await RevHotStore.ProbeRequiredAssetsAsync(remote, resVersion, config.RequiredAssets, token, candidateMap);
                 token.ThrowIfCancelled();
 
                 // ---------- ⑤ 切版本前留恢复日志；旧目录必须保留到重装成功之后 ----------
@@ -435,6 +451,7 @@ namespace Revolution.HotUpdate
                 RevHotStore.WriteCurrentVersion(resVersion);
                 RevHotStore.SetActiveVersion(resVersion);
                 RevHotStore.SetActiveBundleKeys(remote);
+                RevHotStore.SetActiveResMap(candidateMap);
                 _localResVersion = resVersion;
 
                 // Init 不会主动加载主包；候选验证已在上面预先探测主包与所有文件。
@@ -546,6 +563,14 @@ namespace Revolution.HotUpdate
             RevHotCheckResult check = await RunCheckAsync(config, onProgress, token);
             if (check.Success == false)
             {
+                if (!token.IsCancelled)
+                {
+                    RevHotUpdateResult recovered = await TryUseVerifiedLocalAsync(config, check.Error, clock, token);
+                    if (recovered != null)
+                    {
+                        return recovered;
+                    }
+                }
                 return RevHotUpdateResult.Fail(check.Error, clock.Elapsed.TotalSeconds);
             }
 
@@ -566,7 +591,12 @@ namespace Revolution.HotUpdate
 
             if (check.HasUpdate)
             {
-                return await RunUpdateAsync(check, onProgress, token);
+                RevHotUpdateResult updated = await RunUpdateAsync(check, onProgress, token);
+                if (updated.Success || token.IsCancelled)
+                {
+                    return updated;
+                }
+                return await TryUseVerifiedLocalAsync(config, updated.Error, clock, token) ?? updated;
             }
 
             // 无更新同样要检验本地版本：旧包可能损坏，或多轮差量后来源目录已被删除。
@@ -576,34 +606,32 @@ namespace Revolution.HotUpdate
                 try
                 {
                     Directory.CreateDirectory(RevHotStore.VersionDir(check.RemoteManifest.ResVersion));
-                    await EnsureResMapSnapshotAsync(check, config, check.RemoteManifest.ResVersion, token);
+                    await EnsureResMapSnapshotAsync(config, check.RemoteManifest, token);
                     await RevHotStore.ValidateSnapshotAsync(check.RemoteManifest, check.RemoteManifest.ResVersion, token);
+                    File.WriteAllText(RevHotStore.ManifestPath(check.RemoteManifest.ResVersion), check.ManifestText);
                     RevHotStore.MarkVersionComplete(check.RemoteManifest.ResVersion);
                 }
                 catch (RevHotException e) { return Fail(onProgress, e.Error, clock); }
             }
 
-            // ---------- 没有更新：把"生效版本"钉下来即可（首次启动 = 内置基线的版本号） ----------
-            if (string.IsNullOrEmpty(_localResVersion))
-            {
-                // 内置基线的资源版本 = 远端清单的版本（比对一致才会走到这里）
-                string baselineVersion = check.RemoteManifest.ResVersion;
-                _localResVersion = baselineVersion; // 验证并重装成功后才持久化指针
-            }
-
-            RevHotStore.SetActiveVersion(_localResVersion);
-            RevHotStore.SetActiveBundleKeys(check.RemoteManifest);    // ★ 同上：无更新时也要把 hash 表钉到当前版本
-            // ★ WebGL 重启后走这里：静态内存表已清空，必须补拉映射表（strict=false，内置表兜底），
-            //   否则"版本相等短路"会让热更新增的资源在本次会话全部加载不到。
-            //   force=false：能走到这里说明远端版本没变 —— 内存里已有的表就是当前版本的，不必重拉。
+            string verifiedVersion = check.RemoteManifest.ResVersion;
+            // 无更新也要先验证完整内容，之后让映射、依赖和包路径同时绑定到同一版本。
             try
             {
-                await EnsureWebGLResMapAsync(config, check.RemoteManifest.ResVersion, true, false, token, check.RemoteManifest.ResMap.Sha256);
+                Dictionary<string, string> candidateMap = await ReadWebGLResMapAsync(config, check.RemoteManifest, token);
                 if (RevHotPlatform.IsWebGL)
-                    await RevHotStore.ValidateWebGLCandidateAsync(check.RemoteManifest, check.RemoteManifest.ResVersion, token);
+                {
+                    await RevHotStore.ValidateWebGLCandidateAsync(check.RemoteManifest, check.RemoteManifest.ResVersion, token, candidateMap);
+                }
+                RevHotStore.SetActiveVersion(verifiedVersion);
+                RevHotStore.SetActiveBundleKeys(check.RemoteManifest);
+                RevHotStore.SetActiveResMap(candidateMap);
                 RevHotResBridge.ReinitResourceSystem();
-                if (string.IsNullOrEmpty(check.LocalResVersion))
-                    RevHotStore.WriteCurrentVersion(_localResVersion);
+                if (!string.Equals(_localResVersion, verifiedVersion, StringComparison.Ordinal))
+                {
+                    RevHotStore.WriteCurrentVersion(verifiedVersion);
+                }
+                _localResVersion = verifiedVersion;
             }
             catch (RevHotException e) { return Fail(onProgress, e.Error, clock); }
             catch (Exception e)
@@ -617,45 +645,55 @@ namespace Revolution.HotUpdate
             return RevHotUpdateResult.Ok(okMessage, _localResVersion, clock.Elapsed.TotalSeconds);
         }
 
-        // ============================================================
-        // WebGL / 小游戏：热更映射表的内存供给
-        // ============================================================
-
-        /// <summary>
-        /// 确保"热更映射表"已在内存里（那边没有文件系统，表只能放内存，资源系统 Init 时经钩子取走）。
-        /// ★ 每个新会话（重启 / 快速进入 Play）静态内存都是空的 —— 已就位时直接跳过（同会话零成本）。
-        /// <para>strict=true：拉不到就抛（更新语义：新版本的表必须到位，失败可整体重试）；</para>
-        /// <para>strict=false：拉不到只警告（无更新/重启补拉语义：内置表兜底，游戏至少能跑）；</para>
-        /// <para>force=true：无视"已就位"直接重拉（更新语义下表变了 —— 内存里那份是旧版本表的残留）。</para>
-        /// </summary>
-        private static async RevTask EnsureWebGLResMapAsync(RevHotConfig config, string resVersion, bool strict, bool force, RevCancellationToken token, string expectedSha256)
+        /// <summary>在在线检查或候选验证失败后，复核本地完整快照并恢复可玩的旧版。</summary>
+        private static async RevTask<RevHotUpdateResult> TryUseVerifiedLocalAsync(RevHotConfig config, RevHotError original,
+            Stopwatch clock, RevCancellationToken token)
         {
-            if (RevHotPlatform.IsWebGL == false) return;
-            if (force == false && RevHotStore.HasMemoryResMap) return;
-
-            Func<RevHotSource, string> resMapUrl = delegate(RevHotSource source) { return RevHotUrlBuilder.ResMapUrl(config, source.Root, resVersion); };
+            if (!RevHotPlatform.SupportsLocalFiles || config == null || config.Validate() != null ||
+                !RevHotManifest.IsSafeName(_localResVersion) || !RevHotStore.IsVersionComplete(_localResVersion))
+            {
+                return null;
+            }
+            RevHotManifest local = TryParseFile(RevHotStore.ManifestPath(_localResVersion), config);
+            if (local == null || !string.Equals(local.ResVersion, _localResVersion, StringComparison.Ordinal) ||
+                !RevHotVersion.AreEqual(local.AppVersion, config.AppVersion))
+            {
+                return null;
+            }
             try
             {
-                string resMapText = await RevHotDownloader.FetchTextAsync(config, resMapUrl, token);
-                // URL 平台没有落盘文件，但映射表仍需按清单指纹验证，不能信任一份碰巧能解析的旧表。
-                byte[] bytes = System.Text.Encoding.UTF8.GetBytes(resMapText);
-                using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create())
-                {
-                    string actual = BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "");
-                    if (!string.Equals(actual, expectedSha256, StringComparison.OrdinalIgnoreCase))
-                        throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "WebGL ResMap 与目标清单的 SHA-256 不一致"), false);
-                }
-                RevHotStore.SetActiveResMap(RevHotStore.ParseResMapText(resMapText));
+                // 本地标记只定位目录。旧表和所有包仍须匹配本地已验清单，才能用于重启。
+                await RevHotStore.ValidateSnapshotAsync(local, _localResVersion, token);
+                RevHotStore.SetActiveVersion(_localResVersion);
+                RevHotStore.SetActiveBundleKeys(local);
+                RevHotResBridge.ReinitResourceSystem();
+                _state = RevHotState.Ready;
+                return RevHotUpdateResult.Ok("保持已验证资源版本 " + _localResVersion + "。更新未安装：" +
+                    original.Message, _localResVersion, clock.Elapsed.TotalSeconds);
             }
-            catch (RevOperationCanceledException)
+            catch (Exception exception) when (exception is IOException || exception is RevHotException)
             {
-                throw;
+                RevLog.Warn("本地 ResMap 或资源包恢复未通过：" + exception.Message, config.LogTag);
+                return null;
             }
-            catch (RevHotException e)
+        }
+
+        /// <summary>按候选清单拉取并校验 WebGL 原始映射字节。提交前由调用方保存候选，不改变活动表。</summary>
+        private static async RevTask<Dictionary<string, string>> ReadWebGLResMapAsync(RevHotConfig config,
+            RevHotManifest manifest, RevCancellationToken token)
+        {
+            if (!RevHotPlatform.IsWebGL)
             {
-                if (strict) throw;
-                RevLog.Warn("热更映射表补拉失败，本次使用内置表兜底（新增资源可能加载不到）：" + e.Error.Message, config.LogTag);
+                return null;
             }
+            if (RevHotStore.ActiveManifest?.ResMap?.Sha256 == manifest.ResMap.Sha256 && RevHotStore.ActiveMemoryResMap != null)
+            {
+                return RevHotStore.ActiveMemoryResMap;
+            }
+
+            byte[] bytes = await RevHotDownloader.FetchBytesAsync(config,
+                source => RevHotUrlBuilder.ResMapUrl(config, source.Root, manifest.ResVersion), token);
+            return RevHotStore.VerifyResMap(bytes, manifest);
         }
 
         // ============================================================
@@ -674,7 +712,7 @@ namespace Revolution.HotUpdate
 
             if (string.IsNullOrEmpty(localVersion) == false && RevHotStore.IsVersionComplete(localVersion))
             {
-                RevHotManifest fromDisk = TryParseFile(RevHotStore.ManifestPath(localVersion));
+                RevHotManifest fromDisk = TryParseFile(RevHotStore.ManifestPath(localVersion), config);
                 if (fromDisk != null) return fromDisk;
                 RevLog.Warn("当前版本的清单副本缺失（视为需要重新比对）：" + localVersion, config.LogTag);
             }
@@ -682,7 +720,7 @@ namespace Revolution.HotUpdate
             try
             {
                 string text = await RevHotStore.ReadTextAsync(RevHotStore.BuiltinManifestSource(), token);
-                RevHotManifest builtin = RevHotManifest.Parse(text, out string parseError);
+                RevHotManifest builtin = ParsePublishedManifest(text, config, out string parseError);
                 if (builtin != null) return builtin;
                 RevLog.Warn("内置清单解析失败（按纯远端处理）：" + parseError, config.LogTag);
             }
@@ -699,68 +737,106 @@ namespace Revolution.HotUpdate
             return null;
         }
 
-        /// <summary>把"当前版本目录"补齐：清单原文 + 映射表（映射表没变也要从基线复制过来）。</summary>
-        private static async RevTask EnsureResMapSnapshotAsync(RevHotCheckResult check, RevHotConfig config, string resVersion, RevCancellationToken token)
+        /// <summary>确认版本目录已有摘要正确的 ResMap。可以复用旧版或首包的原始字节，必要时重新下载。</summary>
+        private static async RevTask EnsureResMapSnapshotAsync(RevHotConfig config, RevHotManifest manifest, RevCancellationToken token)
         {
-            // 映射表变化时，下载器已经把新表写到版本目录里了
-            if (check.Plan.ResMapChanged) return;
-
-            string target = RevHotStore.ResMapPath(resVersion);
-            if (File.Exists(target)) return;
-
-            // 映射表没变 → 内容与基线一致：从"旧版本目录 / 内置清单里的位置"复制一份过来。
-            // ★ 这一步不能省：加载路径按"当前版本目录"找映射表，少了它就会悄悄退回内置表。
-            string sourceText = await FindExistingResMapTextAsync(config, _localResVersion, token);
-            if (sourceText != null)
+            string target = RevHotStore.ResMapPath(manifest.ResVersion);
+            if (ReadMatchingResMap(target, manifest) != null)
             {
-                File.WriteAllText(target, sourceText);
                 return;
             }
 
-            RevLog.Warn("没有找到可复用的映射表（纯远端首启）—— 本次版本将使用内置映射表", config.LogTag);
-        }
-
-        private static async RevTask<string> FindExistingResMapTextAsync(RevHotConfig config, string oldResVersion, RevCancellationToken token)
-        {
-            // ① 旧版本目录里的映射表（热更过至少一次）
-            if (string.IsNullOrEmpty(oldResVersion) == false && RevHotStore.IsVersionComplete(oldResVersion))
+            byte[] bytes = null;
+            if (!string.IsNullOrEmpty(_localResVersion) && !string.Equals(_localResVersion, manifest.ResVersion, StringComparison.Ordinal) &&
+                RevHotStore.IsVersionComplete(_localResVersion))
             {
-                string path = RevHotStore.ResMapPath(oldResVersion);
-                if (File.Exists(path)) return File.ReadAllText(path);
+                bytes = ReadMatchingResMap(RevHotStore.ResMapPath(_localResVersion), manifest);
+            }
+            if (bytes == null)
+            {
+                try
+                {
+                    string source = RevHotUrlBuilder.BuiltinBundlePath(config, "ResMap.txt");
+                    bytes = await RevHotStore.ReadBootstrapBytesAsync(source, token);
+                    RevHotStore.VerifyResMap(bytes, manifest);
+                }
+                catch (Exception exception) when (exception is IOException || exception is RevHotException)
+                {
+                    bytes = null;
+                }
+            }
+            if (bytes == null)
+            {
+                bytes = await RevHotDownloader.FetchBytesAsync(config,
+                    source => RevHotUrlBuilder.ResMapUrl(config, source.Root, manifest.ResVersion), token);
+                RevHotStore.VerifyResMap(bytes, manifest);
             }
 
-            // ② 出包时随包体发布的映射表（StreamingAssets；Android 上是 jar: URL）
+            // 以字节安装，保持旧版本 BOM 和换行。候选文件写完前不替换可能在使用的活动文件。
+            string staged = target + ".revmaptmp";
             try
             {
-                string source = RevHotUrlBuilder.BuiltinBundlePath(config, "ResMap.txt");
-                return await RevHotStore.ReadTextAsync(source, token);
+                File.WriteAllBytes(staged, bytes);
+                RevHotStore.CommitFile(staged, target);
             }
-            catch (RevOperationCanceledException)
+            finally
             {
-                throw;
+                if (File.Exists(staged))
+                {
+                    File.Delete(staged);
+                }
             }
-            catch
+        }
+
+        /// <summary>读取可复用的映射副本。摘要或结构不符时返回空，让调用方选择其他可信来源。</summary>
+        private static byte[] ReadMatchingResMap(string path, RevHotManifest manifest)
+        {
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+            try
+            {
+                byte[] bytes = RevHotStore.ReadMapFile(path);
+                RevHotStore.VerifyResMap(bytes, manifest);
+                return bytes;
+            }
+            catch (Exception exception) when (exception is IOException || exception is RevHotException)
             {
                 return null;
             }
         }
 
-        // ============================================================
-        // 小工具
-        // ============================================================
-
-        private static RevHotManifest TryParseFile(string path)
+        /// <summary>读取本地发布清单。配置公钥时同样验签，版本指针不作为信任依据。</summary>
+        private static RevHotManifest TryParseFile(string path, RevHotConfig config)
         {
             try
             {
-                if (File.Exists(path) == false) return null;
-                string text = File.ReadAllText(path);
-                return RevHotManifest.Parse(text, out _);
+                if (!File.Exists(path))
+                {
+                    return null;
+                }
+                string text = RevResMapCodec.DecodeText(RevHotStore.ReadMapFile(path));
+                return ParsePublishedManifest(text, config, out _);
             }
-            catch
+            catch (Exception exception) when (exception is IOException || exception is InvalidDataException || exception is RevHotException)
             {
                 return null;
             }
+        }
+
+        /// <summary>安装前验证来自远端或可写目录的清单。旧项目未配置密钥时沿用已有校验路径。</summary>
+        private static RevHotManifest ParsePublishedManifest(string text, RevHotConfig config, out string error)
+        {
+            if (!string.IsNullOrEmpty(config.ManifestPublicKey))
+            {
+                error = RevHotManifestSignature.Verify(text, config.ManifestPublicKey);
+                if (error != null)
+                {
+                    return null;
+                }
+            }
+            return RevHotManifest.Parse(text, out error);
         }
 
         /// <summary>把"调用方的回调"与"静态 Progress 事件"合成一个 sink：两边都能收到进度。</summary>

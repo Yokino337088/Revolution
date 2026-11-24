@@ -154,7 +154,8 @@ namespace Revolution.HotUpdate.Editor
         }
 
         /// <summary>内容先就绪，再发布清单；源文件变化时拒绝覆盖已有产物。</summary>
-        public static void WriteOutputs(RevHotManifest manifest, string outputDir)
+        /// <summary>校验完整发布目录后原子写入清单。传入发布机的 RSA 可生成带签名的清单。</summary>
+        public static void WriteOutputs(RevHotManifest manifest, string outputDir, System.Security.Cryptography.RSA signingKey = null)
         {
             if (manifest == null) throw new ArgumentNullException(nameof(manifest));
             string error = manifest.ValidateForActivation(manifest.Platform, manifest.Channel);
@@ -184,6 +185,8 @@ namespace Revolution.HotUpdate.Editor
             CheckFile(resMapSource, manifest.ResMap.Size, manifest.ResMap.Sha256, "ResMap 来源", problems);
             if (problems.Count > 0) throw new InvalidOperationException(string.Join("；", problems.ToArray()));
 
+            // 先准备完整签名，再修改发布文件。密钥不写入工程或发布目录。
+            string text = signingKey == null ? manifest.Serialize() : RevHotManifestSignature.Sign(manifest.Serialize(), signingKey);
             string resMapTarget = Path.Combine(outputDir, manifest.ResMap.Name);
             string stagedMap = resMapTarget + ".revhottmp";
             try
@@ -199,7 +202,6 @@ namespace Revolution.HotUpdate.Editor
                 if (File.Exists(stagedMap)) File.Delete(stagedMap);
             }
 
-            string text = manifest.Serialize();
             WriteTextSafely(Path.Combine(outputDir, BuiltinManifestFileName), text);
 
             // StreamingAssets 已存在时才同步首包基线；最后发布 CDN 清单，避免清单先于内容可见。

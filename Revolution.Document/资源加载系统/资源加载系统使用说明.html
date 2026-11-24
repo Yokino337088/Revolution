@@ -197,7 +197,7 @@ RevResManager.Release(<span class="s">"UI/Bag"</span>, <span class="s">"icon_swo
           <tr><td>加载中又有人请求同一份</td><td>请求合并（回调排队），不会重复走 IO</td></tr>
           <tr><td>忘记卸载导致内存涨</td><td>计数归零即进"待卸载"名单；<code>FlushUnused()</code> 主动清、<code>RevResAutoUnloader</code> 也可自动清</td></tr>
           <tr><td>编辑器里想直接跑、不想打包</td><td><b>编辑器直读</b>模式：直接从 <code>Assets</code> 读，改完立刻生效</td></tr>
-          <tr><td>上线后要按包管理</td><td><b>AB 模式</b>：按 <code>ResMap.txt</code> 把逻辑路径映射到真实 AB</td></tr>
+          <tr><td>上线后要按包管理</td><td><b>AB 模式</b>使用压缩 ResMap 将逻辑路径映射到真实 AB</td></tr>
           <tr><td>失败不知道为什么</td><td>失败原因带枚举 <code>RevResLoadErrorReason</code>（路径没映射 / 包里没有 / 类型不符…）</td></tr>
         </tbody>
       </table>
@@ -324,7 +324,7 @@ Debug.Log($<span class="s">"缓存 {RevResManager.CachedCount} 份，其中待�
       AB 默认只从<b>本机</b> <code>StreamingAssets</code> 读（源码里就写着这句，见 <code>RevABLoader.cs</code> 头部注释）。
       日常迭代可关闭「强制全部重打」和「打包前清空输出目录」，保留上次输出。Unity 会检查依赖、复用可复用的包并生成完整主包。开启发布后，框架只替换变化的产物并显示实际更新数量。已有成功构建也可用 <code>ab.copy</code> 单独发布。
       <b>资源热更</b>由官方扩展包 <b>RevHotUpdate</b> 提供：它通过本体预留的 2 个默认 <code>null</code> 钩子
-      （<code>RevABLoader.BundlePathResolver</code> = 包路径重定向 / <code>RevResBootstrap.ResMapOverride</code> = 映射表覆盖）
+      （<code>RevABLoader.BundlePathResolver</code> 提供包路径，<code>RevResBootstrap.ResMapSnapshot</code> 装配已验证的整版热更表。）
       把加载指到持久化版本目录（Android / iOS / PC）或 CDN 的版本化 URL（小游戏）—— <b>不装 = 与从前逐字节一致</b>。
       <p>装法：<code>git clone -b hotupdate https://github.com/Yokino337088/Revolution.git Assets/Revolution.HotUpdate</code>
       （框架本体走 <code>-b package</code>）；文档见 <code>Revolution.Document/热更新/</code>（使用说明 / 架构解析 / 技术方案）。</p>
@@ -343,7 +343,7 @@ Debug.Log($<span class="s">"缓存 {RevResManager.CachedCount} 份，其中待�
       </div>
       <div class="yes">
         <div class="h">AB 模式（打包后 / 真机）</div>
-        按 <code>ResMap.txt</code>（逻辑路径 → AB 与真实路径）加载。<br>
+        从校验后的 <code>ResMapPacked.bytes</code> 获取 AB 与包内资源名。<br>
         <b>注意</b>：改了资源或分包后，必须先回「打包」页签点一次<b>「仅生成映射」</b>，否则新资源在真机上会报"没映射"。
       </div>
     </div>
@@ -373,7 +373,7 @@ Debug.Log($<span class="s">"缓存 {RevResManager.CachedCount} 份，其中待�
       <span class="t">四条要记住的</span>
       <p>· <b>路径规则就是 <code>Resources.Load</code> 那一套</b>：相对任意 <code>Resources</code> 文件夹、<b>不带扩展名</b>、层级一致 —— 上面那份文件对应的逻辑路径是 <code>UI/Bag/icon_sword</code>。</p>
       <p>· <b>编辑器“开发模式”下这条通道不注册</b>：默认只注册编辑器直读策略，AB 与 Resources 策略都不参与 → 编辑器里写 <code>Res/xxx</code> 反而会找不到 ✗。想在编辑器里验证：菜单 <code>Revolution.Tools / 资源 / AB 加载模式（编辑器）</code> 切到 AB 模式，或到真机验证 ✓。</p>
-      <p>· <b>代价</b>：<code>Resources</code> 下的东西会被 Unity <b>无条件打进包体、且无法按需卸载</b> ✗ —— 它是“兜底 + 极小必需资源”的定位，别把大资源丢进去（框架自己只往里放一张 <code>ResMap.txt</code>）。</p>
+      <p>首包在 <code>Resources</code> 携带压缩映射。可读表放在 Editor 目录，RevAB 的「仅生成映射」更新两份产物。</p>
       <p style="margin-bottom:0">· 仍然别手写 <code>Resources.Load</code> ✗ —— 经框架走（<code>RevResManager.Load / LoadAsync</code>）才拿得到引用计数、分组卸载与失败原因 ✓。</p>
     </div>
   </section>
@@ -402,7 +402,7 @@ Debug.Log($<span class="s">"缓存 {RevResManager.CachedCount} 份，其中待�
     <h3>3 分钟定位</h3>
     <ol>
       <li><b>看缓存</b>：<code>RevResManager.CachedCount</code> 一直涨 → 有地方只拿不放（在界面关闭处找）；<code>UnusedCount</code> 一直不清 → 没人触发回收，调一次 <code>FlushUnused()</code> 看能不能清掉。</li>
-      <li><b>看映射</b>：报"找不到"先在 <code>Assets/Revolution/Resources/ResourceSystem/ResMap.txt</code> 里搜这条逻辑路径；搜不到就是没生成映射。</li>
+      <li><b>看映射</b>。在 <code>Assets/Revolution/Editor/RevResourceSystem/ResMap.txt</code> 搜逻辑路径。摘要、长度和重复键错误由正式构建或运行时报出。</li>
       <li><b>看分包</b>：菜单 <code>Revolution.Tools / 资源 / RevAB 打包工具</code> → 「分包」页签（带自动同步）：确认资源<b>有没有 AB 标记</b>、「检查」页签有没有漏标；打完包后还可在「检查」页签点「检查映射表与该平台 AB」，核对 <code>ResMap.txt</code> 与产物是否一致。</li>
       <li><b>看体积</b>：「体积」页签找"哪个包突然变大"；「依赖」页签看有没有资源被复制多份。</li>
     </ol>

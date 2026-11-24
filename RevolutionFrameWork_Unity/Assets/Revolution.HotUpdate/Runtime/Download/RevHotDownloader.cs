@@ -37,6 +37,13 @@ namespace Revolution.HotUpdate
         /// </summary>
         public static async RevTask<string> FetchTextAsync(RevHotConfig config, Func<RevHotSource, string> urlBuilder, RevCancellationToken token)
         {
+            byte[] data = await FetchBytesAsync(config, urlBuilder, token);
+            return RevResMapCodec.DecodeText(data);
+        }
+
+        /// <summary>按既有换源和重试规则拉取小文件，保留正文原始字节供摘要校验。</summary>
+        public static async RevTask<byte[]> FetchBytesAsync(RevHotConfig config, Func<RevHotSource, string> urlBuilder, RevCancellationToken token)
+        {
             List<RevHotSource> sources = RevHotSources.Build(config);
             if (sources.Count == 0)
             {
@@ -53,7 +60,7 @@ namespace Revolution.HotUpdate
                     token.ThrowIfCancelled();
                     try
                     {
-                        return await FetchTextOnceAsync(url, config, token);
+                        return await FetchBytesOnceAsync(url, config, token);
                     }
                     catch (RevOperationCanceledException)
                     {
@@ -77,8 +84,8 @@ namespace Revolution.HotUpdate
             throw last ?? new RevHotException(RevHotError.Of(RevHotErrorCode.ManifestFetchFailed, "所有下载源都失败了（检查网络与 RemoteRoot 配置）"), true);
         }
 
-        /// <summary>拉取一次非空清单。超时和传输失败交给现有的重试与换源策略。</summary>
-        private static async RevTask<string> FetchTextOnceAsync(string url, RevHotConfig config, RevCancellationToken token)
+        /// <summary>拉取一次有界的小文件，正文原样返回给调用方解码或校验。</summary>
+        private static async RevTask<byte[]> FetchBytesOnceAsync(string url, RevHotConfig config, RevCancellationToken token)
         {
             using (UnityWebRequest www = UnityWebRequest.Get(url))
             {
@@ -93,14 +100,14 @@ namespace Revolution.HotUpdate
                     throw new RevHotException(RevHotError.Of(RevHotErrorCode.ManifestFetchFailed, "清单拉取失败（" + www.error + "）", url), true);
                 }
 
-                string text = www.downloadHandler.text;
-                if (string.IsNullOrEmpty(text))
+                byte[] bytes = www.downloadHandler.data;
+                if (bytes == null || bytes.Length == 0 || bytes.Length > RevResMapCodec.MaxTextBytes)
                 {
                     // 拿到空内容多半是"上传到一半的清单"——按可重试处理，换源 / 重试都可能拿到完整的
-                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.ManifestFetchFailed, "清单内容为空", url), true);
+                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.ManifestFetchFailed, "清单内容为空或超限", url), true);
                 }
 
-                return text;
+                return bytes;
             }
         }
 

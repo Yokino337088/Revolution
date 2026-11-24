@@ -499,8 +499,8 @@ Hero/1001|hero|1001</pre>
 ├── hero / hero.manifest
 └── BuildManifest.json            <span class="c">← 给人/CI 看：版本、平台、时间、每个包大小</span>
 
-Assets/Revolution/Resources/ResourceSystem/ResMap.txt  <span class="c">← 逻辑名|包名|资源名（框架自己的 Resources）</span>
-                                                          <span class="c">运行时 Resources.Load("ResourceSystem/ResMap") 读它</span>
+Assets/Revolution/Editor/RevResourceSystem/ResMap.txt  <span class="c">← 逻辑名|包名|资源名（编辑器排查）</span>
+Assets/Revolution/Resources/ResourceSystem/ResMapPacked.bytes  <span class="c">← Player 引导用 gzip 副本</span>
 Assets/Revolution/Generation/RevResPath.cs     <span class="c">← 自动生成的目录前缀常量（扫描资源根目录下的文件夹）</span>
 Assets/StreamingAssets/PC/                  <span class="c">← 拷进来的运行时产物</span></pre>
 
@@ -848,6 +848,11 @@ RevResBootstrap.Instance.ShutdownAll();           <span class="c">// 回登录�
     <h2>按真实持有者回收</h2>
     <p>资源分类沿用 <code>RevResGroup</code>，域账本以缓存代次聚合。退域清掉原域的业务回调和引用，具名租约、独立预加载与共享域各自计数。</p>
     <p>归零的 AB 按每帧最多 8 项、约 1 ms 预算分批回收。切场期间合并原生资源整理，普通退域的原生整理沿用空闲维护。</p>
+  </section>
+  <section id="verified-resmap">
+    <h2>首包 ResMap 压缩与版本完整性</h2>
+    <p>一次 RevAB 生成一份编辑器可读表和一份 Player 压缩表。构建通过反解检查两份内容一致。运行时在替换资源策略之前检查正文长度、SHA-256 和预期解压大小，再验证逻辑键和相对路径。</p>
+    <p>热更在候选校验时关联清单、映射和对应包。活动版本使用完整快照，可配置发布公钥让下载和重启恢复都验证来源。</p>
   </section>
 </main>
 

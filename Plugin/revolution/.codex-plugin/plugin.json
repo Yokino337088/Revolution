@@ -1,6 +1,6 @@
 {
   "name": "revolution",
-  "version": "0.9.10",
+  "version": "0.9.11",
   "description": "Revolution 业务自动交付、RevGame 工程实践、Gal、技术美术与 Unity 验收。包含 RevCLI 和 RevMCP。",
   "author": { "name": "Revolution" },
   "license": "MIT",

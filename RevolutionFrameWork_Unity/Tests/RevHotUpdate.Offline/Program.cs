@@ -1,8 +1,12 @@
+using System.Security.Cryptography;
+using Revolution;
 using Revolution.HotUpdate;
 
+/// <summary>链接实际框架源码，检查更新清单和资源映射的纯数据契约。</summary>
 static class Program
 {
     static int _passed;
+    /// <summary>运行既有清单回归和新增的发布签名及压缩映射边界。</summary>
     static void Main()
     {
         RevHotManifest manifest = NewManifest();
@@ -52,9 +56,70 @@ static class Program
         manifest.Bundles[0].UnityHash = new string('f', 32);
         manifest.Bundles[0].UnityCrc = "1234";
         Expect(manifest.ValidateForActivation("WebGL", "official") == null, "WebGL 有效 Hash128/CRC 通过");
-        Console.WriteLine($"RevHotUpdate manifest offline: {_passed} assertions passed");
+        CheckResMap();
+        CheckSignature(text);
+        Console.WriteLine($"RevHotUpdate / ResMap offline: {_passed} assertions passed");
     }
 
+    /// <summary>覆盖产物损坏、路径歧义、UTF-8 和旧文本编码边界。</summary>
+    static void CheckResMap()
+    {
+        const string text = "# 示例\nUI/设置|ui/shared|设置\nUI/房间|ui/shared|房间\n";
+        byte[] packed = RevResMapCodec.Pack(text);
+        Expect(RevResMapCodec.Unpack(packed) == text, "完整解压保留所有列及 Unicode");
+        Expect(packed.SequenceEqual(RevResMapCodec.Pack("\uFEFF" + text.Replace("\n", "\r\n"))), "BOM 和换行由构建统一");
+        Expect(RevResMapCodec.ParseText(text)["UI/设置"] == "ui/shared|设置", "旧文本也走严格查询");
+        IgnoreBadMap(() => RevResMapCodec.Unpack(packed[..^1]), "截断 gzip 尾部拒绝");
+        IgnoreBadMap(() => RevResMapCodec.Unpack(packed.Concat(new byte[1]).ToArray()), "追加正文拒绝");
+        byte[] modified = (byte[])packed.Clone();
+        modified[^1] ^= 1;
+        IgnoreBadMap(() => RevResMapCodec.Unpack(modified), "同长度修改摘要不匹配");
+        byte[] inflated = (byte[])packed.Clone();
+        inflated[11] = 127;
+        IgnoreBadMap(() => RevResMapCodec.Unpack(inflated), "超限声明拒绝");
+        byte[] smaller = (byte[])packed.Clone();
+        smaller[8]--;
+        IgnoreBadMap(() => RevResMapCodec.Unpack(smaller), "声明长度偏小拒绝");
+        IgnoreBadMap(() => RevResMapCodec.Pack(text + "UI/设置|ui/new|设置\n"), "重复逻辑键拒绝");
+        IgnoreBadMap(() => RevResMapCodec.ParseText("UI/A|../bad|A"), "包路径跳转拒绝");
+        IgnoreBadMap(() => RevResMapCodec.ParseText("UI/A|https%3A/pvp|A"), "编码路径歧义拒绝");
+        IgnoreBadMap(() => RevResMapCodec.ParseText("UI/A|ok|A|extra"), "多余列拒绝");
+        IgnoreBadMap(() => RevResMapCodec.DecodeText(new byte[] { 0xE9, 0x83 }), "截断 UTF-8 拒绝");
+    }
+
+    /// <summary>验证已签清单、改动内容、缺失签名和提供错误公钥四种结果。</summary>
+    static void CheckSignature(string text)
+    {
+        using var signer = RSA.Create(2048);
+        using var other = RSA.Create(2048);
+        string publicKey = RevHotManifestSignature.ExportPublicKey(signer);
+        string signed = RevHotManifestSignature.Sign(text, signer);
+        Expect(RevHotManifestSignature.Verify(signed, publicKey) == null, "真实 RSA 发布清单验签通过");
+        Expect(RevHotManifestSignature.Verify("\uFEFF" + signed.Replace("\n", "\r\n"), publicKey) == null, "传输换行规范化后仍可验签");
+        Expect(RevHotManifestSignature.Verify(signed.Replace("@channel|official", "@channel|other"), publicKey) != null,
+            "改渠道破坏签名");
+        Expect(RevHotManifestSignature.Verify(text, publicKey) != null, "配置公钥时旧清单不能冒充带签版本");
+        Expect(RevHotManifestSignature.Verify(signed, RevHotManifestSignature.ExportPublicKey(other)) != null, "其他发布者签名拒绝");
+        Expect(RevHotManifestSignature.Verify(signed + "@channel|other\n", publicKey) != null, "禁止在签名后拼接额外字段");
+        Expect(RevHotManifest.Parse(signed, out _) != null, "旧版清单解析器可忽略新增签名记录");
+    }
+
+    /// <summary>要求底层明确拒绝损坏的映射数据。</summary>
+    static void IgnoreBadMap(Action action, string message)
+    {
+        try
+        {
+            action();
+        }
+        catch (InvalidDataException)
+        {
+            Expect(true, message);
+            return;
+        }
+        Expect(false, message);
+    }
+
+    /// <summary>创建可用于清单校验的最小包记录。</summary>
     static RevHotBundleInfo NewBundle(string name, char hash)
         => new() { Name = name, Sha256 = new string(hash, 64), Size = 10 };
 

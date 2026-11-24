@@ -200,28 +200,60 @@ namespace Revolution.HotUpdate
             return uint.TryParse(text, out uint crc) ? crc : 0;
         }
 
-        /// <summary>
-        /// 解析映射表文本（"逻辑名|包名|资源名"，# 注释、空行忽略）。
-        /// 与框架 RevResBootstrap.LoadResMap 的解析规则保持一致 —— 改一处必须改另一处。
-        /// </summary>
+        /// <summary>使用首包同一解析器，同时拒绝坏行、重复逻辑键和非法路径。</summary>
         public static Dictionary<string, string> ParseResMapText(string text)
         {
-            var map = new Dictionary<string, string>();
-            if (string.IsNullOrEmpty(text)) return map;
+            return RevResMapCodec.ParseText(text);
+        }
 
-            string[] lines = text.Split('\n');
-            for (int i = 0; i < lines.Length; i++)
+        /// <summary>验证候选或活动 ResMap 的原始字节与清单一致，并确认每个资源归属于这一版本的包。</summary>
+        internal static Dictionary<string, string> VerifyResMap(byte[] bytes, RevHotManifest manifest)
+        {
+            if (bytes == null || manifest?.ResMap == null || bytes.Length != manifest.ResMap.Size)
             {
-                string line = lines[i].Trim();
-                if (line.Length == 0 || line.StartsWith("#")) continue;
-
-                string[] parts = line.Split('|');
-                if (parts.Length != 3) continue;
-
-                map[parts[0]] = parts[1] + "|" + parts[2];
+                throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "ResMap 与版本清单长度不一致"), false);
+            }
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            {
+                string actual = BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "");
+                if (!string.Equals(actual, manifest.ResMap.Sha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "ResMap 与版本清单 SHA-256 不一致"), false);
+                }
             }
 
-            return map;
+            try
+            {
+                Dictionary<string, string> map = ParseResMapText(RevResMapCodec.DecodeText(bytes));
+                if (map.Count == 0)
+                {
+                    throw new InvalidDataException("ResMap 为空");
+                }
+                foreach (KeyValuePair<string, string> entry in map)
+                {
+                    string bundle = entry.Value.Substring(0, entry.Value.IndexOf('|'));
+                    if (manifest.Find(bundle) == null)
+                    {
+                        throw new InvalidDataException("ResMap 引用了清单外的包：" + entry.Key);
+                    }
+                }
+                return map;
+            }
+            catch (InvalidDataException exception)
+            {
+                throw new RevHotException(RevHotError.Of(RevHotErrorCode.ManifestInvalid, exception.Message), false);
+            }
+        }
+
+        /// <summary>在分配数组前检查映射表或清单的存在和大小。</summary>
+        internal static byte[] ReadMapFile(string path)
+        {
+            var file = new FileInfo(path);
+            if (!file.Exists || file.Length > RevResMapCodec.MaxTextBytes)
+            {
+                throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "ResMap 缺失或超限：" + path), false);
+            }
+            return File.ReadAllBytes(path);
         }
 
         /// <summary>排查用：当前装配与路径快照（RevHotUpdate.Dump 的一部分）。</summary>
@@ -272,20 +304,8 @@ namespace Revolution.HotUpdate
                 await RevHotVerifier.VerifyAsync(target, bundle.Size, bundle.Sha256, RevHotVerifyMode.Hash, _config, token);
             }
 
-            if (!File.Exists(ResMapPath(version)))
-                throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "候选版本缺少 ResMap.txt"), false);
-            await RevHotVerifier.VerifyAsync(ResMapPath(version), manifest.ResMap.Size,
-                manifest.ResMap.Sha256, RevHotVerifyMode.Hash, _config, token);
-            Dictionary<string, string> mappings = ParseResMapText(File.ReadAllText(ResMapPath(version)));
-            if (mappings.Count == 0)
-                throw new RevHotException(RevHotError.Of(RevHotErrorCode.ManifestInvalid, "候选版本 ResMap 为空"), false);
-            foreach (KeyValuePair<string, string> entry in mappings)
-            {
-                string[] parts = entry.Value.Split('|');
-                if (parts.Length != 2 || manifest.Find(parts[0]) == null)
-                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.ManifestInvalid,
-                        "ResMap 引用了清单中不存在的包：" + entry.Key), false);
-            }
+            token.ThrowIfCancelled();
+            VerifyResMap(ReadMapFile(ResMapPath(version)), manifest);
 
             // Unity 主包装着 AssetBundleManifest；编辑器生成清单时它被排除，因此必须单独检查。
             // Android 上从 APK 拷到 _builtin；其它文件平台直接使用内置 StreamingAssets。
@@ -309,7 +329,8 @@ namespace Revolution.HotUpdate
         /// 再验证随应用发布的主包含 Manifest。只有全部成功才能切换资源版本。
         /// 真机 CDN 仍需测试域名/CORS；这不是 SHA-256 文件校验。
         /// </summary>
-        public static async RevTask ValidateWebGLCandidateAsync(RevHotManifest manifest, string version, RevCancellationToken token)
+        public static async RevTask ValidateWebGLCandidateAsync(RevHotManifest manifest, string version, RevCancellationToken token,
+            Dictionary<string, string> candidateMap)
         {
             if (!RevHotPlatform.IsWebGL) return;
             string error = manifest.ValidateForActivation(_platform, _config.Channel, _config.Env);
@@ -343,19 +364,13 @@ namespace Revolution.HotUpdate
                     loaded.Unload(false);
                 }
             }
-            if (_memoryResMap == null || _memoryResMap.Count == 0)
+            if (candidateMap == null || candidateMap.Count == 0)
                 throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "WebGL 候选 ResMap 未就绪"), false);
-            foreach (KeyValuePair<string, string> entry in _memoryResMap)
-            {
-                string[] parts = entry.Value.Split('|');
-                if (parts.Length != 2 || manifest.Find(parts[0]) == null)
-                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.ManifestInvalid,
-                        "WebGL ResMap 引用了清单外的包：" + entry.Key), false);
-            }
         }
 
         /// <summary>用候选 ResMap 和包依赖打开代表资源。验证期间保持旧版本指针与资源管理器。</summary>
-        internal static async RevTask ProbeRequiredAssetsAsync(RevHotManifest manifest, string version, string[] requested, RevCancellationToken token)
+        internal static async RevTask ProbeRequiredAssetsAsync(RevHotManifest manifest, string version, string[] requested,
+            RevCancellationToken token, Dictionary<string, string> candidateMap)
         {
             if (requested == null || requested.Length == 0)
             {
@@ -363,7 +378,7 @@ namespace Revolution.HotUpdate
             }
             // 复制业务输入，避免调用方在跨帧检查期间更改验收目标。
             string[] keys = (string[])requested.Clone();
-            var map = RevHotPlatform.SupportsLocalFiles ? ParseResMapText(File.ReadAllText(ResMapPath(version))) : _memoryResMap;
+            var map = RevHotPlatform.SupportsLocalFiles ? VerifyResMap(ReadMapFile(ResMapPath(version)), manifest) : candidateMap;
             foreach (string key in keys)
             {
                 token.ThrowIfCancelled();
@@ -526,7 +541,16 @@ namespace Revolution.HotUpdate
         /// </summary>
         public static string ResolveBundlePath(string bundleName)
         {
-            if (_configured == false || string.IsNullOrEmpty(_activeResVersion)) return null;
+            if (!_configured)
+            {
+                return null;
+            }
+            if (!HasActiveManifest())
+            {
+                // 初始装配和离线恢复只能读应用自己的基线。current.txt 不能单独切换 AB。
+                string builtinPath = Path.Combine(_builtinDir, bundleName);
+                return RevHotPlatform.SupportsLocalFiles && File.Exists(builtinPath) ? builtinPath : null;
+            }
 
             // ---------- WebGL / 小游戏：没有"本地"，只有 URL（版本段就是它的"目录"） ----------
             if (RevHotPlatform.IsWebGL)
@@ -544,84 +568,36 @@ namespace Revolution.HotUpdate
             }
 
             // 只有验证通过的完整快照才能按当前清单加载，禁止任意同名历史包混入。
-            if (_activeManifest != null && _activeManifest.Find(bundleName) != null)
-                return Path.Combine(BundlesDir(_activeResVersion), bundleName);
-
-            // 老版兼容：没有可用清单时保持原回退链，待启动验证/迁移后切为快照。
-            string hot = Path.Combine(BundlesDir(_activeResVersion), bundleName);
-            if (File.Exists(hot)) return hot;
-
-            // ★ 回退链：差量更新的另一半。新版本目录只有"新增 / 变更"的包，
-            //   未变化的包还留在旧版本目录里 —— 不回退查找，热更一次后其余包全部加载失败。
-            string[] fallback = _fallbackBundleDirs;
-            for (int i = 0; i < fallback.Length; i++)
-            {
-                string older = Path.Combine(fallback[i], bundleName);
-                if (File.Exists(older)) return older;
-            }
-
-            if (string.IsNullOrEmpty(_builtinDir) == false)
-            {
-                string builtin = Path.Combine(_builtinDir, bundleName);
-                if (File.Exists(builtin)) return builtin;
-            }
-
-            // 都没有 → 交还框架默认（典型场景：PC/iOS 上没动过的内置包，本来就在 StreamingAssets）
-            return null;
+            return _activeManifest.Find(bundleName) == null ? null : Path.Combine(BundlesDir(_activeResVersion), bundleName);
         }
 
         // ============================================================
         // ★ 钩子二：热更映射表（RevResBootstrap.ResMapOverride 的实现）
         // ============================================================
 
-        /// <summary>
-        /// 提供热更映射表（"逻辑名 → 包名|资源名"）。没有热更表返回 null（框架继续用内置表）。
-        /// 返回 null 时框架的合并逻辑会跳过 —— 这是刻意的：表缺失绝不能让资源系统初始化失败。
-        /// </summary>
+        /// <summary>只装配已激活的完整映射。启动时再次核对磁盘字节，避免活动文件被改动后继续流入策略。</summary>
         public static Dictionary<string, string> LoadHotResMap()
         {
-            // URL 型平台：清单声明了新表却没有准备好时必须失败，而不能误报 Ready。
+            if (!HasActiveManifest())
+            {
+                return null;
+            }
             if (RevHotPlatform.IsWebGL)
             {
-                if (_activeManifest?.ResMap != null && _memoryResMap == null)
-                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "当前 WebGL 资源版本缺少 ResMap"), false);
+                if (_memoryResMap == null)
+                {
+                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "活动 WebGL 版本缺少已验证 ResMap"), false);
+                }
                 return _memoryResMap;
             }
+            return VerifyResMap(ReadMapFile(ResMapPath(_activeResVersion)), _activeManifest);
+        }
 
-            if (_configured == false || string.IsNullOrEmpty(_activeResVersion)) return null;
-
-            // ① 当前资源版本目录；② 首包落地目录（Android 上"还没热更过"的那一次就靠它）
-            string path = ResMapPath(_activeResVersion);
-            if (File.Exists(path) == false && string.IsNullOrEmpty(_builtinDir) == false)
-            {
-                string builtin = Path.Combine(_builtinDir, "ResMap.txt");
-                if (File.Exists(builtin)) path = builtin;
-            }
-
-            if (File.Exists(path) == false)
-            {
-                if (_activeManifest?.ResMap != null)
-                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "当前资源版本的 ResMap 丢失：" + path), false);
-                return null;
-            }
-
-            try
-            {
-                // 解析规则与框架 RevResBootstrap.LoadResMap 严格一致（见 ParseResMapText 的注释）
-                Dictionary<string, string> map = ParseResMapText(File.ReadAllText(path));
-                if (map.Count == 0 && _activeManifest?.ResMap != null)
-                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "当前资源版本 ResMap 为空"), false);
-                return map.Count == 0 ? null : map;
-            }
-            catch (RevHotException) { throw; }
-            catch (Exception e)
-            {
-                if (_activeManifest?.ResMap != null)
-                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed,
-                        "当前资源版本 ResMap 读取失败：" + e.Message), false);
-                RevLog.Warn("热更映射表读取失败，本次继续用内置表：" + e.Message, LogTag());
-                return null;
-            }
+        /// <summary>本地版本指针用于找候选目录，只有配套清单已装配时才能提供运行时映射和包路径。</summary>
+        private static bool HasActiveManifest()
+        {
+            return _configured && _activeManifest != null &&
+                string.Equals(_activeResVersion, _activeManifest.ResVersion, StringComparison.Ordinal);
         }
 
         // ============================================================
@@ -635,7 +611,10 @@ namespace Revolution.HotUpdate
         /// </summary>
         public static RevBundleCacheKey ResolveBundleCacheKey(string bundleName)
         {
-            if (_bundleKeys != null && _bundleKeys.TryGetValue(bundleName, out RevBundleCacheKey key)) { return key; }
+            if (HasActiveManifest() && _bundleKeys != null && _bundleKeys.TryGetValue(bundleName, out RevBundleCacheKey key))
+            {
+                return key;
+            }
             return default;
         }
 
@@ -651,10 +630,12 @@ namespace Revolution.HotUpdate
         /// </summary>
         public static string[] ResolveDependencies(string bundleName)
         {
-            RevHotManifest manifest = _activeManifest;
-            if (manifest == null) return null;
+            if (!HasActiveManifest())
+            {
+                return null;
+            }
 
-            RevHotBundleInfo bundle = manifest.Find(bundleName);
+            RevHotBundleInfo bundle = _activeManifest.Find(bundleName);
             if (bundle == null) return null;
 
             return bundle.Dependencies.ToArray();
@@ -970,12 +951,18 @@ namespace Revolution.HotUpdate
         /// <summary>读取内置文本。原生文件直接读，APK、网页和小游戏路径经请求读取并受取消与超时保护。</summary>
         public static async RevTask<string> ReadTextAsync(string pathOrUrl, RevCancellationToken token)
         {
+            return RevResMapCodec.DecodeText(await ReadBootstrapBytesAsync(pathOrUrl, token));
+        }
+
+        /// <summary>以原始字节读取包含摘要的首包小文件，避免重写时移除 BOM 或改变换行。</summary>
+        internal static async RevTask<byte[]> ReadBootstrapBytesAsync(string pathOrUrl, RevCancellationToken token)
+        {
             bool isUrl = RevHotPlatform.IsWebGL || pathOrUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
                          || pathOrUrl.StartsWith("jar:", StringComparison.OrdinalIgnoreCase);
 
             if (isUrl == false)
             {
-                return File.ReadAllText(pathOrUrl);
+                return ReadMapFile(pathOrUrl);
             }
 
             using (UnityWebRequest www = UnityWebRequest.Get(pathOrUrl))
@@ -990,7 +977,12 @@ namespace Revolution.HotUpdate
                     throw new RevHotException(RevHotError.Of(RevHotErrorCode.ManifestFetchFailed, "读取内置文件失败（" + www.error + "）", pathOrUrl), false);
                 }
 
-                return www.downloadHandler.text;
+                byte[] bytes = www.downloadHandler.data;
+                if (bytes == null || bytes.Length > RevResMapCodec.MaxTextBytes)
+                {
+                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "首包文件超限", pathOrUrl), false);
+                }
+                return bytes;
             }
         }
 

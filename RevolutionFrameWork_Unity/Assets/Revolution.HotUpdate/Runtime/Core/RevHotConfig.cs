@@ -67,6 +67,9 @@ namespace Revolution.HotUpdate
         /// <summary>渠道段（可空）：分渠道资源时用，拼在路径里。</summary>
         public string Channel = "";
 
+        /// <summary>发布机对应的 RSA 公钥。配置后远端与本地热更清单均必须验签，空值沿用旧版本的摘要门禁。</summary>
+        public string ManifestPublicKey = "";
+
         /// <summary>候选版本切换前必须实际打开的 ResMap 键。空列表沿用完整文件校验。</summary>
         public string[] RequiredAssets = Array.Empty<string>();
 

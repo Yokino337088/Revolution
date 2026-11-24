@@ -8,5 +8,7 @@
   <ItemGroup>
     <Compile Include="../../Assets/Revolution.HotUpdate/Runtime/Core/RevHotManifest.cs" Link="RevHotManifest.cs" />
     <Compile Include="../../Assets/Revolution.HotUpdate/Runtime/Core/RevHotBundleInfo.cs" Link="RevHotBundleInfo.cs" />
+    <Compile Include="../../Assets/Revolution.HotUpdate/Runtime/Core/RevHotManifestSignature.cs" Link="RevHotManifestSignature.cs" />
+    <Compile Include="../../Assets/Revolution/Runtime/RevResourceSystem/Core/RevResMapCodec.cs" Link="RevResMapCodec.cs" />
   </ItemGroup>
 </Project>
