@@ -42,7 +42,8 @@ namespace Revolution.HotUpdate
         private static bool _configured;
 
         // URL 型平台（WebGL/小游戏）没有本地文件，"热更映射表"放在内存里，资源系统 Init 时取走
-        private static Dictionary<string, string> _memoryResMap;
+        /// <summary>URL 平台验证后交给资源系统的同一张索引，避免保留两份映射。</summary>
+        private static RevResMap _memoryResMap;
 
         // URL 型平台：当前版本每个包的"引擎缓存标识"（unityHash / unityCrc）。
         // ★ 为什么也要寄存在内存里：那边的 AB 是按 URL 下载的，引擎判断"本地缓存过没有"全靠
@@ -85,7 +86,7 @@ namespace Revolution.HotUpdate
         public static RevHotManifest ActiveManifest { get { return _activeManifest; } }
 
         /// <summary>URL 平台重装失败时恢复内存映射表。</summary>
-        public static Dictionary<string, string> ActiveMemoryResMap { get { return _memoryResMap; } }
+        public static RevResMap ActiveMemoryResMap { get { return _memoryResMap; } }
 
         /// <summary>把某个资源版本设为"生效"（之后 ResolveBundlePath 就指向它的 bundles 目录）。</summary>
         public static void SetActiveVersion(string resVersion)
@@ -136,8 +137,8 @@ namespace Revolution.HotUpdate
             }
         }
 
-        /// <summary>URL 型平台：把"下载阶段拿到的热更映射表"先寄存在内存里（资源系统 Init 时取走）。</summary>
-        public static void SetActiveResMap(Dictionary<string, string> resMap)
+        /// <summary>URL 平台在整版激活时保存已验证索引，资源系统直接借用此实例。</summary>
+        public static void SetActiveResMap(RevResMap resMap)
         {
             _memoryResMap = resMap;
         }
@@ -200,14 +201,8 @@ namespace Revolution.HotUpdate
             return uint.TryParse(text, out uint crc) ? crc : 0;
         }
 
-        /// <summary>使用首包同一解析器，同时拒绝坏行、重复逻辑键和非法路径。</summary>
-        public static Dictionary<string, string> ParseResMapText(string text)
-        {
-            return RevResMapCodec.ParseText(text);
-        }
-
-        /// <summary>验证候选或活动 ResMap 的原始字节与清单一致，并确认每个资源归属于这一版本的包。</summary>
-        internal static Dictionary<string, string> VerifyResMap(byte[] bytes, RevHotManifest manifest)
+        /// <summary>校验映射原始字节，再建立同一版本可直接装配的地址索引。</summary>
+        internal static RevResMap VerifyResMap(byte[] bytes, RevHotManifest manifest)
         {
             if (bytes == null || manifest?.ResMap == null || bytes.Length != manifest.ResMap.Size)
             {
@@ -224,18 +219,16 @@ namespace Revolution.HotUpdate
 
             try
             {
-                Dictionary<string, string> map = ParseResMapText(RevResMapCodec.DecodeText(bytes));
+                // 候选清单已有唯一包名。临时成员集合只参与建索引，不随活动快照保留。
+                var bundles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (RevHotBundleInfo bundle in manifest.Bundles)
+                {
+                    bundles.Add(bundle.Name);
+                }
+                RevResMap map = RevResMap.Parse(RevResMapCodec.DecodeText(bytes), bundles.Contains);
                 if (map.Count == 0)
                 {
                     throw new InvalidDataException("ResMap 为空");
-                }
-                foreach (KeyValuePair<string, string> entry in map)
-                {
-                    string bundle = entry.Value.Substring(0, entry.Value.IndexOf('|'));
-                    if (manifest.Find(bundle) == null)
-                    {
-                        throw new InvalidDataException("ResMap 引用了清单外的包：" + entry.Key);
-                    }
                 }
                 return map;
             }
@@ -330,7 +323,7 @@ namespace Revolution.HotUpdate
         /// 真机 CDN 仍需测试域名/CORS；这不是 SHA-256 文件校验。
         /// </summary>
         public static async RevTask ValidateWebGLCandidateAsync(RevHotManifest manifest, string version, RevCancellationToken token,
-            Dictionary<string, string> candidateMap)
+            RevResMap candidateMap)
         {
             if (!RevHotPlatform.IsWebGL) return;
             string error = manifest.ValidateForActivation(_platform, _config.Channel, _config.Env);
@@ -370,7 +363,7 @@ namespace Revolution.HotUpdate
 
         /// <summary>用候选 ResMap 和包依赖打开代表资源。验证期间保持旧版本指针与资源管理器。</summary>
         internal static async RevTask ProbeRequiredAssetsAsync(RevHotManifest manifest, string version, string[] requested,
-            RevCancellationToken token, Dictionary<string, string> candidateMap)
+            RevCancellationToken token, RevResMap candidateMap)
         {
             if (requested == null || requested.Length == 0)
             {
@@ -382,21 +375,16 @@ namespace Revolution.HotUpdate
             foreach (string key in keys)
             {
                 token.ThrowIfCancelled();
-                if (string.IsNullOrWhiteSpace(key) || map == null || !map.TryGetValue(key, out string mapping))
+                if (string.IsNullOrWhiteSpace(key) || map == null || !map.TryGetLocation(key, out string bundleName, out string assetName))
                 {
                     throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "代表资源缺少候选映射：" + key), false);
-                }
-                string[] parts = mapping.Split('|');
-                if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[1]))
-                {
-                    throw new RevHotException(RevHotError.Of(RevHotErrorCode.VerifyFailed, "代表资源的候选映射无效：" + key), false);
                 }
                 var opened = new Dictionary<string, AssetBundle>(StringComparer.OrdinalIgnoreCase);
                 var releaseOrder = new List<AssetBundle>();
                 try
                 {
-                    AssetBundle bundle = await OpenProbeBundleAsync(manifest, version, parts[0], opened, releaseOrder, token);
-                    AssetBundleRequest load = bundle.LoadAssetAsync<UnityEngine.Object>(parts[1]);
+                    AssetBundle bundle = await OpenProbeBundleAsync(manifest, version, bundleName, opened, releaseOrder, token);
+                    AssetBundleRequest load = bundle.LoadAssetAsync<UnityEngine.Object>(assetName);
                     // Unity 不能撤销已派发的资源请求。结束后再卸载临时探针持有。
                     while (!load.isDone)
                     {
@@ -576,7 +564,7 @@ namespace Revolution.HotUpdate
         // ============================================================
 
         /// <summary>只装配已激活的完整映射。启动时再次核对磁盘字节，避免活动文件被改动后继续流入策略。</summary>
-        public static Dictionary<string, string> LoadHotResMap()
+        public static RevResMap LoadHotResMap()
         {
             if (!HasActiveManifest())
             {

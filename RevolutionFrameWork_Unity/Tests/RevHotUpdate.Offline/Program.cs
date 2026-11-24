@@ -69,6 +69,20 @@ static class Program
         Expect(RevResMapCodec.Unpack(packed) == text, "完整解压保留所有列及 Unicode");
         Expect(packed.SequenceEqual(RevResMapCodec.Pack("\uFEFF" + text.Replace("\n", "\r\n"))), "BOM 和换行由构建统一");
         Expect(RevResMapCodec.ParseText(text)["UI/设置"] == "ui/shared|设置", "旧文本也走严格查询");
+        // 类型化索引需要保留原表结果、大小写和已选定的版本，归并字符串仅服务当前快照。
+        RevResMap locations = RevResMap.Parse(text, bundle => bundle == "ui/shared");
+        Expect(locations.Count == 2 && locations.TryGetLocation("UI/设置", out string bundleName, out string assetName) &&
+            bundleName == "ui/shared" && assetName == "设置", "直接取包名和资源名");
+        Expect(locations.TryGetLocation("UI/设置", out var firstBundle, out _) &&
+            locations.TryGetLocation("UI/房间", out var secondBundle, out _) && ReferenceEquals(firstBundle, secondBundle), "相同包名只留一份");
+        Expect(!locations.TryGetLocation("ui/设置", out var missBundle, out var missAsset) &&
+            missBundle == null && missAsset == null, "未命中保持逻辑路径原有大小写");
+        RevResMap next = RevResMap.Parse("UI/设置|ui/new.hd|设置别名");
+        Expect(next.TryGetLocation("UI/设置", out var nextBundle, out var nextAsset) &&
+            nextBundle == "ui/new.hd" && nextAsset == "设置别名" &&
+            locations.TryGetLocation("UI/设置", out var oldBundle, out _) && oldBundle == "ui/shared", "新旧快照独立保留各自的地址");
+        IgnoreBadMap(() => RevResMap.Parse(text, _ => false), "类型化热更拒绝候选清单外的包");
+        IgnoreBadMap(() => RevResMap.Parse(text + "UI/设置|ui/other|A\n"), "类型化索引也拒绝重复逻辑键");
         IgnoreBadMap(() => RevResMapCodec.Unpack(packed[..^1]), "截断 gzip 尾部拒绝");
         IgnoreBadMap(() => RevResMapCodec.Unpack(packed.Concat(new byte[1]).ToArray()), "追加正文拒绝");
         byte[] modified = (byte[])packed.Clone();

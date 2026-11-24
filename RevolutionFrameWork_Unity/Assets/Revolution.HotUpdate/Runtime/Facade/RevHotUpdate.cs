@@ -20,7 +20,6 @@
 //   不会下载两遍、也不会把资源策略重装两次。
 // ============================================================
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using Revolution;
@@ -358,7 +357,7 @@ namespace Revolution.HotUpdate
             {
                 previousManifest = TryParseFile(RevHotStore.ManifestPath(previousVersion), config);
             }
-            Dictionary<string, string> previousResMap = RevHotStore.ActiveMemoryResMap;
+            RevResMap previousResMap = RevHotStore.ActiveMemoryResMap;
             bool activating = false;
 
             try
@@ -403,7 +402,7 @@ namespace Revolution.HotUpdate
                 }
 
                 // URL 平台的候选映射在提交前单独持有。任何失败都不会提前改写活动版本。
-                Dictionary<string, string> candidateMap = await ReadWebGLResMapAsync(config, remote, token);
+                RevResMap candidateMap = await ReadWebGLResMapAsync(config, remote, token);
 
                 // ---------- ③ 版本目录补齐（清单副本 + 映射表） ----------
                 _state = RevHotState.Applying;
@@ -483,7 +482,7 @@ namespace Revolution.HotUpdate
 
         /// <summary>指针可能已切新时恢复旧版；恢复失败必须报错而不是假装可玩。</summary>
         private static RevHotError RestoreIfNeeded(bool activating, string previousVersion,
-            RevHotManifest previousManifest, Dictionary<string, string> previousResMap, RevHotError original)
+            RevHotManifest previousManifest, RevResMap previousResMap, RevHotError original)
         {
             if (!activating)
             {
@@ -618,7 +617,7 @@ namespace Revolution.HotUpdate
             // 无更新也要先验证完整内容，之后让映射、依赖和包路径同时绑定到同一版本。
             try
             {
-                Dictionary<string, string> candidateMap = await ReadWebGLResMapAsync(config, check.RemoteManifest, token);
+                RevResMap candidateMap = await ReadWebGLResMapAsync(config, check.RemoteManifest, token);
                 if (RevHotPlatform.IsWebGL)
                 {
                     await RevHotStore.ValidateWebGLCandidateAsync(check.RemoteManifest, check.RemoteManifest.ResVersion, token, candidateMap);
@@ -679,7 +678,7 @@ namespace Revolution.HotUpdate
         }
 
         /// <summary>按候选清单拉取并校验 WebGL 原始映射字节。提交前由调用方保存候选，不改变活动表。</summary>
-        private static async RevTask<Dictionary<string, string>> ReadWebGLResMapAsync(RevHotConfig config,
+        private static async RevTask<RevResMap> ReadWebGLResMapAsync(RevHotConfig config,
             RevHotManifest manifest, RevCancellationToken token)
         {
             if (!RevHotPlatform.IsWebGL)

@@ -7,7 +7,7 @@
 //   RevABLoader.BundlePathResolver     ← RevHotStore.ResolveBundlePath      （包从哪读）
 //   RevABLoader.BundleCacheKeyResolver ← RevHotStore.ResolveBundleCacheKey  （URL 型平台：引擎缓存标识 hash/crc）
 //   RevABLoader.DependenciesOverride   ← RevHotStore.ResolveDependencies    （依赖图用热更清单的 —— 主包 Manifest 是出包时的静态快照）
-//   RevResBootstrap.ResMapSnapshot     ← RevHotStore.LoadHotResMap          （映射表整版安装）
+//   RevResBootstrap.ResolvedResMapSnapshot ← RevHotStore.LoadHotResMap     （已解析的整版地址索引）
 //
 // 【为什么 Install 不触发资源系统 Init】
 //   钩子是静态委托，设好后对"之后每一次 Init"都生效；
@@ -38,10 +38,10 @@ namespace Revolution.HotUpdate
             RevABLoader.BundlePathResolver = RevHotStore.ResolveBundlePath;
             RevABLoader.BundleCacheKeyResolver = RevHotStore.ResolveBundleCacheKey;
             RevABLoader.DependenciesOverride = RevHotStore.ResolveDependencies;
-            RevResBootstrap.ResMapSnapshot = RevHotStore.LoadHotResMap;
+            RevResBootstrap.ResolvedResMapSnapshot = RevHotStore.LoadHotResMap;
             _installed = true;
 
-            RevLog.Info("热更钩子已装载（BundlePathResolver / BundleCacheKeyResolver / DependenciesOverride / ResMapSnapshot）", LogTag);
+            RevLog.Info("热更钩子已装载（BundlePathResolver / BundleCacheKeyResolver / DependenciesOverride / ResolvedResMapSnapshot）", LogTag);
         }
 
         /// <summary>重装策略，由资源系统先校验映射，再按原依赖归还旧资源。</summary>
