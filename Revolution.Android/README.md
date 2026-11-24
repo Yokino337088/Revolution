@@ -1,5 +1,7 @@
 # Revolution.Android
 
+**从手机选择游戏并连接电脑 Agent**，使用[原生安卓测试台](https://github.com/Yokino337088/Revolution/tree/main/Revolution.Android/Android_APP)。电脑运行 `python connect.py lan` 监听，手机主动通过局域网 HTTPS 接入，RevMCP 可以执行真实 GM、断言及固定时间窗的帧率压测。USB 可选。 [安装和接线](https://github.com/Yokino337088/Revolution/blob/main/Revolution.Android/Android_APP/README.md)
+
 把 **Unity 编辑器、RevMCP 和 Android 真机**接到同一套自动化流程。编辑器继续用既有桥。手机上的测试包开启回环 HTTP，电脑用 USB 上的 ADB 把本机端口转发过去。RevMCP 从已注册的游戏动作拿状态、执行断言，把 JSON 结果原路交给电脑上的 Agent。 [ADB 官方文档](https://developer.android.com/tools/adb#forwardports)
 
 ```text

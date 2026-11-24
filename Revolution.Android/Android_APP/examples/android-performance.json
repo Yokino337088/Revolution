@@ -1,0 +1,71 @@
+{
+  "name": "Android 前台游戏 30 秒帧率采样",
+  "steps": [
+    {
+      "id": "deviceBefore",
+      "target": "game",
+      "action": "runtime.android.device"
+    },
+    {
+      "id": "start",
+      "target": "game",
+      "action": "runtime.performance.begin",
+      "arguments": {
+        "warmup": 3,
+        "seconds": 30
+      }
+    },
+    {
+      "id": "performance",
+      "target": "game",
+      "action": "runtime.performance.state",
+      "until": {
+        "path": "/data/status",
+        "equals": "completed",
+        "timeoutSeconds": 55,
+        "intervalSeconds": 2
+      },
+      "expect": [
+        {
+          "path": "/data/success",
+          "equals": true
+        },
+        {
+          "path": "/data/errors",
+          "equals": 0
+        },
+        {
+          "path": "/data/unfocusedFrames",
+          "equals": 0
+        },
+        {
+          "path": "/data/fps",
+          "exists": true
+        },
+        {
+          "path": "/data/p95Ms",
+          "exists": true
+        },
+        {
+          "path": "/data/p99Ms",
+          "exists": true
+        }
+      ]
+    },
+    {
+      "id": "deviceAfter",
+      "target": "game",
+      "action": "runtime.android.device"
+    }
+  ],
+  "finally": [
+    {
+      "target": "game",
+      "action": "runtime.performance.cancel"
+    },
+    {
+      "target": "game",
+      "action": "runtime.performance.disable"
+    }
+  ]
+}

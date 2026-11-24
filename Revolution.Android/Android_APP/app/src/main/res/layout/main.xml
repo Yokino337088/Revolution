@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/screen" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:fillViewport="true" android:fitsSystemWindows="true">
+    <LinearLayout android:orientation="vertical" android:padding="20dp"
+        android:layout_width="match_parent" android:layout_height="wrap_content">
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="@string/app_name" android:textSize="28sp" android:textStyle="bold" android:textColor="#13312D" />
+        <TextView style="@style/GroupTitle" android:text="@string/game_title" />
+        <TextView android:id="@+id/game" style="@style/Detail" />
+        <LinearLayout style="?android:attr/buttonBarStyle" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <Button style="?android:attr/buttonBarButtonStyle" android:id="@+id/pick" android:text="@string/select_game" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+            <Button style="?android:attr/buttonBarButtonStyle" android:id="@+id/file" android:text="@string/select_file" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+        </LinearLayout>
+        <CheckBox android:id="@+id/isolate" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:checked="true" android:text="@string/isolated" />
+        <TextView style="@style/GroupTitle" android:text="@string/computer" />
+        <RadioGroup android:id="@+id/mode" android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <RadioButton android:id="@+id/usb" android:text="@string/usb" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+            <RadioButton android:id="@+id/lan" android:text="@string/lan" android:layout_marginStart="12dp" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+        </RadioGroup>
+        <TextView android:id="@+id/instructions" style="@style/Detail" android:textIsSelectable="true" />
+        <EditText android:id="@+id/address" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:hint="@string/desktop_address" android:inputType="textUri" android:singleLine="true"
+            android:importantForAutofill="no" android:minHeight="48dp" />
+        <EditText android:id="@+id/code" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:hint="@string/desktop_code" android:inputType="numberPassword" android:maxLength="8"
+            android:importantForAutofill="no" android:saveEnabled="false" android:minHeight="48dp" />
+        <TextView style="@style/GroupTitle" android:text="@string/session" />
+        <TextView android:id="@+id/status" style="@style/Detail" android:accessibilityLiveRegion="polite" />
+        <TextView android:id="@+id/pair" style="@style/Detail" android:fontFamily="monospace" android:textSize="18sp" android:textIsSelectable="true" />
+        <Button android:id="@+id/start" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="16dp" android:backgroundTint="#006B5D" android:textColor="#FFFFFF" />
+        <Button android:id="@+id/stop" android:text="@string/disconnect" android:layout_width="match_parent" android:layout_height="wrap_content" />
+    </LinearLayout>
+</ScrollView>
