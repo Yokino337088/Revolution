@@ -1,6 +1,6 @@
 {
   "name": "revgame",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "RevGame 工程实践、业务自动交付、项目规范、Revolution-TA 技术美术和真实测试入口。",
   "author": { "name": "Revolution" },
   "license": "MIT",
