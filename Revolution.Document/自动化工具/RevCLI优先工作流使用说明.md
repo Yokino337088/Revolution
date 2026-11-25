@@ -13,12 +13,14 @@
 | Prefab 创建、实例化、修改、写回、解包 | **RevCLI** | `prefab.*` |
 | 资产、Importer、材质、Shader | **RevCLI** | `asset.*`、`material.*`、`shader.list` |
 | 项目设置、构建设置、打包 Player | **RevCLI** | `settings.*`、`build.*` |
-| 编译、Console、Test Runner | **RevCLI** | `editor.compilation/console`、`test.*` |
+| 编译、Console、Test Runner | **RevCLI** | `editor compilation`、`editor console --severity error --limit 50`、`test.*` |
 | Revolution 全链路（AB、Excel、热更、平台资源） | **RevCLI** | `ab.*`、`excel.*`、`hot.*`、`platform.*` |
 | 游戏运行时的 GM 指令、点 UI、读运行时状态 | **RevCLI** | `runtime start` 后用 `game gm` / `game call` |
 | 长自动化测试、多步断言、要带截图和 GIF 的 HTML 报告 | **RevMCP** | `rev_run` |
 
 一句话：**轻量操作用 CLI，长自动化测试、要带截图和 GIF 的 HTML 报告用 MCP。** 两者区别和利弊见 [RevCLI 与 RevMCP 怎么选](RevCLI与RevMCP怎么选.md)。
+
+Console 直接返回 Unity 保存的完整分页消息和源文件行列，可用 `--severity`、`--query` 和 `--offset` 筛选。若 `editor wait` 以非零退出，先读随附的本次会话诊断和 Console，修复后再重编，并用 `editor compilation` 核对新工单。
 
 ## 二、调用时间
 

@@ -1,3 +1,5 @@
+from contextlib import redirect_stderr, redirect_stdout
+import io
 import json
 from pathlib import Path
 import sys
@@ -6,8 +8,9 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from revautomation.cli import ROOT, parser, payload_of, run_pipeline, validate_action
+from revautomation.cli import ROOT, main, parser, payload_of, run_pipeline, validate_action
 from revautomation.client import RevError, read_json
+from revautomation.errors import RevCompilationError
 from revautomation.pipeline import argument_references, map_arguments, matches, pointer, prepare, resolve
 
 
@@ -35,6 +38,34 @@ class FakeClient:
 
 
 class AutomationTests(unittest.TestCase):
+    def test_console_cli_passes_all_filters_and_prints_the_whole_page(self):
+        """命令组选项直传 Unity，选定页的堆栈和后半页日志不能再被摘要裁掉。"""
+        page = [{"message": f"第 {index} 条 " + "堆栈" * 400, "severity": "warning"} for index in range(6)]
+        self.client.responses = [{"success": True, "data": {"total": 10, "offset": 4, "entries": page}}]
+        output = io.StringIO()
+        with patch("revautomation.cli.RevClient", return_value=self.client), redirect_stdout(output):
+            code = main(["--no-daemon", "editor", "console", "--severity", "warning", "--query", "棋盘",
+                         "--offset", "4", "--limit", "6"])
+        self.assertEqual(code, 0)
+        self.assertEqual(self.client.calls, [("editor.console", {
+            "severity": "warning", "query": "棋盘", "offset": 4, "limit": 6
+        }, False)])
+        self.assertEqual(json.loads(output.getvalue())["data"]["entries"], page)
+
+    def test_wait_cli_keeps_compile_diagnostics_on_stderr(self):
+        """编译失败的非零退出让自动化停下来，同一错误响应带完整文件行列。"""
+        diagnostics = {"requestId": "wanted", "finished": True, "failed": True,
+                       "messages": [{"file": "Assets/Broken.cs", "line": 4, "column": 9, "message": "CS1002"}]}
+        error = io.StringIO()
+        with patch("revautomation.cli.RevClient") as client, redirect_stderr(error):
+            client.return_value.wait_ready.side_effect = RevCompilationError(diagnostics)
+            code = main(["--no-daemon", "editor", "wait"])
+        self.assertEqual(code, 2)
+        body = json.loads(error.getvalue())
+        self.assertFalse(body["success"])
+        self.assertEqual(body["error"], "RevCompilationError")
+        self.assertEqual(body["data"], diagnostics)
+
     def test_summary_preserves_late_failure_and_recovery_fields(self):
         from revautomation.summary import summarize
         rows = [{"id": str(i), "response": {"success": True, "data": {"log": "x" * 9000}}}

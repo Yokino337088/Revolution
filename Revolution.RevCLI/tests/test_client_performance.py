@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from revautomation.client import RevClient, RevCancelled, _RELEASED_JOB, atomic_json
+from revautomation.errors import RevCompilationError
 
 
 class ClientPerformanceTests(unittest.TestCase):
@@ -132,6 +133,29 @@ class ClientPerformanceTests(unittest.TestCase):
                     result = self.client.wait_ready()
         self.assertEqual(result["endpoint"]["domainId"], "new")
         self.assertGreaterEqual(clock[0] - first_new[0], 2)
+
+    def test_wait_ready_reports_only_the_current_sessions_finished_failure(self):
+        """真实失败返回文件行列。上一次启动或尚未结束的记录不能作为当前证据。"""
+        clock = [0.0]
+        path = self.client.root / "compilation.json"
+        diagnostic = dict(sessionId="same", requestId="requested", finished=True, compiling=False, failed=True,
+                          messages=[dict(file="Assets/Broken.cs", line=3, column=8, type="Error", message="CS1519")])
+
+        def advance(seconds):
+            """推进虚拟时钟，让等待跨过稳定心跳而无需真实休眠。"""
+            clock[0] += seconds
+
+        for changes, expected in (({}, diagnostic), ({"sessionId": "previous"}, None), ({"finished": False}, None)):
+            with self.subTest(changes=changes):
+                atomic_json(path, dict(diagnostic, **changes))
+                clock[0] = 0.0
+                with patch.object(self.client, "endpoint", side_effect=lambda: dict(
+                        sessionId="same", domainId="current", heartbeatUnix=100 + clock[0], compilationFailed=True)):
+                    with patch("revautomation.client.time.monotonic", side_effect=lambda: clock[0]):
+                        with patch("revautomation.client.time.sleep", side_effect=advance):
+                            with self.assertRaises(RevCompilationError) as result:
+                                self.client.wait_ready()
+                self.assertEqual(result.exception.diagnostics, expected)
 
 
 if __name__ == "__main__":
