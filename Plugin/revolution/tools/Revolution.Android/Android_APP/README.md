@@ -30,7 +30,7 @@ Agent → RevMCP → 电脑接线器（HTTPS 服务端） ← 主动连接 ← �
 
 ## 游戏悬浮窗
 
-在测试台打开「在游戏上显示悬浮窗」，到 Android 系统设置为 Revolution 测试台开启「显示在其他应用上层」。启动游戏后可拖动「测试台」手柄，点击展开面板，查看游戏状态、收起、返回测试台或断开本轮连接。回到测试台时暂隐藏，断开后移除。游戏界面以外的系统安全页面可能暂时隐藏浮窗。
+在测试台打开「在游戏上显示悬浮窗」，到 Android 系统设置为 Revolution 测试台开启「显示在其他应用上层」。启动游戏后可拖动「测试台」手柄，点击展开面板，查看游戏状态、开始性能采样、收起、返回测试台或断开本轮连接。回到测试台时暂隐藏，断开后移除。游戏界面以外的系统安全页面可能暂时隐藏浮窗。
 
 「Agent 操作记录」可在测试台或游戏悬浮窗中打开。展开后手机才读取电脑留存的工单和回执，收起时取消日志请求并清空手机的分页缓存。同一会话重新打开可补看关闭期间的操作。按每页 40 条向下读取更早记录，点击单行展开摘要，点「回到最新」恢复跟随。电脑为当前会话最多保留最近 4096 条，手机复用屏外行。
 
@@ -63,9 +63,19 @@ python Revolution.RevMCP/rev_mcp.py --runtime-endpoint $endpoint --full run Revo
 
 ## 真机性能压测
 
+### 从手机开始
+
+让游戏保持前台，进入要测量的关卡或压力场景。展开悬浮窗，点「性能采样」和「开始 30 秒采样」。游戏预热 3 秒并在随后 30 秒采集。收起浮窗可以继续操作游戏，展开后可查看 FPS、P95/P99 和游戏进程 PSS。失焦帧会显示出来，用同一场景复测时保持游戏前台。
+
+手机开始后，电脑 Agent 用同一条已配对连接执行 `rev_discover`，再用 `rev_call` 调用 `target=game`、`action=runtime.performance.state`、`full=true`。默认读取游戏内最近一轮，通过 `data.runId` 核对身份。有明确 ID 时传 `arguments.runId`。状态变为 `finished=true` 后可读取完整回执，包含帧时间、渲染与内存计数、运行错误和两端的安卓设备数据。游戏保留最近一轮摘要供领取，下一轮会更新它。
+
+手机取消或断开时，测试台按启动前选定的 ID 停止本轮。独立开启的采样 Recorder 在完成、失败或取消时释放。使用此入口需要用支持这些采样参数的 Revolution 框架重新构建游戏测试包。
+
+### 从电脑 Agent 发起
+
 - 先让游戏通过项目自身的入口进入指定的战斗、棋子数量或 UI 压力场景，用它实际登记的只读状态核对负载。随附的通用计划测量当前前台场景，预热 3 秒，采样 30 秒。支持的单轮采样范围是 1–600 秒。重复压测应逐轮恢复相同负载。[通用 Android 性能计划](https://github.com/Yokino337088/Revolution/blob/main/Revolution.Android/Android_APP/examples/android-performance.json) · [RevGame 第四章 81 棋计划](https://github.com/Yokino337088/Revolution/blob/main/Revolution.Android/examples/revgame-perf.json)
-- Agent 在计时窗前后读 `runtime.android.device`，获取游戏进程 PID、PSS（KiB）、电池温度（°C）和 Android 系统热状态（API 29+）。这些值由游戏进程调用安卓系统取得，无需 ADB。旧游戏测试包需更新框架并重建才能登记这个新增动作。未提供的设备指标返回空值。
-- `runtime.performance.begin` 返回 `runId`。用 `runtime.performance.state` 等到 `completed`，取同一 `runId` 的实际秒数、帧数、平均 FPS、P50/P95/P99 与最长帧时、超 33.3 ms 比例、失焦帧、运行错误和有效 GPU 样本。平均 FPS 等于实际帧数除以实际秒数。GPU 无有效样本时分位数为 -1，`gpuRejectedSamples` 给出被剔除的读数。用 `full=true` 或 CLI `--full` 取得完整回执。
+- 在 `runtime.performance.begin` 传 `androidDevice:true` 与 `releaseOnFinish:true`。游戏把预热前、计时截止后的 PID、PSS（KiB）、电池温度（°C）和热状态写到 `androidBefore` 与 `androidAfter`。系统未提供的值保留空值；查询故障给出 `sampleError`。需要单独读设备状态时用 `runtime.android.device`，放在计时窗外。
+- `runtime.performance.begin` 返回 `runId`。用 `runtime.performance.state` 等到 `finished=true`，断言 `success=true`，再取同一 `runId` 的实际秒数、帧数、平均 FPS、P50/P95/P99 与最长帧时、超 33.3 ms 比例、失焦帧、运行错误和有效 GPU 样本。平均 FPS 等于实际帧数除以实际秒数。GPU 无有效样本时分位数为 -1，`gpuRejectedSamples` 给出被剔除的读数。用 `full=true` 或 CLI `--full` 取得完整回执。在 `finally` 把本轮 ID 传给 `runtime.performance.cancel`，确保并发场景只清理该轮。
 - 手机持续挂起一条 HTTPS 请求，电脑收到 Agent 指令立即交付。手机向选定游戏的回环端点提交原始工单，接收其状态、JSON 或截图，并在下一次请求中回传。运行时 `POST /call` 表示接单，最终结果仍由 RevMCP 轮询、断言和确认。断线不会自动重放业务变更。通知栏、测试台「断开连接」或电脑 Ctrl+C 均可结束接线，已执行的游戏操作由计划负责收尾。
 
 ## 可选 USB

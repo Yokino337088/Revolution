@@ -7,9 +7,6 @@ import threading
 import time
 import uuid
 
-from revautomation.errors import RevError
-
-
 _SECRET = re.compile(r"token|password|passwd|secret|credential|authorization|api.?key", re.I)
 _INLINE_SECRET = re.compile(r'(?i)(Bearer\s+)[^\s"\\]+|((?:token|password|secret|api[_-]?key)\s*[=:]\s*)[^\s,;"\\]+')
 
@@ -101,5 +98,5 @@ class Activity:
                     row[key] = safe_text(row[key], 512)
             self.publish(row)
             self.last_error = ""
-        except (OSError, RevError, ValueError, TypeError, RecursionError) as exc:
+        except (OSError, RuntimeError, ValueError, TypeError) as exc:
             self.last_error = str(exc)

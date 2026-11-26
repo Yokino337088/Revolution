@@ -2,17 +2,14 @@
   "name": "Android 前台游戏 30 秒帧率采样",
   "steps": [
     {
-      "id": "deviceBefore",
-      "target": "game",
-      "action": "runtime.android.device"
-    },
-    {
       "id": "start",
       "target": "game",
       "action": "runtime.performance.begin",
       "arguments": {
         "warmup": 3,
-        "seconds": 30
+        "seconds": 30,
+        "androidDevice": true,
+        "releaseOnFinish": true
       }
     },
     {
@@ -20,8 +17,8 @@
       "target": "game",
       "action": "runtime.performance.state",
       "until": {
-        "path": "/data/status",
-        "equals": "completed",
+        "path": "/data/finished",
+        "equals": true,
         "timeoutSeconds": 55,
         "intervalSeconds": 2
       },
@@ -49,23 +46,32 @@
         {
           "path": "/data/p99Ms",
           "exists": true
+        },
+        {
+          "path": "/data/androidBefore/pid",
+          "exists": true
+        },
+        {
+          "path": "/data/androidAfter/pid",
+          "exists": true
         }
-      ]
-    },
-    {
-      "id": "deviceAfter",
-      "target": "game",
-      "action": "runtime.android.device"
+      ],
+      "arguments": {
+        "runId": {
+          "$ref": "start#/data/runId"
+        }
+      }
     }
   ],
   "finally": [
     {
       "target": "game",
-      "action": "runtime.performance.cancel"
-    },
-    {
-      "target": "game",
-      "action": "runtime.performance.disable"
+      "action": "runtime.performance.cancel",
+      "arguments": {
+        "runId": {
+          "$ref": "start#/data/runId"
+        }
+      }
     }
   ]
 }
