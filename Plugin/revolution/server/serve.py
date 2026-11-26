@@ -11,7 +11,7 @@ CLI = ROOT / "tools/Revolution.RevCLI"
 MCP = ROOT / "tools/Revolution.RevMCP"
 sys.path[:0] = [str(CLI), str(MCP)]
 
-from revmcp.backends import Hub
+from revmcp.backends import Hub, external_specs
 from revmcp.schema import object_schema, validate
 from revmcp.server import Server
 from revautomation.contracts import audit
@@ -23,6 +23,8 @@ BIND = object_schema({
     "project": {"type": "string", "minLength": 1},
     "runtimeEndpoint": {"type": "string", "minLength": 1,
                         "description": "可选的开发版 Player runtime.json 绝对路径。"},
+    "externalManifest": {"type": "string", "minLength": 1,
+                         "description": "可选的可信外部工具清单绝对路径。绑定后可显式调用登记的程序。"},
 }, ("project",))
 
 
@@ -51,7 +53,7 @@ class ProjectServer(Server):
             arguments = params.get("arguments", {})
             try:
                 validate(arguments, BIND)
-                data = self.bind(arguments["project"], arguments.get("runtimeEndpoint"))
+                data = self.bind(arguments["project"], arguments.get("runtimeEndpoint"), arguments.get("externalManifest"))
             except (OSError, ValueError, RuntimeError) as exc:
                 data = {"success": False, "error": type(exc).__name__, "message": str(exc)}
         elif self.hub:
@@ -64,7 +66,7 @@ class ProjectServer(Server):
             "isError": not data["success"],
         }
 
-    def bind(self, project_arg, endpoint_arg):
+    def bind(self, project_arg, endpoint_arg, external_arg=None):
         """先核对项目标识和目录，再替换连接。绑定失败时原工程仍可用。"""
         requested = Path(project_arg)
         if not requested.is_absolute():
@@ -80,25 +82,33 @@ class ProjectServer(Server):
             endpoint = requested_endpoint.resolve(strict=True)
             if endpoint.name != "runtime.json" or not endpoint.is_file():
                 raise ValueError("请选择开发版 Player 写出的 runtime.json。")
+        external_manifest = None
+        if external_arg:
+            requested_manifest = Path(external_arg)
+            if not requested_manifest.is_absolute():
+                raise ValueError("外部工具清单必须是绝对路径。")
+            external_manifest = requested_manifest.resolve(strict=True)
+        external_actions = external_specs(external_manifest)
 
         # 同版本的项目工具优先。MCP 协议仍使用插件自带的 RevMCP，
         # Hub 读取项目 RevCLI 动作清单，在线注册表才决定动作是否可用。
         project_cli = project.parent / "Revolution.RevCLI"
         has_cli = (project_cli / "rev.py").is_file() and (project_cli / "commands.json").is_file()
         cli = project_cli if has_cli else CLI
-        binding = (project, endpoint)
+        binding = (project, endpoint, external_manifest)
         if binding != self.binding:
             # 先校验安装缓存与项目清单主版本，仍由插件自带 Python 实现处理请求。
             installed = audit(read_json(CLI / "commands.json"))
             declared = audit(read_json(cli / "commands.json"))
             if not installed["success"] or installed["contractVersion"] != declared["contractVersion"]:
                 raise ValueError("插件工具与项目命令契约不兼容，请核对安装版本。")
-            self.hub = Hub(project=project, runtime_endpoint=endpoint, cli_root=cli)
+            self.hub = Hub(project=project, runtime_endpoint=endpoint, cli_root=cli, external_manifest=external_manifest)
             self.binding = binding
         report = audit(self.hub.manifest)
         return {"success": True, "project": str(project), "commandCatalog": str(cli / "commands.json"),
                 "bundledRevCli": str(CLI / "rev.py"),
                 "player": endpoint is not None, "revMcp": str(MCP),
+                "externalActions": [item["id"] for item in external_actions],
                 "contractVersion": report["contractVersion"], "manifestHash": report["manifestHash"],
                 "schemaIssues": report["errors"]}
 

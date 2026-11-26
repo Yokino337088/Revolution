@@ -13,7 +13,7 @@ REVGAME_PLUGIN = ROOT / "Plugin/revgame"
 SKILLS = (
     "revolution-framework", "revolution-unity-editor", "revolution-ai-automation",
     "revolution-performance", "revolution-automation-tester", "revolution-gal", "revolution-ta",
-    "revolution-android-testing", "revolution-revasset",
+    "revolution-android-testing", "revolution-revasset", "fantasy-net",
 )
 # 两个插件共用源 Skill，RevGame 插件的项目入口仍由各自目录维护。
 SHARED_SKILLS = ("revolution-wiki",)

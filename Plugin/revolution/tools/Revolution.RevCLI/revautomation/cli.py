@@ -97,6 +97,13 @@ def _build_parser():
     call.add_argument("--json", type=Path, help="动作参数 JSON 文件")
     call.add_argument("--set", action="append", default=[], metavar="KEY=JSON")
     call.add_argument("--detach", action="store_true", help="提交到在线 Editor 后立即返回工单 ID")
+    external = sub.add_parser("external", help="发现与执行显式配置的外部工具，复用 RevMCP 清单")
+    external.add_argument("--manifest", type=Path, required=True, help="经信任的外部工具 JSON 清单")
+    external_ops = external.add_subparsers(dest="operation", required=True)
+    external_ops.add_parser("discover", help="列出已配置外部能力")
+    external_call = external_ops.add_parser("call", help="向固定能力传递 JSON 输入")
+    external_call.add_argument("action")
+    external_call.add_argument("--json", help="参数 JSON 文件，- 表示标准输入")
     report = sub.add_parser("report", help="从 scenario 结果生成 JSON/CSV/HTML")
     report.add_argument("result", type=Path)
     report.add_argument("--directory", type=Path, required=True)
@@ -621,6 +628,28 @@ def invoke_action(client, action, payload, confirm, report_dir=None, progress=pr
     return editor_outcome(action, response)
 
 
+def run_external(args):
+    """只在显式选用外部能力时加载随工具链附带的 RevMCP。清单控制可执行文件，调用者只提供 JSON。"""
+    mcp_root = ROOT.parent / "Revolution.RevMCP"
+    if not (mcp_root / "revmcp/backends.py").is_file():
+        raise RevError("外部工具需要同版 Revolution.RevMCP 目录。")
+    sys.path.insert(0, str(mcp_root))
+    try:
+        from revmcp.backends import call_external, external_specs
+    finally:
+        sys.path.pop(0)
+
+    specs = external_specs(args.manifest)
+    if args.operation == "discover":
+        fields = ("id", "description", "inputSchema", "readOnly", "confirm", "target")
+        return {"success": True, "actions": [{key: item[key] for key in fields if key in item} for item in specs]}
+    spec = next((item for item in specs if item["id"] == args.action), None)
+    if spec is None:
+        raise RevError("未登记的外部能力：" + args.action)
+    payload = json.load(sys.stdin.buffer) if args.json == "-" else read_json(Path(args.json)) if args.json else {}
+    return call_external(spec, payload, args.confirm, None)
+
+
 def main(argv=None):
     """分发 CLI 动作并输出 JSON。只有命令行明确指定的导出路径才会落盘。"""
     raw = list(sys.argv[1:] if argv is None else argv)
@@ -651,6 +680,8 @@ def main(argv=None):
         elif args.family == "doctor":
             from . import connect as linking
             result = linking.inspect(args.project, args.unity, args.timeout)
+        elif args.family == "external":
+            result = run_external(args)
         elif args.family == "contract":
             from .contracts import audit
             manifest = read_json(ROOT / "commands.json")

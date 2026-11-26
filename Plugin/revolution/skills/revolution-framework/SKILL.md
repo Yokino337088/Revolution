@@ -27,6 +27,7 @@ description: 使用或维护 Revolution Unity 框架时选择公开门面、FSM�
 | 编辑器与项目制作配方 | [Revolution 编辑器技能](../revolution-unity-editor/SKILL.md) 和 [Editor 职责](references/revgame-editor-practice.md) |
 | 进入 Play 慢、关闭域重载后启动失败或状态残留 | [高频踩坑集第 5 节](references/pitfalls.md) 的计时、静态复位与真 AB 重入 |
 | GM、RevMCP、功能完整性与缺陷回归 | [自动化接入](references/automation-integration.md) 和 [实际测试技能](../revolution-ai-automation/SKILL.md) |
+| Fantasy 协议、服务器、Unity 客户端与可选自动化 | [Fantasy 联动](references/fantasy-integration.md) 与 [fantasy-net](../fantasy-net/SKILL.md) |
 | 战斗、逐帧更新、密集 UI/特效与性能敏感代码 | [性能技能](../revolution-performance/SKILL.md)，从设计起核对 CPU、GPU、内存与缓存 |
 | 真机与 Player | [Player 测试](references/player-testing.md) 与 [移动端](references/android-runtime-and-layout.md) |
 | 热更 | [热更](references/hot-update.md) |
