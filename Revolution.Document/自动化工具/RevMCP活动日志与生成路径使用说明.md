@@ -17,7 +17,7 @@ Unity 菜单：`Revolution.Tools/AI/RevMCP 控制台`。默认打开“活动日
 | runtime.screenshot | 截取游戏画面作为证据 | 保存本次画面，配合业务数值断言验收 |
 | rev_run | 执行一份测试计划 | 按步骤操作、核对断言，最后执行清理 |
 
-时间、来源、执行中/成功/失败/取消和耗时在每条记录底部。点击一条记录，查看“在做什么”“有什么用”“AI 说明的目的”、原命令、参数和结果摘要。有编辑器工单时，可点“工单”打开证据目录。
+时间、来源、执行中/成功/失败/取消和耗时在每条记录底部。点击一条记录，查看“在做什么”“有什么用”“AI 说明的目的”、原命令、参数和结果摘要。工单正在使用临时目录时，可点“临时工单”查看。
 
 运行时 GM 记录明确标注“游戏运行时 · GM 指令”，直接显示实际完整指令与参数。通过 Editor 的 gm.exec、runtime.call 或 MCP 的 rev_call 转发时，也按具体 GM 识别；“游戏运行时”和“GM 指令”筛选都可以找到这些记录。详情另外显示“执行环境”和“具体 GM 指令与参数”。结构化 arg0/args 原样以 JSON 展示，避免重拼引号改变中文、空格等参数；仅查询 GM 列表不标成执行指令。
 
@@ -65,9 +65,7 @@ intent 只用于说明，不进入业务 arguments，不改变权限，也不会
 
 Agent 请求、Unity Editor 实际执行、游戏运行时、GM、外部 CLI、计划断言分别显示。一次跨层调用可能出现数条相关记录，这是同一次请求的不同执行层；每层自己的开始与完成使用同一 id 合并。HTTP 接单、单条调用成功和计划断言通过是不同结果。
 
-界面每 250ms 检查增量文件，最多显示最近 500 条；无变化时不主动持续 Repaint。整次刷新共享 256KiB / 128 行读取预算，积压分批处理；标题、用途、搜索文本与行高缓存，只绘制视口内控件，OnGUI 不读磁盘。详见 [提速与活动窗口优化](RevMCP提速与活动窗口优化使用说明.html)。日志在 `Library/RevolutionAutomation/activity`，Python 和 Unity 使用不同文件，不会竞争写同一个流。每个流最多保留四个约 2MiB 的分段；窗口只读最近 64 个流文件。旧进程留下的文件可以在证据不再需要时自行清理。常见 token、password、Authorization 等字段和截图 base64 不进入日志摘要；业务私密内容仍应避免放进自由文本。
-
-脚本重载或重新打开窗口后重新读取本地账本。纯独立 Player 的 Unity 日志在 persistentDataPath 的 RevolutionAutomation/activity；MCP 使用 `--project` 时 Agent 调用记录会同时落入该工程的活动目录。Unity 窗口不主动扫描任意远程设备的文件。
+打开窗口后才启用实时采集。窗口每 250 ms 读取临时活动，逐个读取后立即删除文件，视图最多显示 500 行。若写入太快，待消费的 64 个固定槽位会覆盖最旧事件。窗口关闭或编辑器重载时清理待消费文件，随后停止本轮采集。独立 Player 默认无需写活动文件。升级后旧版本以进程命名的分段可以用 `storage.status` 检查并回收。
 
 CLI 也可只读查询：
 
@@ -76,7 +74,7 @@ python Revolution.RevCLI/rev.py --project <工程绝对路径> --mode live call 
 python Revolution.RevMCP/rev_mcp.py --project <工程绝对路径> call editor editor.status --intent "确认本工程编译完毕"
 ```
 
-`editor.activity` 返回 entries 和 summaries（中文 operation、purpose、agentIntent），另返回 `pending`、`totalIsFinal`、`invalidLines`、`polls` 和 `scope`。诊断复用读取进度，单次最多补齐 8 批，批次间检查 20ms 软预算（不含筛选/摘要，不是主线程硬期限）；每批仍最多 256KiB / 128 行。`pending=true` 时有预算积压，只读重查会继续原游标；不得把当前 total 当完整数量。`totalIsFinal=true` 只表示本次观察的受限视图已无预算积压且未记录读取错误，不代表全部历史或写入器已停止：最多最近 64 流、每个新流尾部 256KiB、最近 500 条，半行/无效行不计入总数。分页是当前实时视图，不承诺跨调用稳定快照。窗口自刷新不通过 MCP，所以不会出现“查看日志又不断生成查看日志”的循环。
+`editor.activity` 返回 entries 和 summaries（中文 operation、purpose、agentIntent）。窗口关闭时返回 `recording: false`。窗口开启时可用 `pending` 检查当前读取是否达到预算，用 `scope` 核对当前视图边界。清空视图会释放当前显示和待消费事件。
 
 ## 4. 连接设置更简单了
 

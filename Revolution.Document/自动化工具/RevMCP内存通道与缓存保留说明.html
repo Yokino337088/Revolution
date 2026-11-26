@@ -1,18 +1,27 @@
-<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RevMCP 内存通道与缓存保留</title><style>body{background:#f6f7f2;color:#25352f;font:16px/1.9 Microsoft YaHei,sans-serif;max-width:960px;margin:40px auto;padding:24px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:white;padding:24px;border:1px solid #dce3da;border-radius:12px}</style><pre># RevMCP 内存通道与缓存保留
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RevMCP 内存通道与临时文件清理</title><style>body{background:#f6f7f2;color:#25352f;font:16px/1.9 Microsoft YaHei,sans-serif;max-width:960px;margin:40px auto;padding:24px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:white;padding:24px;border:1px solid #dce3da;border-radius:12px}</style><pre># RevMCP 内存通道与临时文件清理
 
-更新：2026-11-06。
+## 运行过程
 
-新版 Unity Editor 启动本机 HTTP 服务，RevCLI 与 RevMCP 自动优先使用内存任务。普通查询、GM 与 UI 调用不再创建 jobs/&lt;id&gt;/request.json 和 response.json；旧工程没有内存端点时继续使用文件桥。提交后的请求不会因断线切换通道或重新 POST。
+日常 RevCLI 和 RevMCP 查询领到终态就确认，Editor 释放响应，只保留有期限的去重身份。断线后查询原工单。旧版文件桥和批处理使用临时工单，读取回执和必要的诊断后立即永久删除。
 
-支持 HTTP 的编辑器在域重载时即使暂时没有监听地址，工具也会等待同一会话的 HTTP 服务就绪。已提交的请求继续用原 ID 查询。检查点允许没有业务数据的回执，单条不可保留的结果只会过期，不会影响其他工单恢复。
+| 临时文件 | 谁负责清理 |
+| --- | --- |
+| 场景与游戏截图 | RevCLI 和 RevMCP 在读取 PNG 后删除，独立 Player 在 HTTP 传输结束后删除。用户需要留图时使用显式导出。 |
+| Test Runner 和旧 scenario | 调用端先消费终态和用户指定的报告，然后删除临时结果、标记和逐轮记录。取消等待的测试可用 `test.result` 领取终态。 |
+| 旧文件桥和后台工单 | 领取终态后删除文件。批处理失败会附上日志尾部，随后删除临时日志。 |
+| 活动事件 | 只有 RevMCP 窗口开启才创建。窗口读取后逐个删除，关闭时清掉待消费事件并停止采集。最多暂存 64 个事件，总计不超过 4 MiB。 |
 
-收到结果后客户端发送 Ack，释放大响应，保留身份用于去重。结果未确认时有数量、体积与时限上限；已过期的原始请求拒绝重新执行。脚本重载保留必要的恢复检查点，普通操作不重放，原有明确可恢复的等待动作继续恢复。Test Runner、scenario、构建等需要证据的任务仍可写少量文件。
+AI 使用内联计划或标准输入。临时输入由创建者在 `finally` 删除。报告和长久证据导出到明确指定的文档目录，避开 Unity 的 `Library/RevolutionAutomation/jobs`、`activity`、`screenshots` 与工具的 `results`。
 
-显式截图保存为 PNG，响应包含路径、大小和 mimeType。RevMCP 返回 image 时读取该图片。常规执行不保存工单或报告，必须落盘的兼容桥接文件和后台回执在领取终态后回收。只有用户明确要求时生成报告。
+## 清理历史遗留
 
-Unity RevMCP → 连接设置 → 缓存与证据保留，可以设置自动回收、成功/失败工单天数、工单/截图/报告容量。默认成功工单7天、失败14天、工单256MiB；截图7天/512MiB；报告30天/256MiB。超过容量从最老已完成缓存开始回收。保留设置在 Library/RevolutionAutomation/storage-policy.json，凭据在 editor-http.json，不提交或分享凭据。
+`storage.status` 查看工单、后台凭条、旧截图、待领取截图和旧活动分段。 `storage.prune` 默认预览，传 `dryRun=false` 才执行。升级后自动回收原先已停用的活动分段和过期工单。正在执行的请求、尚在领取窗口内的文件、`.keep`、自定义工单文件和链接会受到保护。兼容旧版本的天数和容量设置用于异常退出补偿，正常消费完成时即时清理。
 
-CLI：storage.status 预览；storage.configure 用 configJson 修改；storage.prune 默认 dryRun=true，传 dryRun=false 才应用清理。未完成工单、活动/TestRunner工单、原请求期限未过、最近15分钟证据和 .keep 标记受到保护。目录含符号链接/junction 时不跟随清理。受保护文件超过预算会报告 overBudget，不强行删除。
+更新 Unity 桥、RevCLI 和 RevMCP 到同一版本后重启常驻 RevMCP。配置与连接心跳在 `Library/RevolutionAutomation` 根目录，凭据只在本机使用。
 
-本次验证：新增 Python 内存通道5/5、RevMCP回归36/36、Unity新增内存/清理测试5/5通过。实际Editor状态查询返回 http-memory、jobDirectory=null。已有CLI全量初次出现一项常驻服务大请求连接中断，单独复验32/32通过。完整MCP游戏流程、跨重载长任务、Player与设备的最终验收尚未完成，不以这些基础结果宣称全部通过。游戏工程需同步新版框架和Python工具后才能使用；历史游戏工单未在本次人工清理。
+## RevGame 验证
+
+在 Unity 2022.3.15f1c1 的 RevGame 工程实测场景截图、Play 内截图、运行时 HTTP 截图、后台回执领取和旧 scenario。实时活动窗口仍能看到 Agent 和 Unity 的执行结果。领取后，工单、活动、截图和后台凭条目录的文件数均为 0。
+
+用过期工单、活动分段、截图和后台凭条验证预览与回收，并核对带 `.keep` 的工单、自定义文件和期限内的凭条可以正常保留。
 </pre></html>

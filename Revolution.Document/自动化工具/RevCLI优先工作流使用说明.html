@@ -27,6 +27,9 @@ pre{background:var(--code-bg);color:var(--code-fg);border-radius:8px;padding:15p
 <p>CLI 在 Play 时也能调 <code>gm.exec</code>。跨接口断言与清理用 <code>rev_run</code>，用户明确要求时才导出报告。</p>
 <p>Console 返回 Unity 保存的完整分页消息和源文件行列，可用 <code>--severity</code>、<code>--query</code> 和 <code>--offset</code> 筛选。若 <code>editor wait</code> 以非零退出，先读随附的本次会话诊断和 Console，修复后再重编，并用 <code>editor compilation</code> 核对新工单。</p></section>
 
+<section id="temp-files"><h2>临时文件用完即删</h2>
+<p>查询和验收直接读取本次响应。AI 自建临时计划放系统临时目录，在最后一次读取后通过 <code>finally</code> 删除。Unity 自动化的 <code>Library/RevolutionAutomation/jobs</code>、<code>activity</code> 和 <code>screenshots</code> 专供暂存。用户明确要求保留的产物写到指定文档位置。</p>
+<p>截图交付后立即删除临时 PNG。活动窗口打开后才采集临时事件，读取后立即回收。关闭窗口时停止采集并清掉未读事件。旧工单在最后一次领取后回收，异常退出遗留用 <code>storage.status</code> 和 <code>storage.prune</code> 核对。<a href="RevMCP内存通道与缓存保留说明.html">缓存保留说明</a></p></section>
 <section><h2><span class="num">二</span>调用时间</h2><p class="lead">常驻服务 + 快速路径：启动一次，之后每条命令只做一次本机转发。</p>
 <h3>做了什么</h3>
 <ol><li><b>常驻服务</b>：<code>daemon start</code> 起本机后台进程，之后每条命令只做一次 HTTP 转发。服务端复用 argparse 解析器和与 Unity 的连接。</li>

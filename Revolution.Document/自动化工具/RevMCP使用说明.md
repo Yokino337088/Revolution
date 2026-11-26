@@ -167,7 +167,9 @@ RevRuntimeAutomation.Register("inventory.reset", () => bag.Clear());
 
 ### 输出位置
 
-`Revolution.RevMCP/results/` 禁止写入所有运行产物。日常使用内联计划或 `rev_mcp.py run -`，结果直接返回。确需临时工单时，消费后立即永久删除。
+日常用内联计划或 `rev_mcp.py run -`，结果直接返回。显式截图领取后临时 PNG 立即删除，MCP 在本次响应中提供画面。只把用户明确要求的报告、截图和 GIF 导出到指定文档位置。导出避开 `Revolution.RevMCP/results/` 和 `Library/RevolutionAutomation/jobs`、`activity`、`screenshots`。
+
+活动窗口打开后才采集。窗口读完即删临时事件，关闭后停止采集。旧桥和后台请求临时文件在最后一次领取终态后删除。跨重载的 Test Runner 和旧 scenario 在完成并消费结果后清理。取消等待后用 `test.result` 领取仍在执行的测试结果。历史文件用 `storage.status` 预览，按 `storage.prune` 回收。 [缓存保留说明](RevMCP内存通道与缓存保留说明.md)
 
 报告优先采用计划中的 `reportDirectory`。相对路径从绑定工程的仓库根计算，也可以传项目内绝对路径。明确要求报告但未指定路径时，用 `report: true` 从 Unity 工程逐级查找已有 `文档`、`Docs` 或 `Documentation`，优先已有测试报告子目录。未找到时返回 `evidenceError` 和本次实际结果。
 

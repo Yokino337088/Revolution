@@ -22,6 +22,14 @@
 
 Console 直接返回 Unity 保存的完整分页消息和源文件行列，可用 `--severity`、`--query` 和 `--offset` 筛选。若 `editor wait` 以非零退出，先读随附的本次会话诊断和 Console，修复后再重编，并用 `editor compilation` 核对新工单。
 
+
+## 临时文件用完即删
+
+- 日常查询、UI、GM 和计划直接读取本次响应。AI 使用内联参数或标准输入传计划，需要临时输入文件时放系统临时目录，最后一次读取后在 `finally` 永久删除自己创建的文件。
+- `<Unity 工程>/Library/RevolutionAutomation/jobs`、`activity` 和 `screenshots` 由工具管理。把 JSON、截图、GIF 和报告的正式导出放在用户明确指定的位置。项目已有正式文档目录时按项目规范选择。
+- 临时截图和兼容工单交付后立即删除。取消、失败也执行收尾，原动作仍在跑时先等终态。窗口关闭时停止活动采集，活动文件供实时窗口读取，读完即删。
+- 升级 Unity 桥、RevCLI 和 RevMCP 后重启常驻工具。检查遗留占用用 `storage.status`，用 `storage.prune` 默认预览，`dryRun=false` 应用工具识别的回收。
+
 ## 二、调用时间
 
 ### 做了什么
