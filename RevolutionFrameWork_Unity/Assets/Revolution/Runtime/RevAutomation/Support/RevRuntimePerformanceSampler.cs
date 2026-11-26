@@ -1,6 +1,7 @@
 // 常驻采样宿主。每帧仅读Recorder/写预分配数组；排序、JSON、截图和文件输出不在采样循环中执行。
 #if UNITY_EDITOR || DEVELOPMENT_BUILD || REV_AUTOMATION
 using System;
+using System.Collections.Generic;
 using Unity.Profiling;
 using UnityEngine;
 
@@ -29,6 +30,12 @@ namespace Revolution
         private double[] _frames, _gpu, _sums;
         private int[] _valid;
         private bool _collecting;
+        /// <summary>当前固定采样是否在计时窗外读取 Android 设备指标。</summary>
+        private bool _androidDevice;
+        /// <summary>当前轮完成或取消后归还临时采样宿主的请求。</summary>
+        private bool _releaseOnFinish;
+        /// <summary>已有调用方明确开启了滚动快照，终态不能替它关闭宿主。</summary>
+        private bool _keepRolling;
         // 退出的墙钟期限，负值表示尚未收到退出请求。
         private double _quitAt = -1;
         // 仅在等待 Android 客户端领取退出结果时存在，收到 ACK 后立即释放。
@@ -152,7 +159,14 @@ namespace Revolution
             }
         }
 
-        internal static RevPerformanceReport Begin(double seconds, double warmup)
+        /// <summary>有明确的滚动窗口消费者时保留它的 Recorder，直到调用方主动关闭。</summary>
+        internal void KeepRolling()
+        {
+            _keepRolling = true;
+        }
+
+        /// <summary>准备有界采样。选填 ID 让调用方在网络回执丢失时仍只能操作自己发起的轮次。</summary>
+        internal static RevPerformanceReport Begin(double seconds, double warmup, string runId, bool androidDevice, bool releaseOnFinish)
         {
             if (double.IsNaN(seconds) || double.IsNaN(warmup) || seconds < 1 || seconds > 600 || warmup < 0 || warmup > 60)
             {
@@ -162,12 +176,14 @@ namespace Revolution
             {
                 throw new InvalidOperationException("已有测量作业，不能覆盖");
             }
-            var host = Ensure();
-            _report = new RevPerformanceReport
+            if (!string.IsNullOrEmpty(runId) && (!Guid.TryParseExact(runId, "N", out _) || runId == _report.runId))
             {
-                runId = Guid.NewGuid().ToString("N"), status = "running", requestedSeconds = seconds,
-                warmupSeconds = warmup, startedUtc = DateTime.UtcNow.ToString("O"), environment = Identity()
-            };
+                throw new ArgumentException("runId 必须是尚未使用的 32 位十六进制 ID");
+            }
+
+            // PSS/热态查询可能要调用系统服务，完成后才开始预热计时。
+            var before = androidDevice ? ReadAndroidDevice() : null;
+            var host = Ensure();
             int capacity = (int)Math.Ceiling(seconds * 1000) + 1;
             host._frames = new double[capacity];
             host._gpu = new double[capacity];
@@ -176,11 +192,36 @@ namespace Revolution
             host._errorStart = RevRuntimeAutomation.ErrorCount;
             host._warmUntil = Time.realtimeSinceStartupAsDouble + warmup;
             host._collecting = false;
+            host._androidDevice = androidDevice;
+            host._releaseOnFinish = releaseOnFinish;
+            _report = new RevPerformanceReport
+            {
+                runId = string.IsNullOrEmpty(runId) ? Guid.NewGuid().ToString("N") : runId, status = "running", requestedSeconds = seconds,
+                warmupSeconds = warmup, startedUtc = DateTime.UtcNow.ToString("O"), environment = Identity(),
+                androidBefore = before
+            };
             return _report;
         }
 
+        /// <summary>Android Player 的边界读数与帧统计各自出证据。系统服务缺测带原因返回。</summary>
+        private static Dictionary<string, object> ReadAndroidDevice()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                return RevAndroidDeviceMetrics.Read();
+            }
+            catch (Exception error)
+            {
+                return new Dictionary<string, object> { ["sampleError"] = error.Message };
+            }
+#else
+            throw new PlatformNotSupportedException("androidDevice 需要在安装的安卓测试 Player 中采样");
+#endif
+        }
+
         /// <summary>封存本次测量，可归属于整个采样窗的 GPU 数据才参与分位数；缺样保留默认 -1。</summary>
-        private void Finish(string status, string error)
+        private void Finish(string status, string error, bool destroying = false)
         {
             _report.status = status;
             _report.cancelled = status == "cancelled";
@@ -246,6 +287,17 @@ namespace Revolution
             _gpu = null;
             _sums = null;
             _valid = null;
+
+            // 先封存采样秒数和分位数，再调用 Android 服务。后者的开销不进入本轮帧统计。
+            if (_androidDevice)
+            {
+                _report.androidAfter = ReadAndroidDevice();
+            }
+            _report.finished = true;
+            if (!destroying && _releaseOnFinish && !_keepRolling && _quitAt < 0)
+            {
+                ReleaseHost();
+            }
         }
 
         private static double Percentile(double[] sorted, int count, double fraction)
@@ -315,30 +367,53 @@ namespace Revolution
             return result;
         }
 
-        internal static RevPerformanceReport State()
+        /// <summary>返回指定或最近一轮的摘要。窗口释放后仍可按 ID 领取同一轮终态。</summary>
+        internal static RevPerformanceReport State(string runId)
         {
+            CheckRun(runId);
             return _report;
         }
 
-        internal static RevPerformanceReport Cancel()
+        /// <summary>只取消调用者指定的轮次。旧客户端省略 ID 时仍可取消正在运行的轮次。</summary>
+        internal static RevPerformanceReport Cancel(string runId)
         {
+            CheckRun(runId);
             if (_instance != null && _report.status == "running")
             {
-                _instance.Finish("cancelled", "调用方取消；已发生的业务动作不回滚");
+                _instance.Finish("cancelled", "调用方取消本轮采样");
             }
             return _report;
         }
 
-        internal static void Disable()
+        /// <summary>显式结束滚动窗口，先核对指定轮次并确保固定采样已经终止。</summary>
+        internal static void Disable(string runId = null)
         {
+            CheckRun(runId);
             if (_report.status == "running")
             {
-                throw new InvalidOperationException("进行中的测量请先cancel");
+                throw new InvalidOperationException("进行中的测量请先 cancel");
             }
             if (_instance != null)
             {
-                Destroy(_instance.gameObject);
+                _instance.ReleaseHost();
             }
+        }
+
+        /// <summary>防止旧回执或并发 Agent 的收尾误读、误取消另一轮。</summary>
+        private static void CheckRun(string runId)
+        {
+            if (!string.IsNullOrEmpty(runId) && !string.Equals(runId, _report.runId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("当前轮次与指定 runId 不匹配");
+            }
+        }
+
+        /// <summary>先取消更新与当前宿主引用，下一轮无需等待 Unity 帧末销毁。</summary>
+        private void ReleaseHost()
+        {
+            _instance = null;
+            enabled = false;
+            Destroy(gameObject);
         }
 
         /// <summary>安卓 HTTP 等待本次退出工单被认领；电脑断线时最多等待十秒，其它入口沿用原有延迟。</summary>
@@ -350,11 +425,12 @@ namespace Revolution
             _quitAt = Time.realtimeSinceStartupAsDouble + (_quitReceipt == null ? .75 : 10);
         }
 
+        /// <summary>场景或游戏退出时封存当前轮，并归还本宿主的原生采样器。</summary>
         private void OnDestroy()
         {
-            if (_report.status == "running")
+            if (_instance == this && _report.status == "running")
             {
-                Finish("cancelled", "采样宿主销毁");
+                Finish("cancelled", "采样宿主销毁", destroying: true);
             }
             if (_recorders != null)
             {

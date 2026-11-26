@@ -67,7 +67,7 @@ class CompanionTests(unittest.TestCase):
                     """本机一侧走原版协议提交单个请求，而后等待手机回传。"""
                     client = HTTPConnection("127.0.0.1", local, timeout=8)
                     try:
-                        client.request("POST", "/call", b'{"action":"runtime.performance.state"}',
+                        client.request("GET", "/jobs/" + "c" * 32, headers=
                                        {"Authorization": "Bearer " + channel.local_token, "X-Rev-Session": sid})
                         response = client.getresponse()
                         return response.status, response.read()
@@ -76,12 +76,16 @@ class CompanionTests(unittest.TestCase):
 
                 waiting = executor.submit(agent)
                 status, headers, body = poll.result()
-                self.assertEqual((status, headers["X-Rev-Method"], headers["X-Rev-Path"]), (200, "POST", "/call"))
-                self.assertEqual(json.loads(body)["action"], "runtime.performance.state")
-                evidence = b'{"fps":59.7,"frames":1791}'
+                self.assertEqual((status, headers["X-Rev-Method"], headers["X-Rev-Path"]), (200, "GET", "/jobs/" + "c" * 32))
+                self.assertEqual(body, b"")
+                # 模拟同一游戏会话的已完成采样，传输层须保持原始数组、数值单位和 ID。
+                evidence = json.dumps(dict(id="c" * 32, sessionId=sid, success=True, data=dict(
+                    runId="d" * 32, finished=True, fps=59.7, frames=1791, p95Ms=18.5,
+                    androidBefore={"pid":17,"processPssKiB":89000,"batteryCelsius":34.5},
+                    androidAfter={"pid":17,"processPssKiB":92000,"thermalStatus":1}))).encode()
                 followup = executor.submit(device, "/phone/exchange", evidence, token,
-                                           {"X-Rev-Command": headers["X-Rev-Command"], "X-Rev-Status": "202"})
-                self.assertEqual(waiting.result(), (202, evidence))
+                                           {"X-Rev-Command": headers["X-Rev-Command"], "X-Rev-Status": "200"})
+                self.assertEqual(waiting.result(), (200, evidence))
                 self.assertEqual(device("/phone/close", b"{}", token)[0], 200)
                 self.assertEqual(followup.result()[0], 410)
                 self.assertEqual(device("/phone/ready", json.dumps(info), token)[0], 401)

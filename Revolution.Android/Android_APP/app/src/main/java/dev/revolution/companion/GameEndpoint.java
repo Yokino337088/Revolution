@@ -1,6 +1,7 @@
 package dev.revolution.companion;
 
 import android.content.Intent;
+import android.os.SystemClock;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -121,6 +122,79 @@ final class GameEndpoint
         finally
         {
             connection.disconnect();
+        }
+    }
+
+    /** 由悬浮窗提交一次本机性能动作，等待并确认同一工单。只允许三个固定入口。 */
+    JSONObject performance(String action, JSONObject arguments) throws Exception
+    {
+        if (!action.equals("begin") && !action.equals("state") && !action.equals("cancel"))
+        {
+            throw new IllegalArgumentException("未知的性能采样动作");
+        }
+        String jobId = randomHex(16);
+        String path = "/jobs/" + jobId;
+        byte[] requestBody = new JSONObject().put("id", jobId).put("action", "runtime.performance." + action)
+            .put("payload", arguments).put("confirm", false).put("timeoutSeconds", 8)
+            .toString().getBytes(StandardCharsets.UTF_8);
+        boolean consumed = false;
+        try
+        {
+            // 接单和结果分开，丢回执时取消原工单；开始采样的 POST 永远只执行一次。
+            Wire.Reply accepted = request("POST", "/call", requestBody);
+            JSONObject intake = new JSONObject(new String(accepted.body, StandardCharsets.UTF_8));
+            if (accepted.status != 202 || !jobId.equals(intake.optString("id")) || !id.equals(intake.optString("sessionId")))
+            {
+                throw new IOException(intake.optString("message", "游戏未接受性能工单（HTTP " + accepted.status + "）"));
+            }
+            long deadline = SystemClock.elapsedRealtime() + 9000;
+            while (SystemClock.elapsedRealtime() < deadline)
+            {
+                Wire.Reply response = request("GET", path, new byte[0]);
+                JSONObject result = new JSONObject(new String(response.body, StandardCharsets.UTF_8));
+                if (response.status != 200 || !jobId.equals(result.optString("id")))
+                {
+                    throw new IOException(result.optString("message", "性能工单已失效（HTTP " + response.status + "）"));
+                }
+                if (result.optBoolean("pending"))
+                {
+                    SystemClock.sleep(80);
+                    continue;
+                }
+                if (!id.equals(result.optString("sessionId")))
+                {
+                    throw new IOException("性能结果属于另一游戏会话");
+                }
+                consumed = true;
+                try
+                {
+                    request("POST", path + "/ack", "{}".getBytes(StandardCharsets.UTF_8));
+                }
+                catch (IOException disconnected)
+                {
+                    // 终态已经收到，运行时的有界回收负责释放无法确认的旧回执。
+                }
+                if (!result.optBoolean("success"))
+                {
+                    throw new IOException(result.optString("message", "游戏拒绝性能动作"));
+                }
+                return result.getJSONObject("data");
+            }
+            throw new IOException("等待游戏返回性能工单超时");
+        }
+        finally
+        {
+            if (!consumed)
+            {
+                try
+                {
+                    request("DELETE", path, new byte[0]);
+                }
+                catch (IOException disconnected)
+                {
+                    // 游戏失联时由工单自身期限回收。
+                }
+            }
         }
     }
 

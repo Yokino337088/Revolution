@@ -30,9 +30,25 @@
                 android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:textColor="@color/overlay_ink" android:text="@string/disconnect" />
         </LinearLayout>
-        <Button android:id="@+id/overlay_log_toggle" style="@style/QuietButton"
-            android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:textColor="@color/overlay_ink" android:text="@string/agent_history" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+            <Button android:id="@+id/overlay_log_toggle" style="@style/QuietButton"
+                android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+                android:textColor="@color/overlay_ink" android:text="@string/agent_history" />
+            <Button android:id="@+id/overlay_perf_toggle" style="@style/QuietButton"
+                android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+                android:textColor="@color/overlay_ink" android:text="@string/perf_title" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/overlay_performance" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+            <TextView android:id="@+id/overlay_perf_state" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:accessibilityLiveRegion="polite" android:textColor="@color/overlay_ink" android:textSize="14sp" />
+            <Button android:id="@+id/overlay_perf_start" style="@style/SecondaryButton"
+                android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                android:text="@string/perf_start" />
+            <Button android:id="@+id/overlay_perf_cancel" style="@style/QuietButton"
+                android:layout_width="match_parent" android:layout_height="wrap_content" android:visibility="gone"
+                android:textColor="@color/overlay_ink" android:text="@string/perf_cancel" />
+        </LinearLayout>
         <dev.revolution.companion.AgentLogView android:id="@+id/overlay_timeline"
             android:layout_width="match_parent" android:layout_height="224dp"
             android:background="@drawable/card_surface" android:visibility="gone" />

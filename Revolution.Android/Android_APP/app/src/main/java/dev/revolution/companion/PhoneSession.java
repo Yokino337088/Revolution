@@ -31,6 +31,8 @@ final class PhoneSession implements AutoCloseable
     private volatile String bearer;
     // 只能用于本包本轮冷启动的 Unity 回环连接。
     private GameEndpoint game;
+    // 悬浮窗发起的单轮采样，取消时只使用本窗口持有的 runId。
+    final PhonePerformance performance;
     // 唯一出站 HTTPS 目标。
     private DesktopConnection computer;
     // 仅记录本轮确实被游戏接受的退出工单编号。
@@ -45,6 +47,7 @@ final class PhoneSession implements AutoCloseable
         this.packageId = packageId;
         this.address = address;
         this.isolate = isolate;
+        performance = new PhonePerformance(() -> service.performanceChanged(this));
     }
 
     /** 先取电脑证书，完整指纹匹配才发送长期凭据，首次连接等待用户核对。 */
@@ -267,6 +270,15 @@ final class PhoneSession implements AutoCloseable
         return new OperationPage(page);
     }
 
+    /** 只有验证过身份的前台游戏能从浮窗开始本地采样。 */
+    synchronized void startPerformance()
+    {
+        if (phase == Phase.READY)
+        {
+            performance.start(game);
+        }
+    }
+
     /** 从可见 Activity 启动选定游戏，前台服务留在后台转交请求。 */
     synchronized void launch(MainActivity activity)
     {
@@ -367,6 +379,7 @@ final class PhoneSession implements AutoCloseable
             return;
         }
         phase = Phase.CLOSED;
+        performance.cancel();
         DesktopConnection peer = computer;
         String token = bearer;
         bearer = null;

@@ -161,6 +161,17 @@ public final class BridgeService extends Service
         });
     }
 
+    /** 将后台性能回执交给当前会话的悬浮窗，隐藏期间不挂载新窗口。 */
+    void performanceChanged(PhoneSession owner)
+    {
+        main.post(() -> {
+            if (current == owner && overlay != null)
+            {
+                overlay.refreshPerformance(owner);
+            }
+        });
+    }
+
     /** 仅接受本轮退出回调，保留原因并停止前台服务。 */
     void finished(PhoneSession owner, String message)
     {

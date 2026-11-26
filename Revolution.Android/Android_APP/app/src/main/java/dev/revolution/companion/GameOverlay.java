@@ -22,10 +22,13 @@ import android.view.WindowManager;
 import android.view.WindowMetrics;
 import android.widget.TextView;
 import android.widget.Button;
+import org.json.JSONObject;
 
 /** 在一次游戏测试期间持有小范围悬浮窗。所有视图操作均由前台服务在主线程完成。 */
 final class GameOverlay
 {
+    /** 展开时只展示其中一页，小屏幕不会叠加日志列表和采样面板。 */
+    private enum Page { SUMMARY, TIMELINE, PERFORMANCE }
     // 游戏及系统所在屏幕的窗口管理器，用于挂载和归还本窗。
     private final WindowManager windows;
     // 只占用浮窗实际大小并保持游戏焦点的窗口参数。
@@ -42,6 +45,20 @@ final class GameOverlay
     private final Button timelineToggle;
     // 开启时只读取当前会话已收到的工单。
     private final AgentLogView timeline;
+    /** 展开游戏在前台时使用的性能控制与摘要。 */
+    private final View performance;
+    /** 在性能页和连接摘要之间切换。 */
+    private final Button performanceToggle;
+    /** 读取或更新最近一轮运行状态。 */
+    private final TextView performanceState;
+    /** 游戏验证通过且本窗口空闲时允许开始。 */
+    private final Button startPerformance;
+    /** 只在本窗口正在采样时显示。 */
+    private final Button cancelPerformance;
+    /** 当前展开页，手柄收起后归到连接摘要。 */
+    private Page page = Page.SUMMARY;
+    /** 两个控件只操作当前身份已验证的会话。 */
+    private PhoneSession session;
     // 当前客户端连接阶段。
     private final TextView state;
     // 系统安装包的显示名称。
@@ -82,6 +99,11 @@ final class GameOverlay
         summary = content.findViewById(R.id.overlay_summary);
         timeline = content.findViewById(R.id.overlay_timeline);
         timelineToggle = content.findViewById(R.id.overlay_log_toggle);
+        performance = content.findViewById(R.id.overlay_performance);
+        performanceToggle = content.findViewById(R.id.overlay_perf_toggle);
+        performanceState = content.findViewById(R.id.overlay_perf_state);
+        startPerformance = content.findViewById(R.id.overlay_perf_start);
+        cancelPerformance = content.findViewById(R.id.overlay_perf_cancel);
         state = content.findViewById(R.id.overlay_state);
         game = content.findViewById(R.id.overlay_game);
         address = content.findViewById(R.id.overlay_address);
@@ -100,7 +122,20 @@ final class GameOverlay
             move(position.x, position.y));
         handle.setOnClickListener(view -> expand(panel.getVisibility() != View.VISIBLE));
         handle.setOnTouchListener((view, motion) -> drag(view, motion));
-        timelineToggle.setOnClickListener(view -> showTimeline(timeline.getVisibility() != View.VISIBLE));
+        timelineToggle.setOnClickListener(view -> selectPage(page == Page.TIMELINE ? Page.SUMMARY : Page.TIMELINE));
+        performanceToggle.setOnClickListener(view -> selectPage(page == Page.PERFORMANCE ? Page.SUMMARY : Page.PERFORMANCE));
+        startPerformance.setOnClickListener(view -> {
+            if (session != null)
+            {
+                session.startPerformance();
+            }
+        });
+        cancelPerformance.setOnClickListener(view -> {
+            if (session != null)
+            {
+                session.performance.cancel();
+            }
+        });
         content.findViewById(R.id.overlay_open).setOnClickListener(view ->
             service.startActivity(new Intent(service, MainActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP)));
@@ -110,6 +145,8 @@ final class GameOverlay
     /** 发布实际启动状态后挂载。用户在系统撤销权限时，本轮仍可在通知或测试台操作。 */
     void show(PhoneSession session)
     {
+        this.session = session;
+        refreshPerformance(session);
         state.setText(session.phase == PhoneSession.Phase.READY ? R.string.overlay_ready : R.string.overlay_starting);
         address.setText(session.address);
         timeline.bind(session);
@@ -143,6 +180,7 @@ final class GameOverlay
     /** 回到测试台或关闭会话时归还窗口，再次显示默认保持为小手柄。 */
     void hide()
     {
+        session = null;
         if (attached)
         {
             attached = false;
@@ -166,20 +204,88 @@ final class GameOverlay
         handle.setText(expanded ? R.string.overlay_collapse : R.string.overlay_bubble);
         if (!expanded)
         {
-            showTimeline(false);
+            selectPage(Page.SUMMARY);
         }
     }
 
-    /** 显示记录时隐藏会话摘要，折叠后让列表停止本地刷新。 */
-    private void showTimeline(boolean show)
+    /** 只让被选中的页持有可见控件，折叠日志列表时停止读取电脑活动。 */
+    private void selectPage(Page selected)
     {
-        summary.setVisibility(show ? View.GONE : View.VISIBLE);
-        if (show)
+        page = selected;
+        summary.setVisibility(page == Page.SUMMARY ? View.VISIBLE : View.GONE);
+        if (page == Page.TIMELINE)
         {
             fitTimeline();
         }
-        timeline.setVisibility(show ? View.VISIBLE : View.GONE);
-        timelineToggle.setText(show ? R.string.overlay_summary : R.string.agent_history);
+        timeline.setVisibility(page == Page.TIMELINE ? View.VISIBLE : View.GONE);
+        performance.setVisibility(page == Page.PERFORMANCE ? View.VISIBLE : View.GONE);
+        timelineToggle.setText(page == Page.TIMELINE ? R.string.overlay_summary : R.string.agent_history);
+        performanceToggle.setText(page == Page.PERFORMANCE ? R.string.overlay_summary : R.string.perf_title);
+    }
+
+    /** 主线程刷新采样页，旧会话的完成回调不能覆盖新会话。 */
+    void refreshPerformance(PhoneSession owner)
+    {
+        if (session != owner)
+        {
+            return;
+        }
+        boolean ready = owner.phase == PhoneSession.Phase.READY;
+        PhonePerformance.Display value = owner.performance.display();
+        startPerformance.setEnabled(ready && !value.active);
+        cancelPerformance.setVisibility(value.active ? View.VISIBLE : View.GONE);
+        cancelPerformance.setEnabled(!value.cancelling);
+        if (value.active)
+        {
+            int progress = value.cancelling ? R.string.perf_cancelling :
+                value.accepted ? R.string.perf_running : R.string.perf_connecting;
+            performanceState.setText(progress);
+        }
+        else if (value.error != null)
+        {
+            performanceState.setText(content.getContext().getString(R.string.perf_failed, value.error));
+        }
+        else if (value.report != null)
+        {
+            showReport(value.report);
+        }
+        else
+        {
+            performanceState.setText(ready ? R.string.perf_idle : R.string.overlay_starting);
+        }
+    }
+
+    /** 展示与 Agent 共享的真实帧统计。取消、失焦和运行错误各有自己的状态。 */
+    private void showReport(JSONObject data)
+    {
+        Context context = content.getContext();
+        if (data.optBoolean("cancelled"))
+        {
+            performanceState.setText(R.string.perf_cancelled);
+            return;
+        }
+        if (!data.optBoolean("success"))
+        {
+            performanceState.setText(context.getString(R.string.perf_failed, data.optString("error")));
+            return;
+        }
+        String summaryText = context.getString(R.string.perf_result, data.optDouble("seconds"), data.optDouble("fps"),
+            data.optDouble("p95Ms"), data.optDouble("p99Ms"));
+        if (data.optInt("unfocusedFrames") > 0)
+        {
+            summaryText += "\n" + context.getString(R.string.perf_unfocused, data.optInt("unfocusedFrames"));
+        }
+        JSONObject device = data.optJSONObject("androidAfter");
+        if (device != null && !device.isNull("processPssKiB"))
+        {
+            summaryText += "\n" + context.getString(R.string.perf_pss, device.optDouble("processPssKiB") / 1024);
+        }
+        String runId = data.optString("runId");
+        if (runId.length() >= 8)
+        {
+            summaryText += "\n" + context.getString(R.string.perf_run, runId.substring(0, 8));
+        }
+        performanceState.setText(summaryText);
     }
 
     /** 给短屏幕和横屏保留手柄和返回按钮，再把余下高度交给可滚动列表。 */

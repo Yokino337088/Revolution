@@ -289,5 +289,33 @@ class AndroidTests(unittest.TestCase):
                                     if key not in ("timeoutSeconds", "intervalSeconds")})
 
 
+    def test_phone_performance_plan_waits_for_and_cleans_only_its_run(self):
+        """示例计划按真实 runId 查询和收尾。接单失败也不能取消其它采样。"""
+        _, _, _, run_plan, _ = backends()
+        path = Path(__file__).resolve().parents[1] / "Android_APP/examples/android-performance.json"
+        plan = json.loads(path.read_text(encoding="utf-8"))
+        begun, tracked, cleanup = "runtime.performance.begin", "runtime.performance.state", "runtime.performance.cancel"
+        run_id = "e" * 32
+        hub = Mock(activity=None, timeout=10)
+        hub.discover.return_value = {"commands": [], "actions": [
+            {"target":"game","id":action,"readOnly":action == tracked} for action in (begun, tracked, cleanup)
+        ]}
+        evidence = {"runId":run_id,"finished":True,"success":True,"errors":0,"unfocusedFrames":0,
+                    "fps":59.5,"p95Ms":18.0,"p99Ms":26.0,"androidBefore":{"pid":37},"androidAfter":{"pid":37}}
+        hub.call.side_effect = [{"success":True,"data":{"runId":run_id}}, {"success":True,"data":evidence},
+                                {"success":True,"data":evidence}]
+        result = run_plan(hub, plan)
+        self.assertTrue(result["success"], result)
+        self.assertEqual(hub.call.call_args_list[1].args[2], {"runId":run_id})
+        self.assertEqual(hub.call.call_args_list[2].args[2], {"runId":run_id})
+        self.assertEqual(result["steps"][1]["response"]["data"], evidence)
+
+        hub.call.reset_mock()
+        hub.call.side_effect = [{"success":False,"message":"已有测量作业"}]
+        rejected = run_plan(hub, plan)
+        self.assertFalse(rejected["success"])
+        self.assertEqual([invocation.args[1] for invocation in hub.call.call_args_list], [begun])
+
+
 if __name__ == "__main__":
     unittest.main()

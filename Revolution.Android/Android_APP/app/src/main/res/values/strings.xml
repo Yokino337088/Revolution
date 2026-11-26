@@ -45,4 +45,17 @@
     <string name="agent_failed">失败</string>
     <string name="agent_cancelled">取消或超时</string>
     <string name="agent_unknown">未确认结果</string>
+    <string name="perf_title">性能采样</string>
+    <string name="perf_idle">保持游戏前台，进入要测量的场景后开始。</string>
+    <string name="perf_start">开始 30 秒采样</string>
+    <string name="perf_cancel">取消采样</string>
+    <string name="perf_connecting">正在向游戏请求采样</string>
+    <string name="perf_running">已开始本轮 · 预热 3 秒，采样 30 秒。可以收起浮窗继续操作。</string>
+    <string name="perf_cancelling">正在停止本轮采样</string>
+    <string name="perf_cancelled">本轮采样已取消</string>
+    <string name="perf_failed">采样失败 · %1$s</string>
+    <string name="perf_result">完成 %1$.1f 秒 · %2$.1f FPS\nP95 %3$.2f ms · P99 %4$.2f ms</string>
+    <string name="perf_run">轮次 %1$s</string>
+    <string name="perf_pss">游戏进程 PSS %1$.1f MiB</string>
+    <string name="perf_unfocused">有 %1$d 帧游戏失焦，请保持前台复测。</string>
 </resources>
