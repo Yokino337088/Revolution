@@ -175,7 +175,7 @@ class PluginTests(unittest.TestCase):
             {path.parent.name for path in (FRAMEWORK / "skills").glob("*/SKILL.md")},
             {"revolution-framework", "revolution-unity-editor", "revolution-ai-automation",
              "revolution-performance", "revolution-automation-tester", "revolution-gal", "revolution-ta",
-             "revolution-wiki", "revolution-android-testing", "revolution-revasset"},
+             "revolution-wiki", "revolution-android-testing", "revolution-revasset", "fantasy-net"},
         )
         self.assertEqual(
             {path.parent.name for path in (ROOT / "revgame/skills").glob("*/SKILL.md")},
@@ -224,6 +224,24 @@ class PluginTests(unittest.TestCase):
                 self.assertTrue(result["unavailable"])
                 self.assertNotIn("reportPath", result)
                 self.assertFalse((project / ".codex/work/revmcp").exists())
+                # 外部工具是按绑定启用的能力，重绑为空后恢复默认目录。
+                manifest = Path(directory) / "external.json"
+                manifest.write_text(json.dumps({"version": 1, "tools": [{
+                    "name": "fantasy.fixture", "description": "固定测试动作",
+                    "command": [sys.executable, "-c", "print('{\"fixture\": true}')"],
+                    "cwd": directory,
+                    "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+                    "readOnly": True, "confirm": False,
+                }]}), encoding="utf-8")
+                query = {"target": "cli", "query": "fantasy."}
+                self.assertFalse(call("rev_discover", query)["structuredContent"]["actions"])
+                result = call("rev_bind", {"project": str(project), "externalManifest": str(manifest)})["structuredContent"]
+                self.assertEqual(result["externalActions"], ["fantasy.fixture"])
+                self.assertEqual(len(call("rev_discover", query)["structuredContent"]["actions"]), 1)
+                result = call("rev_call", {"target": "cli", "action": "fantasy.fixture", "arguments": {}, "full": True})
+                self.assertTrue(result["structuredContent"]["data"]["fixture"])
+                call("rev_bind", {"project": str(project)})
+                self.assertFalse(call("rev_discover", query)["structuredContent"]["actions"])
             finally:
                 process.stdin.close()
                 process.wait(timeout=15)

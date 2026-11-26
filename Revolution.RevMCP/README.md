@@ -30,6 +30,8 @@ CLI 目录默认取同级 `Revolution.RevCLI`；若放在别处用 `--cli-root` 
 
 独立 Player 显式 `-revAutomation` 开启服务，MCP 使用 `--runtime-endpoint <runtime.json>`。正式包默认无运行时测试接口。game 业务能力通过 `RevRuntimeAutomation.Register` 登记，GM 从真实 RevGM.Commands 读取；外部脚本必须用 manifest 显式登记，不执行任意模型生成的 shell。
 
+使用 Codex 插件时，可在 `rev_bind` 传递已审阅的 `externalManifest` 绝对路径，按 `target=cli` 发现外部能力。重新绑定时由本次参数决定是否继续加载。可选 Fantasy 导出、编译和联动回归复用这一入口。 [Fantasy 联动 Skill](../Skills/revolution-framework/references/fantasy-integration.md)
+
 Android 真机用 `Revolution.Android/rev_android.py mcp` 建立 USB 转发和测试会话。同一 RevMCP 实例继续用 `editor` 访问编辑器，`game` 和 `gm` 发往手机。 [Android 真机接线与验收](https://github.com/Yokino337088/Revolution/tree/main/Revolution.Android)
 
 安装 `Skills/revolution-ai-automation` 后可以说：“点击 Demo 增加按钮，再 GM 增加 2，断言 3，截图并清理归零。”Skill 负责发现与组织计划；业务仍需真实可调用的契约。

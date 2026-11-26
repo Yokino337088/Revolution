@@ -80,6 +80,8 @@ commands.json 是离线说明，commands --live 才是实际安装能力。2026-
 
 需要一句话 Agent 测试、GM 动态工具、独立开发版 Player、外部 CLI/Python，使用相邻的 [Revolution.RevMCP](../Revolution.RevMCP/README.md) 与 Skills/revolution-ai-automation。
 
+显式登记的外部工具也可在 RevCLI 离线执行。`rev.py external --manifest <可信清单> discover` 列出可用动作。`rev.py external --manifest <清单> call <动作ID> --json -` 从标准输入读取数据，沿用 RevMCP 的参数和确认校验。可选 Fantasy 的使用示例见 [联动 Skill](../Skills/revolution-framework/references/fantasy-integration.md)。
+
 完整的新手使用说明（操作示例、参数契约、pipeline、旧 scenario、报告与故障处理）：
 
 - [HTML 文档](../Revolution.Document/自动化工具/Revolution自动化工具使用说明.html)
