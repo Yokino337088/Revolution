@@ -1,0 +1,496 @@
+// 开发态本机 HTTP 传输。网络线程仅处理纯数据；Unity 调用和跨帧工作全部由 Update 串行推进。
+// 桌面 Editor 始终可用。网页与小游戏 Player 即使是开发包也不创建本机 HTTP 监听器。
+#if UNITY_EDITOR || ((DEVELOPMENT_BUILD || REV_AUTOMATION) && !(UNITY_WEBGL || UNITY_WEIXINMINIGAME || UNITY_BYTEDANCE_MINIGAME || UNITY_BYTEDANCEMINIGAME))
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Text;
+using System.Threading;
+using UnityEngine;
+
+namespace Revolution
+{
+    /// <summary>持有一次测试会话的回环监听，并把后台网络请求交给 Unity 主线程处理。</summary>
+    internal sealed class RevRuntimeAutomationHost : MonoBehaviour
+    {
+        // 工单分三个阶段：HTTP 线程入队 → Unity Update 执行业务 → HTTP 线程读取结果。
+        // Job 中不能保存待从网络线程访问的 Transform/GameObject；Operation 只由主线程使用。
+        private sealed class Job
+        {
+            public string Id, Action, Payload, Fingerprint;
+            // 主线程写入最终 JSON 后，后台 GET 必须看见发布后的完整字符串。
+            public volatile string Response;
+            public bool Confirm;
+            public volatile bool Cancelled;
+            public DateTime Deadline;
+            public RevRuntimeOperation Operation;
+            public int StartErrorCount;
+            public bool Started;
+            public RevAutomationActivity.Ticket Activity;
+        }
+        private static RevRuntimeAutomationHost _instance;
+        private readonly ConcurrentQueue<Job> _queue = new ConcurrentQueue<Job>();
+        // 字典保留本 session 的请求 id，防止客户端重发相同请求造成“道具加两次”。
+        // _gate 只保护短暂的数据登记，不能持锁等待 Unity 帧或网络返回。
+        private readonly Dictionary<string, Job> _jobs = new Dictionary<string, Job>(StringComparer.Ordinal);
+        private readonly object _gate = new object();
+        private readonly RevAutomationMemoryJobs _memory = new RevAutomationMemoryJobs();
+        private HttpListener _listener;
+        private Thread _thread;
+        private Job _active;
+        private string _token, _session, _endpoint, _health;
+        /// <summary>主线程获取的临时截图位置，后台 HTTP 线程用它下发并回收 PNG。</summary>
+        private string _captureDirectory;
+        /// <summary>运行期后台回收器的下次执行时间，间隔至少一分钟。</summary>
+        private float _nextCaptureCleanup;
+        private bool _wasBackground;
+        /// <summary>仅在已接管后台运行开关时恢复原值，启动失败可以发生在接管之前。</summary>
+        private bool _ownsBackground;
+        private volatile bool _stopping;
+        private int _connections;
+        public static bool HasPendingWork => _instance != null && (_instance._active != null || !_instance._queue.IsEmpty);
+        /// <summary>在 Unity 主线程捕获当前退出工单的收件确认；非 HTTP 退出保留原有延迟。</summary>
+        internal static Func<bool> CurrentQuitReceipt()
+        {
+            var host = _instance;
+            if (host == null || host._active?.Action != "runtime.quit")
+            {
+                return null;
+            }
+            string id = host._active.Id;
+            return () => host._memory.IsAcknowledged(id);
+        }
+        /// <summary>启动只绑定回环地址的测试监听。安卓 Intent 会话由电脑持有凭据，其他入口返回本机端点文件。</summary>
+        public static string StartServer(int port, string token, string androidLaunchId = null, int androidPid = 0)
+        {
+            if (_instance != null)
+            {
+                throw new InvalidOperationException("运行时服务已启动，请先停止再切换配置");
+            }
+            if (port < 1024 || port > 65535)
+            {
+                throw new ArgumentOutOfRangeException(nameof(port));
+            }
+            if (token != null && (token.Length < 32 || token.Any(char.IsWhiteSpace))) { throw new ArgumentException("token 至少 32 字符且不能含空白"); }
+            var go = new GameObject("[RevRuntimeAutomation]") { hideFlags = HideFlags.HideInHierarchy };
+            DontDestroyOnLoad(go);
+            var host = go.AddComponent<RevRuntimeAutomationHost>();
+            try
+            {
+                host._token = token ?? Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
+                host._session = androidLaunchId ?? Guid.NewGuid().ToString("N");
+                host._captureDirectory = RevRuntimeScreenshot.ScreenshotFolder();
+                host._listener = new HttpListener();
+                string url = "http://127.0.0.1:" + port;
+                host._listener.Prefixes.Add(url + "/"); host._listener.Start();
+                var endpoint = new Dictionary<string, object> { ["protocol"] = 1, ["url"] = url, ["token"] = host._token,
+                    ["sessionId"] = host._session, ["pid"] = androidLaunchId == null ? System.Diagnostics.Process.GetCurrentProcess().Id : androidPid,
+                    ["product"] = Application.productName, ["platform"] = Application.platform.ToString(), ["project"] = Application.isEditor ? Path.GetFullPath(Path.Combine(Application.dataPath, "..")) : "" };
+                endpoint["launchId"] = androidLaunchId ?? (Environment.GetEnvironmentVariable("REV_AUTOMATION_LAUNCH_ID") ?? "");
+                endpoint["buildId"] = Application.buildGUID;
+                endpoint["memoryJobs"] = true;
+                if (androidLaunchId == null)
+                {
+                    host.PublishEndpoint(endpoint);
+                }
+                else
+                {
+                    // USB 会话的端点由电脑生成，Android 沙盒无需写出令牌或活动日志。
+                    endpoint["applicationId"] = Application.identifier;
+                }
+                endpoint.Remove("token"); host._health = RevAutomationJson.Write(endpoint);
+                host._wasBackground = Application.runInBackground;
+                Application.runInBackground = true;
+                host._ownsBackground = true;
+                host._thread = new Thread(host.Accept) { IsBackground = true, Name = "RevRuntimeAutomation.HTTP" };
+                _instance = host; host._thread.Start(); return host._endpoint;
+            }
+            catch
+            {
+                host.Shutdown();
+                Destroy(go);
+                throw;
+            }
+        }
+
+        /// <summary>为桌面或显式启动入口写出本会话凭据，默认跳过无人查看的活动事件。</summary>
+        private void PublishEndpoint(Dictionary<string, object> endpoint)
+        {
+            string folder = Application.isEditor ? Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Library", "RevolutionAutomation")) : Path.Combine(Application.persistentDataPath, "RevolutionAutomation");
+            // launcher 为每次进程指定独立的本机凭据目录。
+            string customEndpoint = Environment.GetEnvironmentVariable("REV_AUTOMATION_ENDPOINT");
+            if (!Application.isEditor && !string.IsNullOrEmpty(customEndpoint))
+            {
+                if (!Path.IsPathRooted(customEndpoint))
+                {
+                    throw new ArgumentException("REV_AUTOMATION_ENDPOINT必须是绝对路径");
+                }
+                _endpoint = Path.GetFullPath(customEndpoint);
+                folder = Path.GetDirectoryName(_endpoint);
+            }
+            else
+            {
+                _endpoint = Path.Combine(folder, "runtime.json");
+            }
+            Directory.CreateDirectory(folder);
+            string temporary = _endpoint + ".tmp";
+            File.WriteAllText(temporary, RevAutomationJson.Write(endpoint), new UTF8Encoding(false));
+            if (File.Exists(_endpoint))
+            {
+                File.Delete(_endpoint);
+            }
+            File.Move(temporary, _endpoint);
+        }
+        /// <summary>主线程关闭当前宿主。取消回调重入时由原调用完成销毁。</summary>
+        public static void StopServer()
+        {
+            var host = _instance;
+            if (host == null || host._stopping)
+            {
+                return;
+            }
+            try
+            {
+                host.Shutdown();
+            }
+            finally
+            {
+                if (host != null)
+                {
+                    Destroy(host.gameObject);
+                }
+            }
+        }
+        /// <summary>启动后检查显式测试配置，安卓从本次 Activity Intent 获取 USB 会话身份。</summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void StartOptIn()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (TryStartAndroidIntent())
+            {
+                return;
+            }
+#endif
+            string[] args = Environment.GetCommandLineArgs();
+            if (!args.Contains("-revAutomation"))
+            {
+                return;
+            }
+            int index = Array.IndexOf(args, "-revAutomationPort");
+            int port = index >= 0 && index + 1 < args.Length ? int.Parse(args[index + 1]) : 18766;
+            RevRuntimeAutomation.Start(port, Environment.GetEnvironmentVariable("REV_AUTOMATION_TOKEN"));
+        }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        /// <summary>使用本次受控启动携带的临时会话、令牌和端口，未启用时保留原启动行为。</summary>
+        private static bool TryStartAndroidIntent()
+        {
+            using var unity = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+            using var activity = unity.GetStatic<AndroidJavaObject>("currentActivity");
+            using var intent = activity?.Call<AndroidJavaObject>("getIntent");
+            if (intent == null || !intent.Call<bool>("getBooleanExtra", "revAutomation", false))
+            {
+                return false;
+            }
+
+            // 电脑在启动前生成这组身份，通过 ADB 转发后直接核对 /health。
+            string token = intent.Call<string>("getStringExtra", "revAutomationToken");
+            string launchId = intent.Call<string>("getStringExtra", "revAutomationLaunchId");
+            int port = intent.Call<int>("getIntExtra", "revAutomationPort", 0);
+            if (token == null || token.Length != 64 || token.Any(c => !Uri.IsHexDigit(c)) ||
+                launchId == null || launchId.Length != 32 || launchId.Any(c => !Uri.IsHexDigit(c)))
+            {
+                throw new ArgumentException("安卓自动化启动缺少有效的临时会话身份");
+            }
+
+            using var process = new AndroidJavaClass("android.os.Process");
+            StartServer(port, token, launchId, process.CallStatic<int>("myPid"));
+            return true;
+        }
+#endif
+        private void Accept()
+        {
+            // HttpListener.GetContext 是阻塞等待，因此放后台线程；这里绝不调用 Unity API。
+            // 一个连接慢也不能卡住 Unity，每次请求交给受连接数限制的线程池处理。
+            while (!_stopping)
+            {
+                HttpListenerContext context;
+                try { context = _listener.GetContext(); }
+                catch (HttpListenerException) { break; } catch (ObjectDisposedException) { break; }
+                if (Interlocked.Increment(ref _connections) > 16)
+                { Interlocked.Decrement(ref _connections); Send(context, 503, "{\"success\":false,\"error\":\"ConnectionLimit\"}"); continue; }
+                ThreadPool.QueueUserWorkItem(_ => { try { Handle(context); } finally { Interlocked.Decrement(ref _connections); } });
+            }
+        }
+        /// <summary>校验本机凭据和会话后接单、返回结果或流式交付临时截图。</summary>
+        private void Handle(HttpListenerContext context)
+        {
+            // 认证、session、参数解析都是纯数据工作，可以留在后台线程。
+            // POST 返回 202 仅表示“已接单”，真正成功必须等 GET /jobs/<id> 的最终 success。
+            try
+            {
+                var req = context.Request;
+                if (!IPAddress.IsLoopback(req.RemoteEndPoint.Address) || !string.IsNullOrEmpty(req.Headers["Origin"]) || req.Headers["Authorization"] != "Bearer " + _token)
+                { Send(context, 401, "{\"success\":false,\"error\":\"Unauthorized\"}"); return; }
+                if (req.Headers["X-Rev-Session"] != _session) { Send(context, 409, "{\"success\":false,\"error\":\"SessionChanged\"}"); return; }
+                string path = req.Url.AbsolutePath;
+                if (path == "/health" && req.HttpMethod == "GET") { Send(context, 200, _health); return; }
+                const string capturePrefix = "/captures/";
+                if (req.HttpMethod == "GET" && path.StartsWith(capturePrefix, StringComparison.Ordinal))
+                {
+                    if (!Guid.TryParseExact(path.Substring(capturePrefix.Length), "N", out Guid captureId) || !SendCapture(context, captureId))
+                    {
+                        Send(context, 404, "{\"success\":false,\"error\":\"CaptureExpired\"}");
+                    }
+                    return;
+                }
+                if (path == "/call" && req.HttpMethod == "POST")
+                {
+                    if (req.ContentLength64 < 0 || req.ContentLength64 > 4 * 1024 * 1024) { throw new ArgumentException("body 必须声明长度且不能超过 4 MiB"); }
+                    if (req.InputStream.CanTimeout) { req.InputStream.ReadTimeout = 2000; }
+                    string body; using (var reader = new StreamReader(req.InputStream, Encoding.UTF8)) { body = reader.ReadToEnd(); }
+                    var data = RevAutomationJson.Object(RevAutomationJson.Parse(body));
+                    if (data.Keys.Except(new[] { "id", "action", "payload", "confirm", "timeoutSeconds", "deadlineUtc" }).Any()) { throw new ArgumentException("未知请求字段"); }
+                    string id = data["id"] as string, action = data["action"] as string;
+                    if (id == null || id.Length != 32 || id.Any(c => !Uri.IsHexDigit(c)) || string.IsNullOrEmpty(action)) { throw new ArgumentException("请求 id/action 无效"); }
+                    double timeout = data.TryGetValue("timeoutSeconds", out object t) && t is double seconds ? seconds : 120;
+                    if (timeout <= 0 || timeout > 3600) { throw new ArgumentException("timeoutSeconds 为 0..3600"); }
+                    bool expirable = data.TryGetValue("deadlineUtc", out object absoluteDeadline);
+                    DateTime deadline = DateTime.UtcNow.AddSeconds(timeout);
+                    if (expirable && (!(absoluteDeadline is string deadlineText) || !DateTimeOffset.TryParse(deadlineText, out DateTimeOffset parsed)
+                        || parsed <= DateTimeOffset.UtcNow || parsed > DateTimeOffset.UtcNow.AddHours(1)))
+                    { throw new ArgumentException("Expired：原始请求期限无效，未执行操作"); }
+                    if (expirable) { deadline = DateTimeOffset.Parse((string)absoluteDeadline).UtcDateTime; }
+                    object payload = data.TryGetValue("payload", out object p) ? p : new Dictionary<string, object>(); RevAutomationJson.Object(payload);
+                    if (data.TryGetValue("confirm", out object confirmation) && !(confirmation is bool)) { throw new ArgumentException("confirm 需要 bool"); }
+                    var job = new Job { Id = id, Action = action, Payload = RevAutomationJson.Write(payload), Confirm = confirmation is bool c && c,
+                        Deadline = deadline, Fingerprint = RevAutomationMemoryJobs.Fingerprint(body) };
+                    lock (_gate)
+                    {
+                        if (_stopping) { throw new InvalidOperationException("服务正在停止"); }
+                        if (_queue.Count >= 16 && _memory.Find(id) == null) { throw new InvalidOperationException("Busy：运行时队列已满"); }
+                        if (_memory.Add(new RevAutomationMemoryJobs.Job { id = id, action = action, fingerprint = job.Fingerprint,
+                            deadlineTicks = deadline.Ticks, expirable = expirable }, DateTime.UtcNow))
+                        {
+                            _jobs.Add(id, job); _queue.Enqueue(job);
+                            _memory.Take(); // Runtime 继续用既有业务队列，内存账本仅负责身份和结果。
+                        }
+                    }
+                    Send(context, 202, "{\"success\":true,\"id\":\"" + id + "\",\"sessionId\":\"" + _session + "\"}"); return;
+                }
+                if (path.StartsWith("/jobs/", StringComparison.Ordinal))
+                {
+                    string id = path.Substring(6); bool ack = id.EndsWith("/ack", StringComparison.Ordinal);
+                    if (ack) { id = id.Substring(0, id.Length - 4); }
+                    if (ack && req.HttpMethod == "POST") { Send(context, 200, RevAutomationJson.Write(new Dictionary<string, object> { ["success"] = _memory.Ack(id) })); return; }
+                    if (req.HttpMethod != "GET" && req.HttpMethod != "DELETE") { Send(context, 404, "{\"success\":false}"); return; }
+                    Job job;
+                    lock (_gate) { _jobs.TryGetValue(id, out job); }
+                    if (req.HttpMethod == "DELETE" && job != null) { job.Cancelled = true; _memory.Cancel(id); }
+                    string response = _memory.Response(id, _session);
+                    Send(context, response == null ? 404 : 200, response ?? "{\"success\":false,\"error\":\"JobNotFound\"}"); return;
+                }
+                Send(context, 404, "{\"success\":false,\"error\":\"RouteNotFound\"}");
+            }
+            catch (Exception e) { Send(context, 400, RevAutomationJson.Write(new Dictionary<string, object> { ["success"] = false, ["error"] = e.GetType().Name, ["message"] = e.Message })); }
+        }
+        /// <summary>从本会话受控缓存读取完整 PNG。响应成功写完即删除，网络中断只留给兜底回收。</summary>
+        private bool SendCapture(HttpListenerContext context, Guid id)
+        {
+            string path = RevRuntimeScreenshot.ScreenshotPath(_captureDirectory, id);
+            if (!File.Exists(path) || (File.GetAttributes(_captureDirectory) & FileAttributes.ReparsePoint) != 0 ||
+                (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+            {
+                return false;
+            }
+            try
+            {
+                using (var source = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+                {
+                    if (source.Length <= 0 || source.Length > RevRuntimeScreenshot.MaxPngBytes)
+                    {
+                        return false;
+                    }
+                    context.Response.ContentType = "image/png";
+                    context.Response.ContentLength64 = source.Length;
+                    context.Response.Headers["Cache-Control"] = "no-store";
+                    source.CopyTo(context.Response.OutputStream);
+                }
+                context.Response.Close();
+                File.Delete(path);
+            }
+            catch (Exception error) when (error is IOException || error is HttpListenerException || error is ObjectDisposedException)
+            {
+                context.Response.Abort();
+            }
+            return true;
+        }
+
+        private static void Send(HttpListenerContext context, int status, string json)
+        {
+            try
+            {
+                byte[] bytes = Encoding.UTF8.GetBytes(json); context.Response.StatusCode = status;
+                context.Response.ContentType = "application/json; charset=utf-8"; context.Response.Headers["Cache-Control"] = "no-store";
+                context.Response.ContentLength64 = bytes.Length; context.Response.OutputStream.Write(bytes, 0, bytes.Length);
+            }
+            catch (Exception e) when (e is IOException || e is HttpListenerException || e is ObjectDisposedException) { }
+            finally { try { context.Response.Close(); } catch (ObjectDisposedException) { } }
+        }
+        /// <summary>推进 Unity 主线程动作，同时按固定周期回收无人领取的过期截图。</summary>
+        private void Update()
+        {
+            // 唯一执行 Unity 业务的位置。始终只推进一个 active 工单；
+            // Editor 文件桥持有忙标记时让出执行权，避免两个入口同时改场景/游戏状态。
+            if (_stopping) { return; }
+            if (Time.realtimeSinceStartup >= _nextCaptureCleanup)
+            {
+                _nextCaptureCleanup = Time.realtimeSinceStartup + 60;
+                string directory = _captureDirectory;
+                ThreadPool.QueueUserWorkItem(_ => RevAutomationStorage.TemporaryScreenshots(directory, false));
+            }
+#if UNITY_EDITOR
+            if (RevRuntimeAutomation.EditorBusy) { return; }
+#endif
+            if (_active == null && !_queue.TryDequeue(out _active)) { return; }
+            var job = _active;
+            job.Activity ??= RevAutomationActivity.Begin("Unity HTTP", job.Action == "gm.exec" ? "gm" : "game",
+                job.Action, job.Payload, "http-" + job.Id);
+            try
+            {
+                if (job.Cancelled || DateTime.UtcNow >= job.Deadline)
+                { job.Operation?.Cancel(); Complete(job, false, "CancelledOrTimeout", "已停止等待；已执行的业务副作用不会回滚", job.Operation?.Result); return; }
+                if (job.Operation == null)
+                {
+                    job.Started = true; job.StartErrorCount = RevRuntimeAutomation.ErrorCount;
+                    object result;
+                    if (job.Action == "gm.exec")
+                    {
+                        var p = RevAutomationJson.Object(RevAutomationJson.Parse(job.Payload));
+                        if (p.Count != 1 || !p.TryGetValue("command", out object command) || !(command is string)) { throw new ArgumentException("gm.exec 只接收 command 字符串"); }
+                        result = RevRuntimeAutomation.ExecuteGM((string)command, job.Confirm);
+                    }
+                    else { result = RevRuntimeAutomation.Invoke(job.Action, job.Payload, job.Confirm); }
+                    if (result is RevRuntimeOperation operation) { job.Operation = operation; }
+                    else { Complete(job, true, null, "完成", result); return; }
+                }
+                if (job.Operation.Tick()) { Complete(job, job.Operation.Success, job.Operation.Success ? null : "OperationFailed", job.Operation.Message, job.Operation.Result); }
+            }
+            catch (Exception e) { Complete(job, false, e.GetType().Name, e.Message, job.Operation?.Result); }
+        }
+        private void Complete(Job job, bool success, string error, string message, object data)
+        {
+            // 即使 handler 正常 return，期间新增的 Unity Error 也会判失败。
+            // Dispose 也属于动作结果的一部分，清理异常不能被吞掉伪装成成功。
+            if (success && job.Started && RevRuntimeAutomation.ErrorCount > job.StartErrorCount)
+            { success = false; error = "UnityError"; message = "操作期间出现 Unity Error/Exception，请读取 runtime.logs"; }
+            try { job.Operation?.Dispose(); }
+            catch (Exception e) { success = false; error = "DisposeFailed"; message += "; " + e.Message; }
+            job.Operation = null;
+            try { job.Response = RevAutomationJson.Write(new Dictionary<string, object> { ["id"] = job.Id, ["sessionId"] = _session,
+                ["success"] = success, ["error"] = error, ["message"] = message, ["data"] = data }); }
+            catch (Exception e)
+            {
+                success = false; error = "SerializationFailed"; message = e.Message;
+                job.Response = RevAutomationJson.Write(new Dictionary<string, object> { ["id"] = job.Id, ["sessionId"] = _session, ["success"] = false, ["error"] = error, ["message"] = message });
+            }
+            job.Activity ??= RevAutomationActivity.Begin("Unity HTTP", job.Action == "gm.exec" ? "gm" : "game",
+                job.Action, job.Payload, "http-" + job.Id);
+            RevAutomationActivity.Finish(job.Activity, success, message, data, error);
+            _memory.Complete(job.Id, job.Response);
+            lock (_gate) { _jobs.Remove(job.Id); }
+            job.Payload = null; job.Response = null;
+            if (_active == job) { _active = null; }
+        }
+        /// <summary>停止接单并终结本轮工单，业务取消失败时仍释放监听、凭据和后台运行设置。</summary>
+        private void Shutdown()
+        {
+            // 与 HTTP 入队共用短锁。退出锁后才执行第三方回调，避免工单收尾和后台线程互相等待。
+            lock (_gate)
+            {
+                if (_stopping)
+                {
+                    return;
+                }
+                _stopping = true;
+            }
+
+            try
+            {
+                if (_active != null)
+                {
+                    Job active = _active;
+                    string error = "ServerStopped";
+                    string message = "运行时服务已停止";
+                    try
+                    {
+                        active.Operation?.Cancel();
+                    }
+                    catch (Exception exception)
+                    {
+                        error = "CancelFailed";
+                        message += "，取消回调失败：" + exception.Message;
+                    }
+                    Complete(active, false, error, message, null);
+                }
+                while (_queue.TryDequeue(out Job job))
+                {
+                    Complete(job, false, "ServerStopped", "运行时服务已停止", null);
+                }
+            }
+            finally
+            {
+                try
+                {
+                    _listener?.Close();
+                    if (_thread?.IsAlive == true)
+                    {
+                        _thread.Join(500);
+                    }
+                }
+                finally
+                {
+                    if (ReferenceEquals(_instance, this))
+                    {
+                        _instance = null;
+                    }
+                    if (_ownsBackground)
+                    {
+                        Application.runInBackground = _wasBackground;
+                    }
+                    // 只删除属于当前会话的文件，保留后来实例写入的凭据。
+                    try
+                    {
+                        if (_endpoint != null && File.Exists(_endpoint) && File.ReadAllText(_endpoint).Contains(_session))
+                        {
+                            File.Delete(_endpoint);
+                        }
+                    }
+                    catch (IOException) { }
+                }
+            }
+        }
+        private void OnDestroy() { Shutdown(); }
+        private void OnApplicationQuit() { Shutdown(); }
+    }
+}
+#elif UNITY_EDITOR || DEVELOPMENT_BUILD || REV_AUTOMATION
+namespace Revolution
+{
+    /// <summary>网页与小游戏开发包的本机 HTTP 占位入口。项目可以提供自己的受控传输。</summary>
+    internal static class RevRuntimeAutomationHost
+    {
+        /// <summary>本机监听器未启动，没有待处理的本机 HTTP 请求。</summary>
+        public static bool HasPendingWork => false;
+        /// <summary>当前宿主无法启动本机 HTTP 服务，明确拒绝调用。</summary>
+        public static string StartServer(int port, string token) => throw new System.PlatformNotSupportedException("WebGL / 小游戏无法启动本机 HTTP 监听器，请提供项目传输适配");
+        /// <summary>接口对称的清理入口。当前宿主没有本机服务需要停止。</summary>
+        public static void StopServer()
+        {
+        }
+    }
+}
+#endif
