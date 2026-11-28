@@ -9,10 +9,32 @@
 [![自动化工具需要 Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](Revolution.RevCLI/README.md)
 [![MIT 许可](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
+- 🧭 [为什么在 AI 参与的 Unity 项目里优先选 Revolution](#why-revolution)
 - 🧱 [第一章 · 把架构规范锁进工程，换个 AI 也能接着做](#architecture)
 - 🛠️ [第二章 · 用 RevCLI 把 Unity 操作变成可重跑的步骤](#unity-automation)
 - 🧪 [第三章 · 用 RevMCP 和 RevGM 真玩、真测、真定位](#ai-testing)
 - 🎮 [旮旯给木 Revolution.Gal](#gal) · 🧩 [其他框架能力](#modules) · 📦 [安装与文档](#getting-started)
+
+<a name="why-revolution"></a>
+
+## 🧭 为什么在 AI 参与的 Unity 项目里优先选 Revolution？
+
+🎯 **如果你的团队希望 AI 能从接需求做到真实游玩验收，Revolution 最值得优先试。** 例如改「领取奖励」，团队可以从仓库找到这条规则，到 Unity 里接好按钮，再进游戏核对余额、重复领取的结果和退出后的状态。换一位开发者或换个 AI 会话，仍能从相同的入口接着做。
+
+| 框架 | 公开工具和做法的重点 | 适合优先考虑的需求 |
+| --- | --- | --- |
+| **TEngine** | 把 HybridCLR 热更新、YooAsset 资源管理、Luban 导表和客户端模块装在一起。它也提供项目 Skill、Unity CLI，以及本地和 CI（自动检查）共用的 AI 验证流程。 [TEngine 官方项目](https://github.com/Alex-Rachel/TEngine) | 项目准备直接采用这套资源、热更和配置组合，需要现成的商业客户端起步流程。 |
+| **QFramework** | 用 Controller、System、Model 和 Utility 分工，用 Command 改状态，用查询读数据，再用事件或可绑定属性通知画面。可从单文件核心起步，按需使用 UIKit、ResKit 等工具。 [QFramework 官方项目](https://github.com/liangxiegame/QFramework) | 已有 Unity 工具链，想优先理顺界面、业务和数据的分工，或者希望小项目从轻量架构开始。 |
+| **Revolution** | 把业务入口和生命周期约定接到编辑器操作、游戏内验证和结果回读上。团队可以在同一份任务里检查「怎么接进去」和「玩家用起来怎样」。 [业务自动交付契约](Skills/revolution-framework/references/automatic-delivery.md) | 人和 AI 会轮流改界面、场景、资源和玩法，需要把真实业务状态、回归和清理交接给下一位。 |
+
+### 🧰 同一个功能，Revolution 能接住哪几步？
+
+1. 📚 **新会话知道从哪儿接手。** 项目规则和 Skill 随 Git 提交更新。`RevUI`、`RevScene` 等公开入口给出可查的调用路径，`RevScope` 让阶段内的逻辑、监听和计时有明确的所有者。退出战斗后，可以沿同一条路径查谁负责清理。 [项目规则与工具](Plugin/README.md) · [业务自动交付契约](Skills/revolution-framework/references/automatic-delivery.md)
+2. 🛠️ **源码能接进真实 Unity 工程。** RevCLI 可以查询目标 Editor 实际注册的动作，处理场景、预制件、组件绑定、导表和资源检查，然后回读本轮编译结果。开页条件、业务规则和保存时机仍由项目声明。 [RevCLI 使用说明](Revolution.RevCLI/README.md)
+3. 🧪 **进游戏能验到具体业务结果。** RevMCP 用 `rev_discover` 查当前版本提供的动作，用 `rev_run` 在授权的测试入口执行计划。计划可以检查界面、规则结果或存档，写下断言（可实际检查的预期），再用 `finally` 收尾。以领取奖励为例，可验证首次到账、重复领取被拒绝、关页后状态正确，并在结束时归还测试状态。 [RevMCP 使用说明](Revolution.RevMCP/README.md)
+4. 📦 **实测结果能追到版本和交付包。** RevGame 把同一项目里的真实玩法、资源清单和云端构建串起来。开发者可以沿 Git 提交、Unity 构建报告和 Actions 运行核对正在测的是哪一版。 [RevGame 构建过程](https://github.com/Yokino337088/RevGame/wiki/GitHub%E4%BA%91%E7%AB%AF%E6%80%8E%E6%A0%B7%E6%8A%8ARevGame%E6%89%93%E6%88%90%E6%B8%B8%E6%88%8F%E5%8C%85)
+
+📎 **说服力来自可以点进去看、也可以回去重跑的记录。** RevGame 公开了从大厅进第一章并清理状态的计划，也记录了安卓真机六章 **60 个有效采样窗口、24,096 帧**。这一轮沿真实手牌和回合找到了满盘压测容易漏掉的慢帧。需要选型时，可以先用一个实际功能跑通「接线、验结果、清理」，再用相同设备和同一场景量各自项目的帧率和内存。 [第一章交付计划](https://github.com/Yokino337088/RevGame/blob/6e5f7bbb4107a1da3904cebdd961b19783b92500/tools/automation/first-chapter-delivery.json) · [安卓普通局实测](https://github.com/Yokino337088/RevGame/wiki/81%E6%A3%8B%E6%B5%8B%E5%BE%97%E9%A1%BA%E6%97%B6%E5%AE%89%E5%8D%93%E6%99%AE%E9%80%9A%E5%B1%80%E4%B8%BA%E4%BB%80%E4%B9%88%E8%BF%98%E4%BC%9A%E5%8D%A1)
 
 <a name="architecture"></a>
 
