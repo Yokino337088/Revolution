@@ -117,9 +117,9 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual(console.emit.call_count, 47)
 
     def test_console_prints_only_final_gm_with_declared_intent(self):
-        """非 GM 请求、接单、轮询、确认和计划报告不刷屏，终态每条只打印一次。"""
+        """gm 模式保留单行终态，切换显示范围不影响已经记录的普通工单。"""
         console = Mock()
-        history = operation_log.OperationLog(console)
+        history = operation_log.OperationLog(console, console_log="gm")
         session = "a" * 32
         gm = "b" * 32
         wire = json.dumps(dict(id=gm, action="gm.exec", payload={"command": 'RevGame/选奖励 "0"'})).encode()
@@ -135,6 +135,7 @@ class CompanionTests(unittest.TestCase):
         history.page({})
         history.plan_finished(dict(success=False, steps=1, cleanup=2))
         console.emit.assert_not_called()
+        self.assertEqual(len(history.page({})["events"]), 4)
         final = json.dumps(dict(id=gm, sessionId=session, success=True,
                                 data={"success": True, "elapsedMs": 1.25, "message": "详细数据"})).encode()
         history.response("GET", "/jobs/" + gm, None, 200, final, session)
@@ -155,6 +156,38 @@ class CompanionTests(unittest.TestCase):
         history.response("POST", "/call", job, 504, b"{}", "a" * 32)
         console.emit.assert_called_once()
         self.assertRegex(console.emit.call_args.args[1], r"^RevGame/自动化开始 \[长参数略\] · 意图 未提供 · 未获回执 · 等待 \d+ ms$")
+
+    def test_console_prints_mcp_results_once_and_preserves_plan_outcome(self):
+        """显式发现、业务失败与计划失败各有一行，内部能力查询和传输轮询不输出。"""
+        console = Mock()
+        history = operation_log.OperationLog(console)
+        session = "a" * 32
+        cases = (("rev_call", "runtime.capabilities"), ("rev_discover", "runtime.capabilities"),
+                 ("rev_run", "runtime.performance.state"))
+        for number, (tool, action) in enumerate(cases, 1):
+            job = f"{number:032x}"
+            metadata = {"tool": tool}
+            if tool == "rev_run":
+                metadata.update(phase="finally", step="sample")
+            ctx = operation_log.mcp_context(quote(json.dumps(metadata)))
+            body = json.dumps(dict(id=job, action=action, payload={"token": "test-private-value"})).encode()
+            history.submit(body, ctx)
+            history.response("POST", "/call", job, 202, b"{}", session)
+            history.response("GET", "/jobs/" + job, None, 200, json.dumps(dict(id=job, pending=True)).encode(), session)
+            finished = dict(id=job, sessionId=session, success=number != 3, error="NotReady" if number == 3 else "")
+            reply = json.dumps(finished).encode()
+            history.response("GET", "/jobs/" + job, None, 200, reply, session)
+            history.response("GET", "/jobs/" + job, None, 200, reply, session)
+            history.response("POST", "/jobs/" + job + "/ack", None, 200, b"{}", session)
+        history.plan_finished(dict(name="性能采样", success=False, steps=2, cleanup=1, failure="AssertionFailed"))
+
+        rows = [call.args for call in console.emit.call_args_list]
+        self.assertEqual([tag for tag, _ in rows], ["MCP", "MCP", "MCP"])
+        self.assertIn("rev_discover · runtime.capabilities · 成功", rows[0][1])
+        self.assertIn("rev_run 收尾 sample · runtime.performance.state · 失败", rows[1][1])
+        self.assertIn("NotReady", rows[1][1])
+        self.assertIn("rev_run · 性能采样 · 未通过 · 业务步骤 2，收尾步骤 1 · AssertionFailed", rows[2][1])
+        self.assertNotIn("test-private-value", str(rows))
 
     def test_activity_never_decodes_large_game_artifact(self):
         """含截图等大字段时只取接单头部，ANSI 控制符不会跟随消息输出。"""

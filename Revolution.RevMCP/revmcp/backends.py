@@ -296,7 +296,7 @@ class Hub:
         return self.editor.call("runtime.call", {"runtimeAction": action, "argumentsJson": json.dumps(arguments, ensure_ascii=False)}, confirm, cancel=cancel)
 
     def report_android_plan(self, result):
-        """向安卓接线器补充主机侧断言和收尾状态，旁路失败不修改测试结果。"""
+        """向安卓接线器补充实际入口、断言和收尾状态，旁路失败不修改测试结果。"""
         if not self.runtime_endpoint:
             return
         try:
@@ -307,9 +307,10 @@ class Hub:
             cleanup = result.get("cleanup", [])
             failed = next((row.get("response", row) for row in [*steps, *cleanup]
                            if row.get("response", row).get("success") is False or row.get("error")), {})
+            tool = getattr(self.activity.context, "values", {}).get("mcpTool", "")
             runtime.request("POST", "/mcp/activity", {"name": result.get("name", ""), "success": result.get("success") is True,
-                            "steps": len(steps), "cleanup": len(cleanup),
-                            "failure": failed.get("error") or failed.get("message") or ""})
+                            "tool": tool, "steps": len(steps), "cleanup": len(cleanup),
+                            "failure": failed.get("error") or result.get("error") or failed.get("message") or ""})
         except (OSError, RevError, ValueError, TypeError, AttributeError):
             pass
 

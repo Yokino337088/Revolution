@@ -11,7 +11,7 @@ import sys
 
 
 def main():
-    """命令行与 MCP 共用按需报告规则，终端默认直接返回执行结果。"""
+    """命令行与 MCP 共用报告规则，安卓接线器可识别实际调用入口。"""
     root = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Revolution 统一 MCP：Editor、游戏运行时、GM、显式注册 CLI/Python")
     parser.add_argument("--project", type=Path, help="Unity 工程目录；Editor 后端只连接已打开的工程")
@@ -58,15 +58,17 @@ def main():
         Server(hub, compact_tools=args.compact_tools).serve()
         return 0
     try:
-        if args.operation == "discover":
-            result = hub.discover()
-        elif args.operation == "call":
-            if len(args.intent) > 512:
-                raise ValueError("intent 最多 512 字符")
-            with hub.activity.scope(intent=args.intent):
+        # CLI 与 stdio 共用回环日志，但工具名保留实际子命令。
+        with hub.activity.scope(mcpTool=args.operation, intent=getattr(args, "intent", "")):
+            if args.operation == "discover":
+                result = hub.discover()
+            elif args.operation == "call":
+                if len(args.intent) > 512:
+                    raise ValueError("intent 最多 512 字符")
                 result = hub.call(args.target, args.action, input_json(args.json) if args.json else {}, args.confirm)
-        else:
-            result = run_with_reports(hub, input_json(args.plan))
+            else:
+                result = run_with_reports(hub, input_json(args.plan))
+                hub.report_android_plan(result)
     except (OSError, ValueError, RuntimeError, TimeoutError, KeyboardInterrupt) as exc:
         result = dict(success=False, error=type(exc).__name__, message=str(exc))
     # Reconfigure only CLI output; MCP writes explicit UTF-8 bytes itself.
