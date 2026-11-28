@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""RevMCP 启动入口。Python 3.10+，仅使用标准库，无需安装 pip 依赖。
+
+serve 给 Agent 讲 MCP 协议；discover/call/run 给人和 CI 提供同一套 CLI。
+Unity Editor 能力复用旁边的 Revolution.RevCLI，因此必须保留两个目录。
+"""
+from pathlib import Path
+import argparse
+import json
+import sys
+
+
+def main():
+    """命令行与 MCP 共用报告规则，安卓接线器可识别实际调用入口。"""
+    root = Path(__file__).resolve().parent
+    parser = argparse.ArgumentParser(description="Revolution 统一 MCP：Editor、游戏运行时、GM、显式注册 CLI/Python")
+    parser.add_argument("--project", type=Path, help="Unity 工程目录；Editor 后端只连接已打开的工程")
+    parser.add_argument("--runtime-endpoint", type=Path, help="开发版游戏产生的 runtime.json 凭据文件")
+    parser.add_argument("--cli-root", "--automation-root", dest="cli_root", type=Path, default=root.parent / "Revolution.RevCLI",
+                        help="RevCLI 目录（含 commands.json）；--automation-root 为改名前的旧名，仍可用")
+    parser.add_argument("--external-manifest", type=Path, help="显式注册的外部工具清单")
+    parser.add_argument("--reports", type=Path, help=argparse.SUPPRESS)  # 保留旧启动命令兼容性，只校验路径。
+    parser.add_argument("--timeout", type=float, default=120)
+    parser.add_argument("--compact-tools", action="store_true", help="仅暴露三个稳定 MCP 工具；通过 rev_discover 按需查真实能力")
+    parser.add_argument("--full", action="store_true", help="discover/call/run 在终端输出完整 JSON")
+    sub = parser.add_subparsers(dest="operation", required=True)
+    sub.add_parser("serve", help="MCP stdio 服务；stdout 仅输出 JSON-RPC")
+    sub.add_parser("discover", help="读取实际注册能力")
+    call = sub.add_parser("call", help="调用真实能力")
+    call.add_argument("target", choices=("editor", "game", "gm", "cli"))
+    call.add_argument("action")
+    call.add_argument("--json", help="参数 JSON 文件。用 - 从标准输入读取")
+    call.add_argument("--confirm", action="store_true")
+    call.add_argument("--intent", default="", help="给活动窗口的一句话目的；不会传入业务参数")
+    run = sub.add_parser("run", help="运行带断言和 finally 的测试计划")
+    run.add_argument("plan", help="计划 JSON 文件。用 - 从标准输入读取，无需写临时工单")
+    args = parser.parse_args()
+    if not 0 < args.timeout <= 3600:
+        parser.error("--timeout must be 0..3600")
+    if not (args.cli_root / "revautomation/client.py").is_file():
+        parser.error("Revolution.RevCLI not found; set --cli-root")
+    sys.path.insert(0, str(args.cli_root.resolve()))
+    from revautomation.client import read_json
+    from revautomation.summary import compact_json, summarize
+    from revmcp.backends import Hub
+    from revmcp.server import Server
+    from revmcp.reporting import run_with_reports
+
+    def input_json(source):
+        """接收已有文件或管道输入。工具不接管调用者的输入文件。"""
+        return json.load(sys.stdin.buffer) if source == "-" else read_json(Path(source))
+
+    try:
+        hub = Hub(args.project, args.runtime_endpoint, args.cli_root, args.external_manifest, args.reports, args.timeout)
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
+    if args.operation == "serve":
+        Server(hub, compact_tools=args.compact_tools).serve()
+        return 0
+    try:
+        # CLI 与 stdio 共用回环日志，但工具名保留实际子命令。
+        with hub.activity.scope(mcpTool=args.operation, intent=getattr(args, "intent", "")):
+            if args.operation == "discover":
+                result = hub.discover()
+            elif args.operation == "call":
+                if len(args.intent) > 512:
+                    raise ValueError("intent 最多 512 字符")
+                result = hub.call(args.target, args.action, input_json(args.json) if args.json else {}, args.confirm)
+            else:
+                result = run_with_reports(hub, input_json(args.plan))
+                hub.report_android_plan(result)
+    except (OSError, ValueError, RuntimeError, TimeoutError, KeyboardInterrupt) as exc:
+        result = dict(success=False, error=type(exc).__name__, message=str(exc))
+    # Reconfigure only CLI output; MCP writes explicit UTF-8 bytes itself.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    visible = result if args.full else summarize(result)
+    print(json.dumps(visible, ensure_ascii=False, indent=2, allow_nan=False) if args.full else compact_json(visible))
+    return 0 if result.get("success") else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

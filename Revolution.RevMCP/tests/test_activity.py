@@ -1,0 +1,168 @@
+"""活动订阅、日志上下文、并发、断言失败、取消与脱敏的回归。"""
+import json
+from pathlib import Path
+import sys
+import tempfile
+import threading
+import unittest
+from unittest.mock import patch
+from urllib.parse import unquote
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(ROOT), str(ROOT.parent / "Revolution.RevCLI")]
+from revmcp.activity import Activity
+from revmcp.backends import Hub, RuntimeClient
+from revmcp.workflow import run
+from revmcp.schema import object_schema
+from revmcp.server import Server
+from revautomation.client import RevCancelled, RevError
+from test_revmcp import FakeHub
+
+
+class ActivityTests(unittest.TestCase):
+    def test_android_gm_intent_is_only_sent_in_a_local_request_header(self):
+        """真实 RuntimeClient 组装中文意图，保留原业务载荷，非 GM 查询不带该头。"""
+        with tempfile.TemporaryDirectory() as folder:
+            endpoint = Path(folder) / "runtime.json"
+            endpoint.write_text(json.dumps(dict(url="http://127.0.0.1:1234", protocol=1, token="test",
+                                                sessionId="test", companionActivity=True)), encoding="utf-8")
+            client = RuntimeClient(endpoint, activity_context={"intent": "核对当前大厅", "mcpTool": "rev_call"})
+            with patch.object(client.opener, "open") as transport:
+                transport.return_value.__enter__.return_value.read.return_value = b"{}"
+                action = dict(action="gm.exec", payload={"command": "RevGame/快照"})
+                client.request("POST", "/call", action)
+                request = transport.call_args.args[0]
+                self.assertEqual(unquote(request.get_header("X-rev-intent")), "核对当前大厅")
+                self.assertEqual(json.loads(request.data), action)
+                client.request("POST", "/call", dict(action="story.state", payload={}))
+                self.assertIsNone(transport.call_args.args[0].get_header("X-rev-intent"))
+
+    def test_start_is_visible_before_completion_and_updates_same_identity(self):
+        """观察者先收到 Running，再收到相同 ID 的终态。"""
+        records = []
+        activity = Activity(records.append)
+        ticket = activity.start("gm", "测试/加金币", {"arg0": 3})
+        self.assertEqual(records[0]["state"], "Running")
+        activity.finish(ticket, dict(success=True))
+        self.assertEqual(records[0]["id"], records[1]["id"])
+        self.assertEqual(records[1]["state"], "Succeeded")
+        self.assertEqual(records[1]["action"], "测试/加金币")
+
+    def test_nested_json_credentials_and_image_payload_are_hidden(self):
+        """发送给窗口前移除敏感字段和图像正文。"""
+        records = []
+        activity = Activity(records.append)
+        ticket = activity.start("game", "login", {"argumentsJson": json.dumps({"token": "secret-value", "password": "pw-value", "count": 2})})
+        activity.finish(ticket, dict(success=True, data={"base64": "large-image-value", "authorization": "credential-value"}))
+        raw = json.dumps(records)
+        for secret in ("secret-value", "pw-value", "large-image-value", "credential-value"):
+            self.assertNotIn(secret, raw)
+        self.assertIn("count", raw)
+
+    def test_publish_failure_does_not_change_business_result(self):
+        """活动端点掉线后，调用端仍可完成日志收尾。"""
+        def offline(_row):
+            """模拟已关闭的本机诊断端点。"""
+            raise OSError("listener closed")
+
+        activity = Activity(offline)
+        ticket = activity.start("cli", "echo")
+        activity.finish(ticket, dict(success=True))
+        self.assertEqual(activity.last_error, "listener closed")
+
+    def test_no_activity_files_or_publish_when_console_is_closed(self):
+        """无人查看时，实际 Hub 调用跳过活动事件与所有默认文件输出。"""
+        with tempfile.TemporaryDirectory() as folder, patch("revmcp.backends.workspace_for", return_value=Path(folder)):
+            hub = Hub(cli_root=ROOT.parent / "Revolution.RevCLI")
+            with patch.object(hub.activity, "publish") as publish:
+                with self.assertRaises(RevError):
+                    hub.call("gm", "不存在", {}, catalog=dict(commands=[], actions=[]))
+                publish.assert_not_called()
+            self.assertEqual(list(Path(folder).iterdir()), [])
+
+    def test_concurrent_agents_preserve_independent_activity_ids(self):
+        """多个 Agent 发布的每次调用各有一条开始和终态。"""
+        records = []
+        agents = [Activity(records.append) for _ in range(4)]
+
+        def work(activity):
+            """模拟 Agent 连续发布二十个临时诊断事件组。"""
+            for _ in range(20):
+                activity.finish(activity.start("cli", "echo"), dict(success=True))
+
+        threads = [threading.Thread(target=work, args=(agent,)) for agent in agents]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(len(records), 160)
+        self.assertEqual(len({record["id"] for record in records}), 80)
+
+    def test_plan_records_assertion_failure_and_finally_with_context(self):
+        """断言失败和清理仍发送给正在订阅活动的窗口。"""
+        records = []
+        hub = FakeHub()
+        hub.activity = Activity(records.append)
+        report = run(hub, {"name": "失败后清理", "steps": [dict(target="game", action="add", expect=[dict(path="/data/count", equals=99)])],
+                           "finally": [dict(target="game", action="reset")]})
+        self.assertFalse(report["success"])
+        self.assertEqual(hub.count, 0)
+        completed = [r for r in records if r["state"] != "Running"]
+        self.assertEqual(completed[0]["error"], "AssertionFailed")
+        self.assertEqual(completed[0]["plan"], "失败后清理")
+        self.assertEqual(completed[-1]["phase"], "finally")
+        self.assertEqual(completed[-1]["state"], "Succeeded")
+
+    def test_hub_records_rejection_and_cancellation_without_starting_business(self):
+        """即使没有工单文件，拒绝和取消仍可在活动流查询。"""
+        with tempfile.TemporaryDirectory() as folder, patch("revmcp.backends.workspace_for", return_value=Path(folder)):
+            hub = Hub(cli_root=ROOT.parent / "Revolution.RevCLI")
+            records = []
+            hub.activity = Activity(records.append)
+            with self.assertRaises(RevError):
+                hub.call("gm", "不存在", {}, catalog=dict(commands=[], actions=[]))
+            with patch.object(hub, "_call", side_effect=RevCancelled("cancelled")):
+                with self.assertRaises(RevCancelled): hub.call("game", "wait")
+            completed = [r for r in records if r["state"] != "Running"]
+            self.assertEqual([r["state"] for r in completed], ["Failed", "Cancelled"])
+
+    def test_real_external_python_call_records_exact_arguments_and_result(self):
+        """外部脚本在隔离目录实际执行，活动流里能定位本次结果。"""
+        with tempfile.TemporaryDirectory() as folder, patch("revmcp.backends.workspace_for", return_value=Path(folder)):
+            hub = Hub(cli_root=ROOT.parent / "Revolution.RevCLI")
+            records = []
+            hub.activity = Activity(records.append)
+            spec = dict(target="cli", id="echo", command=[sys.executable, "-c", "import json,sys; print(json.dumps(json.load(sys.stdin)))"], cwd=folder,
+                        inputSchema=object_schema({"text": {"type": "string"}}))
+            result = hub.call("cli", "echo", {"text": "中文调用"}, catalog=dict(commands=[], actions=[spec]))
+            self.assertEqual(result["data"]["text"], "中文调用")
+            final = records[-1]
+            self.assertEqual(final["state"], "Succeeded")
+            self.assertIn("中文调用", final["argumentsJson"])
+
+    def test_mcp_intent_is_logged_separately_from_external_business_arguments(self):
+        """客户端意图仍作为活动元数据记录，外部工具只接收业务参数。"""
+        with tempfile.TemporaryDirectory() as folder, patch("revmcp.backends.workspace_for", return_value=Path(folder)):
+            hub = Hub(cli_root=ROOT.parent / "Revolution.RevCLI")
+            records = []
+            hub.activity = Activity(records.append)
+            spec = dict(target="cli", id="echo", description="回传调用者文本", command=[sys.executable, "-c", "import json,sys; print(json.dumps(json.load(sys.stdin)))"], cwd=folder,
+                        inputSchema=object_schema({"text": {"type": "string"}}))
+            server = Server(hub)
+            with patch("revmcp.backends.external_specs", return_value=[spec]):
+                result = server.call({"name": "rev_call", "arguments": {"target": "cli", "action": "echo", "arguments": {"text": "中文"}, "intent": "确认中文输入不会乱码"}}, None)
+            self.assertFalse(result["isError"])
+            self.assertEqual(result["structuredContent"]["data"], {"text": "中文"})
+            command = next(r for r in records if r["target"] == "cli" and r["state"] == "Succeeded")
+            self.assertEqual(command["intent"], "确认中文输入不会乱码")
+            self.assertEqual(command["description"], "回传调用者文本")
+
+    def test_step_intent_is_validated_before_any_mutation(self):
+        hub = FakeHub()
+        with self.assertRaises(RevError):
+            run(hub, {"steps": [dict(target="game", action="add"), dict(target="game", action="state", intent=4)]})
+        self.assertEqual(hub.calls, [])
+
+
+if __name__ == "__main__":
+    unittest.main()
