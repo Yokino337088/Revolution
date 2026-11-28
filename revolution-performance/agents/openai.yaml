@@ -1,0 +1,4 @@
+interface:
+  display_name: "Revolution 性能优化"
+  short_description: "设计与优化战斗、密集表现和资源热路径，核对 CPU、GPU、内存与缓存"
+  default_prompt: "使用 $revolution-performance 检查本次热路径的 CPU、GPU、内存和缓存成本，复用 RevGame 实践并在同负载下验证规则、画面和收益。"
