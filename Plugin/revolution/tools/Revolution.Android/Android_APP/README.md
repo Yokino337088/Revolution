@@ -53,13 +53,16 @@ python Revolution.RevMCP/rev_mcp.py --runtime-endpoint $endpoint --full run Revo
 
 ## 电脑控制台
 
-连接时显示监听地址、配对提示和可供 Agent 绑定的端点。测试开始后，**每条 RevGM 指令只在结案时打印一行**，内容是实际命令、Agent 声明的意图、结果和耗时。示例：
+连接时显示监听地址、配对提示和可供 Agent 绑定的端点。测试开始后，**通过这个安卓端点的 MCP 调用在结案时各显示一行**，包括显式能力发现、游戏动作、RevGM 和多步计划的最终结果。
 
 ```text
+22:24:02 [MCP] rev_discover · runtime.capabilities · 成功 · 等待 12 ms
+22:24:04 [MCP] rev_call · runtime.performance.state · 成功 · 等待 16 ms
 22:24:06 [RevGM] RevGame/快照 · 意图 核对当前大厅 · 成功 · 1.25 ms
+22:24:07 [MCP] rev_run · 安卓战斗采样 · 通过 · 业务步骤 4，收尾步骤 1
 ```
 
-命令时间优先使用游戏报告的 GM 执行毫秒。失败或缺少执行时长时显示电脑等待时间。旧版 RevMCP 或调用者未提供意图时显示「未提供」。状态轮询和计划断言的结果在 RevMCP 回执中查看，手机仍可打开「Agent 操作记录」。终端重定向时默认为纯文本，可用 `--color always` 或 `--color never` 切换。
+普通动作显示电脑等待回执的时间，RevGM 优先显示游戏报告的执行毫秒。接单、工单轮询、确认及调用前的内部能力检查不重复打印。业务查询仍各有自己的终态。详细回执可在 RevMCP 中查看，手机可打开「Agent 操作记录」。如果只想看 RevGM，在 Windows 运行 `.\start-test-service.cmd --console-log gm`。终端重定向时默认为纯文本，可用 `--color always` 或 `--color never` 切换。
 
 ## 真机性能压测
 

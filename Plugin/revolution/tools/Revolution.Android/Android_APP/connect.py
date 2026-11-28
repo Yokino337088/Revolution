@@ -86,7 +86,7 @@ class Command:
 class Channel:
     """一个电脑监听实例接受一台手机，条件变量把 Agent 的指令即时送到手机挂起的请求。"""
 
-    def __init__(self, expected_package=None, expected_build=None, trust=None, console=None):
+    def __init__(self, expected_package=None, expected_build=None, trust=None, console=None, console_log="mcp"):
         """准备三分钟配对窗口和两组彼此独立的认证凭据。"""
         # 电脑端显示的临时口令。
         self.code = f"{secrets.randbelow(100000000):08d}"
@@ -101,7 +101,7 @@ class Channel:
         # 电脑持久授权库与本轮临时令牌分开。
         self.trust = trust
         # 工单历史只在电脑，按实际收到的请求与回执更新。
-        self.operations = OperationLog(console)
+        self.operations = OperationLog(console, console_log)
         # 以下状态和挂起请求都在同一条件变量下发布。
         self.changed = threading.Condition()
         # 配对成功后绑定到所选游戏的唯一启动号。
@@ -507,7 +507,7 @@ def serve_session(args, path, address, tls, pin, channel):
 
 
 def run(args):
-    """开启电脑接线器；常驻模式为下一轮连接更新会话身份，继续使用同一份电脑授权。"""
+    """开启电脑接线器，常驻模式创建新会话并沿用电脑授权与控制台显示模式。"""
     trust = HostTrust(args.trust_dir)
     build = read_build_identity(args.build_report)
     with ExitStack() as resources:
@@ -523,7 +523,7 @@ def run(args):
             raise AndroidError("请指定手机可直达的电脑网卡 IPv4 地址")
         tls, pin = server_tls(folder, trust)
         while True:
-            channel = Channel(args.package, build, trust, console)
+            channel = Channel(args.package, build, trust, console, args.console_log)
             try:
                 serve_session(args, path, address, tls, pin, channel)
             except AndroidError as error:
@@ -536,7 +536,7 @@ def run(args):
 
 
 def main(argv=None):
-    """启动接线器，或在电脑端撤销需要重新授权的手机。"""
+    """解析接线、控制台显示模式或撤销手机授权的启动参数。"""
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_subparsers(dest="mode", required=True)
     lan = modes.add_parser("lan", help="监听电脑局域网网卡，手机主动接入")
@@ -552,6 +552,8 @@ def main(argv=None):
     for mode in (usb, lan):
         mode.add_argument("--color", choices=("auto", "always", "never"), default="auto",
                           help="控制台高亮，默认根据终端能力决定")
+        mode.add_argument("--console-log", choices=("mcp", "gm"), default="mcp",
+                          help="默认显示 MCP 工单与计划摘要，gm 仅显示 RevGM")
         mode.add_argument("--endpoint", type=Path, help="可选的私有 runtime.json 绝对路径")
         mode.add_argument("--package", help="可选，仅接受此游戏包名")
         mode.add_argument("--build-report", type=Path, help="可选，核对 Android rev-build.json")

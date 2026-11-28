@@ -24,7 +24,7 @@ READ_LIMIT = 64 * 1024
 CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]")
 # 游戏返回的请求编号固定为 32 位十六进制。
 JOB_ID = re.compile(r"[0-9a-f]{32}")
-# 控制台只输出 GM 的终态。等待中的状态仍用于手机历史。
+# 控制台只输出工单终态。等待中的状态仍用于手机历史。
 OUTCOMES = {"success": "成功", "failed": "失败", "cancelled": "取消或超时", "unknown": "未获回执"}
 
 
@@ -76,7 +76,7 @@ class Console:
     """后台写入彩色控制台；终端慢时最多缓存 512 行，不拖慢游戏工单。"""
 
     # 颜色只分配给接线器自己的短标签。
-    COLORS = {"RevGM": "95", "安卓": "36"}
+    COLORS = {"RevGM": "95", "MCP": "94", "安卓": "36"}
 
     def __init__(self, color):
         """启动一个轻量终端写线程，游戏的网络线程只投递短行。"""
@@ -146,6 +146,10 @@ class Event:
     arguments: str
     # 接单时关联的本地 MCP 工具名，可为空。
     tool: str
+    # 计划中声明的步骤编号及阶段，仅用于定位控制台中的调用。
+    step: str
+    # 已识别的阶段为 steps、finally，其他值按普通调用处理。
+    phase: str
     # Agent 为本次 GM 声明的意图。旧客户端没有这个字段时留空。
     intent: str
     # 转交、接单和终态字面值由手机列表映射。
@@ -162,10 +166,12 @@ class Event:
 class OperationLog:
     """一台手机一轮游戏，留存经过实际 Android 通道的命令和回执。"""
 
-    def __init__(self, console=None):
+    def __init__(self, console=None, console_log="mcp"):
         """初始化旁路历史，只有展开消息列表的手机才会来查询。"""
         # 电脑控制台可以关闭，记录与游戏派发仍然正常。
         self.console = console
+        # mcp 显示收到的工具调用，gm 只保留 RevGM。两个模式共用手机历史。
+        self.console_log = console_log
         # 只持锁读写少数记录，任何网络或终端操作在锁外进行。
         self.lock = threading.Lock()
         # 本轮最多保留 CAPACITY 项，由序号快速定位分页。
@@ -185,7 +191,7 @@ class OperationLog:
             self.console.emit(tag, value)
 
     def submit(self, body, context):
-        """记录已提交的工单供手机查询，控制台等到 GM 有终态才输出。"""
+        """记录已提交的工单和实际工具来源，控制台等待工单终态。"""
         request = envelope(body, b"payload")
         job, action = request.get("id"), request.get("action")
         if not isinstance(job, str) or not JOB_ID.fullmatch(job) or not isinstance(action, str) or not action:
@@ -201,6 +207,8 @@ class OperationLog:
         if isinstance(payload, dict) and payload:
             arguments = line(payload.get("command")) if action == "gm.exec" else json_preview(payload, 384)
         tool = line(context.get("tool"), 128)
+        step = line(context.get("step"), 64)
+        phase = context.get("phase", "")
         intent = line(context.get("intent"), 256) if action == "gm.exec" else ""
         with self.lock:
             if job in self.jobs:
@@ -208,7 +216,7 @@ class OperationLog:
             self.latest += 1
             self.revision += 1
             self.events[self.latest] = (job, Event(self.latest, time.time_ns() // 1_000_000,
-                                                    time.monotonic(), line(action), arguments, tool, intent))
+                                                    time.monotonic(), line(action), arguments, tool, step, phase, intent))
             self.jobs[job] = self.events[self.latest][1]
             expired = self.events.pop(self.latest - CAPACITY, None)
             if expired:
@@ -253,7 +261,7 @@ class OperationLog:
         self._update(job, state, reply.get("message") or error or "", reply.get("data"))
 
     def _update(self, job, state, message="", data=None):
-        """更新手机历史。GM 到达终态时只写一次具体命令、意图、结果和耗时。"""
+        """按工单更新历史并输出一次终态。连接查询和内部工具发现不刷控制台。"""
         with self.lock:
             item = self.jobs.get(job)
             if item is None or item.state == state or item.state in OUTCOMES:
@@ -268,7 +276,10 @@ class OperationLog:
             item.message = "" if state == "success" and message == "完成" else message
             self.revision += 1
         outcome = OUTCOMES.get(state)
-        if outcome and item.action == "gm.exec" and item.arguments:
+        if not outcome:
+            return
+        waited = f"等待 {round((time.monotonic() - item.started) * 1000)} ms"
+        if item.action == "gm.exec" and item.arguments:
             # 普通参数保留原命令行。很长的计划正文只显示命令名，避免每条 GM 再刷屏。
             command = item.arguments
             if len(command) > 120:
@@ -278,8 +289,18 @@ class OperationLog:
             if type(elapsed) in (int, float) and 0 <= elapsed < float("inf"):
                 duration = f"{elapsed:.2f} ms"
             else:
-                duration = f"等待 {round((time.monotonic() - item.started) * 1000)} ms"
+                duration = waited
             self.emit("RevGM", f"{command} · 意图 {item.intent or '未提供'} · {outcome} · {duration}")
+        elif self.console_log == "mcp":
+            # rev_call 和 rev_run 会先读能力以校验输入，只显示 Agent 显式发起的发现。
+            if item.action == "runtime.capabilities" and item.tool not in ("rev_discover", "discover"):
+                return
+            tool = item.tool or "运行时"
+            if item.step and item.phase in ("steps", "finally"):
+                phase_label = "收尾" if item.phase == "finally" else "步骤"
+                tool += f" {phase_label} {item.step}"
+            detail = f" · {line(item.message, 160)}" if state != "success" and item.message else ""
+            self.emit("MCP", f"{tool} · {item.action} · {outcome} · {waited}{detail}")
 
     def page(self, data):
         """首次读取或回到顶部取最新一页，向下滚动按 before 取更早的记录。"""
@@ -301,12 +322,19 @@ class OperationLog:
             return {"operations": self.latest, "activityReads": self.reads}
 
     def plan_finished(self, data):
-        """继续接收旧 RevMCP 的计划结论，终端只显示单条 GM 的终态。"""
+        """显示 RevMCP 汇总的断言和收尾结论，游戏动作成功不代表计划通过。"""
         if type(data.get("success")) is not bool:
             raise ValueError("Invalid MCP plan summary")
         steps, cleanup = data.get("steps", 0), data.get("cleanup", 0)
         if type(steps) is not int or type(cleanup) is not int or min(steps, cleanup) < 0:
             raise ValueError("Invalid MCP plan counts")
+        if self.console_log == "mcp":
+            tool = "run" if data.get("tool") == "run" else "rev_run"
+            name = line(data.get("name"), 160) or "未命名计划"
+            outcome = "通过" if data["success"] else "未通过"
+            failure = line(data.get("failure"), 160)
+            detail = f" · {failure}" if not data["success"] and failure else ""
+            self.emit("MCP", f"{tool} · {name} · {outcome} · 业务步骤 {steps}，收尾步骤 {cleanup}{detail}")
 
 
 def mcp_context(header, intent_header=""):
@@ -315,8 +343,8 @@ def mcp_context(header, intent_header=""):
     if len(header) <= 2048:
         try:
             context = json.loads(unquote(header))
-            if isinstance(context, dict) and isinstance(context.get("tool"), str):
-                result["tool"] = context["tool"]
+            if isinstance(context, dict):
+                result.update({key: context[key] for key in ("tool", "phase", "step") if isinstance(context.get(key), str)})
         except (ValueError, RecursionError):
             pass
     if 0 < len(intent_header) <= 4096:
