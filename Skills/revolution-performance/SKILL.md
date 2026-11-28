@@ -11,6 +11,8 @@ description: 编写、修改、审查 Revolution Unity 项目的战斗、AI、�
 
 以 [RevGame 实践与来源](references/revgame-practice.md) 为例，从性能 Wiki 的通用、设备和平台索引找到可复用做法，读取对应实测条件。实际步长、容量、入口和通过标准读取目标项目。
 
+主验收从真实玩家入口开始，按实际策略、回合、交火、技能和交接分别采样。固定峰值用来定位吞吐与极端场景。按实际路径、工作量和图形后端解释每组结果。 [普通游玩与端侧复测](references/ordinary-play-performance.md)
+
 固定负载可以通过 [RevMCP 性能批次](../revolution-framework/references/automatic-delivery.md#自动验收与性能对比) 预热、重复并比较回执。指标从每轮真实结果提取，按路径、工作量与设备口径核对。
 
 ## 写性能敏感代码时

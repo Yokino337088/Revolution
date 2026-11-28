@@ -4,6 +4,8 @@ Windows 上先确认目标是玩家运行的游戏包还是 Unity Editor 的 Gam
 
 ## 固定显示与运行条件
 
+先按 [普通游玩与端侧复测](ordinary-play-performance.md) 走玩家的真实场景交接，分别量剧情、操作和持续交火的实际绘制。
+
 - 记录 CPU/显卡、实际显卡适配器和驱动、图形 API、Unity 与资源版本、Mono 或 IL2CPP、Development 与 Frame Timing 设置。笔记本要记录供电、性能模式、温度或频率可用性、后台负载。核显可能与 CPU 共用系统内存，系统报告的共享上限和独显专用内存各自注明。
 - 记录实际绘制宽高、窗口或全屏、屏幕刷新率、焦点、VSync 和 `Application.targetFrameRate`。在 Unity 2022.3 的 Windows Player 中，VSync 开启后按同步设置运行。默认同步用于玩家体验，隔离的 `vSyncCount=0`、`targetFrameRate=-1` 适合量吞吐，分开比较并恢复配置。 [Unity 目标帧率设置](https://docs.unity3d.com/2022.3/Documentation/ScriptReference/Application-targetFrameRate.html)
 - 开始前核对真实 PC AB、正式进关、采样可交互、棋数、攻击量和反馈预算。固定窗口大小、加载状态、种子和持续时间，用同包单开关多轮对照。Game 窗口模式保留编辑器本身的成本。正式 Player 的构建、连接、采样与退出沿 [独立 Player 测试](player-testing.md)。

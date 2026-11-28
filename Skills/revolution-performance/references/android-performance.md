@@ -9,6 +9,8 @@
 
 ## 怎样量从冷到热
 
+按 [普通章回与真机像素案例](ordinary-play-performance.md) 核对游戏包、相机实际尺寸、帧率请求、画面和结束阶段。整局与诊断开关分别采样。
+
 USB 设备接入、RevMCP 计划与 Unity 独立结果沿用已安装的 `revolution-android-testing`（[官方技能源码](https://github.com/Yokino337088/Revolution/blob/30a02e0f3e7faac6a3a3534759ab4b1e05d7d56d/Skills/revolution-android-testing/SKILL.md)）。核对实际运行的构建身份，再在同一部手机采样。
 
 1. 同一设备记录型号、系统、CPU/GPU、图形 API、分辨率与实际绘制尺寸、刷新率和帧率上限。固定画质、亮度、充电和前后台状态，记温度或系统热状态。当目标机支持 Thermal API 或性能分析时，将热状态变化和慢帧对齐，标明缺测项。 [Android Thermal API](https://developer.android.com/games/optimize/adpf/thermal)
