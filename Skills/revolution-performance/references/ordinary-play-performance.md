@@ -25,5 +25,6 @@ RevGame 后续将硬验收线改为平均至少 45 FPS 且 P95 < 40 ms，优先�
 ## Windows 和 Web 复用哪些办法
 
 - **复用可见范围与生命周期。** 剧情中只绘制当前需要的内容。相机可以排除被剧情遮住的棋盘、棋子和战斗反馈；逻辑阶段、场景初始化和资源仍由已有流程推进。验开始、正常读完、跳过、取消和回到玩法的首帧，记录真实绘制量和仍可见的画面。
+- **按实际新画面复核帧时间。** 省下被遮挡的对象时，原本被它们挡住的背景像素可能完全露出。同一 Windows Editor 剧情回归中，RevGame 第四章绘制调用从 22 降到 13，完整动态背景出现后 GPU P95 从约 4.68 ms 到三个稳态窗的 6.83–6.87 ms。记录绘制量、GPU 时间和整帧各自的方向。 [全天实践与可见范围对照](https://github.com/Yokino337088/RevGame/wiki/81%E6%A3%8B%E6%B5%8B%E5%BE%97%E9%A1%BA%E6%97%B6%E5%AE%89%E5%8D%93%E6%99%AE%E9%80%9A%E5%B1%80%E4%B8%BA%E4%BB%80%E4%B9%88%E8%BF%98%E4%BC%9A%E5%8D%A1)
 - **Windows** 在目标独立包核实实际显卡、D3D、VSync、窗口/焦点与 Present 等待。用真实前后台条件度量阶段；Editor 可辅助定位和验证功能。
 - **WebGL** 记录 CSS 区域、DPR、drawing buffer 与浏览器回调。对同章同画幅续用已经验证的像素预算，画幅改变与跨章重新观察。浏览器回调、Wasm 游戏工作、GPU 计数可用性分别记录。 [Windows 性能](windows-performance.md) · [WebGL 性能](webgl-performance.md)
